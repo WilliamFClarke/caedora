@@ -20,31 +20,36 @@ test.describe('Landing Page', () => {
   })
 
   test('has a Get Started CTA', async ({ page }) => {
-    await expect(page.getByRole('link', { name: 'Get Started Free' })).toBeVisible()
+    await expect(page.getByRole('link', { name: /Get Started/i })).toBeVisible()
   })
 
   test('navigates to connect page', async ({ page }) => {
-    await page.getByRole('link', { name: 'Get Started Free' }).click()
+    await page.getByRole('link', { name: /Get Started.*Local/i }).click()
     await expect(page).toHaveURL('/connect')
   })
 })
 
-test.describe('Connect Page', () => {
+test.describe('Setup Page', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/connect')
   })
 
-  test('displays connect vault heading', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Connect your vault' })).toBeVisible()
+  test('displays setup vault heading', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Set up your vault' })).toBeVisible()
   })
 
-  test('shows GitHub connect option', async ({ page }) => {
-    await expect(page.getByRole('link', { name: /Continue with GitHub/i })).toBeVisible()
+  test('shows the three setup steps', async ({ page }) => {
+    await expect(page.getByText('Create your vault folder')).toBeVisible()
+    await expect(page.getByText('Add some notes')).toBeVisible()
+    await expect(page.getByText('Connect your AI via MCP')).toBeVisible()
   })
 
-  test('shows coming soon options', async ({ page }) => {
-    await expect(page.getByText('GitLab')).toBeVisible()
-    await expect(page.getByText('Local Git')).toBeVisible()
+  test('shows MCP config snippet', async ({ page }) => {
+    await expect(page.getByText('personal-md-mcp')).toBeVisible()
+  })
+
+  test('shows optional GitHub backup section', async ({ page }) => {
+    await expect(page.getByText('Optional: back up to GitHub')).toBeVisible()
   })
 
   test('navigates back to home', async ({ page }) => {

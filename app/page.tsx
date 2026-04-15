@@ -24,7 +24,7 @@ const features = [
     icon: Lock,
     title: 'Completely Private',
     description:
-      'Your notes live in your own git repository — GitHub, GitLab, or local. We never store, see, or touch your data.',
+      'Your notes live on your machine in a local folder. Nothing is uploaded anywhere. We never see your data.',
   },
   {
     icon: Brain,
@@ -36,7 +36,7 @@ const features = [
     icon: GitBranch,
     title: 'Git-Native',
     description:
-      'Every note has full version history. Branch your ideas, merge decisions, and diff changes to your life.',
+      'Every note has full version history. Branch your ideas, merge decisions, and optionally push to GitHub for backup.',
   },
 ]
 
@@ -44,7 +44,7 @@ const exampleNotes = [
   { icon: Heart, label: 'Health', example: 'Side sleeper, lactose intolerant, target 8k steps/day' },
   { icon: TrendingUp, label: 'Finance', example: 'Portfolio: 60% index funds, 30% bonds, 10% crypto' },
   { icon: Coffee, label: 'Preferences', example: 'Oat milk flat white, dark chocolate, aisle seat' },
-  { icon: Moon, label: 'Sleep', example: 'Avg 7.2hrs, best with 18°C room, no screens after 10pm' },
+  { icon: Moon, label: 'Sleep', example: 'Avg 7.2hrs, best with 18\u00b0C room, no screens after 10pm' },
   { icon: Dumbbell, label: 'Fitness', example: '3x gym/week, PR: 100kg squat, runs 5k in 28min' },
   { icon: BookOpen, label: 'Learning', example: 'Reading: Atomic Habits, learning Rust, piano Grade 4' },
 ]
@@ -52,9 +52,9 @@ const exampleNotes = [
 const steps = [
   {
     step: '01',
-    title: 'Connect your git',
+    title: 'Create a local folder',
     description:
-      'Sign in with GitHub, GitLab, or point to a local git repo. We never store your credentials or data.',
+      'Make a folder anywhere on your machine and optionally run git init. That\u2019s your vault.',
   },
   {
     step: '02',
@@ -64,9 +64,9 @@ const steps = [
   },
   {
     step: '03',
-    title: 'Ask your AI anything',
+    title: 'Connect your AI via MCP',
     description:
-      'Your AI assistant connects via MCP and uses your personal data to give you truly personalised answers.',
+      'Point your AI assistant at your vault with a one-line MCP config. It now knows everything about you.',
   },
 ]
 
@@ -97,7 +97,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <ModeToggle />
             <Button asChild>
-              <Link href="/connect">Connect GitHub</Link>
+              <Link href="/connect">Get Started</Link>
             </Button>
           </div>
         </div>
@@ -108,7 +108,7 @@ export default function Home() {
         <section className="mx-auto max-w-screen-xl px-6 pt-24 pb-20 text-center">
           <Badge variant="outline" className="mb-6 gap-1.5">
             <Zap className="h-3 w-3" />
-            Open source · Self-hosted · No data collection
+            Open source \u00b7 Local-first \u00b7 No data collection
           </Badge>
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 leading-[1.1]">
             Your life,
@@ -116,13 +116,13 @@ export default function Home() {
             <span className="text-muted-foreground">fully documented.</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-            A personal wiki backed by your own git repo. Track everything about yourself and give
-            your AI assistant a rich, private knowledge base — all without sharing a single byte
-            with us.
+            A personal wiki that lives on your machine. Track everything about yourself
+            and give your AI assistant a rich, private knowledge base — nothing ever
+            leaves your computer.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button size="lg" asChild>
-              <Link href="/connect">Get Started Free</Link>
+              <Link href="/connect">Get Started — It\u2019s Local</Link>
             </Button>
             <Button size="lg" variant="outline" asChild>
               <Link
@@ -165,8 +165,7 @@ export default function Home() {
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Built different</h2>
             <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-              No accounts. No sync servers. No data harvesting. Just your markdown files in your git
-              repo.
+              No accounts. No cloud sync. No data harvesting. Just your markdown files on your machine.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
@@ -219,9 +218,9 @@ export default function Home() {
                 knows you intimately.
               </h2>
               <p className="text-muted-foreground text-lg mb-6 leading-relaxed">
-                personal-md ships a built-in MCP (Model Context Protocol) server. Connect it to
-                Claude, Cursor, or any MCP-compatible AI tool and your assistant can read, search,
-                and reference everything you&apos;ve documented.
+                personal-md ships a built-in MCP (Model Context Protocol) server that reads
+                directly from your local vault. Connect it to Claude, Cursor, or any MCP-compatible
+                AI tool — no API keys, no cloud, no tokens.
               </p>
               <p className="text-muted-foreground mb-8 leading-relaxed">
                 Ask &quot;what did I eat this week?&quot;, &quot;what are my investment
@@ -229,7 +228,7 @@ export default function Home() {
                 answers grounded in <em>your</em> actual data.
               </p>
               <Button asChild>
-                <Link href="/connect">Get Started</Link>
+                <Link href="/connect">Set Up Your Vault</Link>
               </Button>
             </div>
             <div className="bg-muted rounded-xl p-6 font-[family-name:var(--font-geist-mono)] text-sm border">
@@ -237,18 +236,7 @@ export default function Home() {
                 ~/.claude/claude_desktop_config.json
               </div>
               <pre className="text-foreground leading-relaxed overflow-auto">{
-`{
-  "mcpServers": {
-    "personal-md": {
-      "command": "npx",
-      "args": [
-        "personal-md-mcp",
-        "--vault",
-        "~/.personal-md"
-      ]
-    }
-  }
-}`}</pre>
+`{\n  "mcpServers": {\n    "personal-md": {\n      "command": "npx",\n      "args": [\n        "personal-md-mcp",\n        "--vault",\n        "~/.personal-md"\n      ]\n    }\n  }\n}`}</pre>
             </div>
           </div>
         </section>
@@ -258,10 +246,10 @@ export default function Home() {
           <div className="mx-auto max-w-screen-xl px-6 py-24 text-center">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Start documenting your life.</h2>
             <p className="text-muted-foreground text-lg mb-10 max-w-lg mx-auto">
-              Free, open source, and entirely self-hosted. Your data stays yours.
+              Free, open source, and entirely local. Your data never leaves your machine.
             </p>
             <Button size="lg" asChild>
-              <Link href="/connect">Connect GitHub to Get Started</Link>
+              <Link href="/connect">Get Started in 2 Minutes</Link>
             </Button>
           </div>
         </section>
@@ -272,7 +260,7 @@ export default function Home() {
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <FileText className="h-4 w-4" />
             <span>personal-md</span>
-            <span>·</span>
+            <span>\u00b7</span>
             <span>Open source</span>
           </div>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
