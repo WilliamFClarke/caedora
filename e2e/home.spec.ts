@@ -5,9 +5,10 @@ test('landing page loads with hero heading', async ({ page }) => {
   await expect(page.locator('h1')).toContainText('Your life')
 })
 
-test('connect page shows GitHub option', async ({ page }) => {
+test('connect page shows local folder and GitHub options', async ({ page }) => {
   await page.goto('/connect')
   await expect(page.locator('h1')).toContainText('Connect your vault')
+  await expect(page.getByRole('button', { name: /Open local folder/i })).toBeVisible()
   await expect(page.getByRole('link', { name: /Continue with GitHub/i })).toBeVisible()
 })
 
