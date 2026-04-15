@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { ModeToggle } from '@/components/mode-toggle'
@@ -11,7 +10,6 @@ import {
   ArrowLeft,
   Shield,
   Github,
-  Copy,
   CheckCircle,
 } from 'lucide-react'
 
