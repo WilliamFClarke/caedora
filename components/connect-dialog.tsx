@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Dialog,
@@ -76,6 +76,11 @@ function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
   const { connectLocal } = useVault()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showChromiumWarning, setShowChromiumWarning] = useState(false)
+
+  useEffect(() => {
+    setShowChromiumWarning(!('showDirectoryPicker' in window))
+  }, [])
 
   async function onPick() {
     setError(null)
@@ -122,9 +127,11 @@ function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
         {mode === 'create' ? 'Choose folder' : 'Open folder'}
       </Button>
       {error && <p className="text-destructive text-sm">{error}</p>}
-      <p className="text-destructive text-xs">
-        Requires a Chromium browser (Chrome, Edge, Arc, Brave).
-      </p>
+      {showChromiumWarning && (
+        <p className="text-destructive text-xs">
+          Requires a Chromium browser (Chrome, Edge, Arc, Brave).
+        </p>
+      )}
     </div>
   )
 }
