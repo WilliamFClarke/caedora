@@ -1,19 +1,21 @@
 import { test, expect } from '@playwright/test'
 
-test('landing page loads with hero heading', async ({ page }) => {
+test('home shows Create vault and Open vault buttons', async ({ page }) => {
   await page.goto('/')
-  await expect(page.locator('h1')).toContainText('Your life')
+  await expect(page.getByRole('button', { name: /Create vault/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Open vault/i })).toBeVisible()
 })
 
-test('connect page shows local folder and GitHub options', async ({ page }) => {
-  await page.goto('/connect')
-  await expect(page.locator('h1')).toContainText('Connect your vault')
-  await expect(page.getByRole('button', { name: /Open local folder/i })).toBeVisible()
-  await expect(page.getByRole('link', { name: /Continue with GitHub/i })).toBeVisible()
+test('Create vault opens a dialog with Local and GitHub options', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: /Create vault/i }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByRole('tab', { name: /On this computer/i })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /GitHub/i })).toBeVisible()
 })
 
-test('vault page redirects to connect when not authenticated', async ({ page }) => {
+test('vault page redirects home when no vault connected', async ({ page }) => {
   await page.goto('/vault')
-  await page.waitForURL('**/connect')
-  await expect(page).toHaveURL(/\/connect/)
+  await page.waitForURL('**/')
+  await expect(page).toHaveURL(/\/$/)
 })

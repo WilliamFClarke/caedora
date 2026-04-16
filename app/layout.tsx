@@ -17,10 +17,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'personal-md — Your life, documented',
   description:
-    'A personal wiki that lives in your git repo. Track everything about your life and give your AI assistant a rich, private knowledge base.',
+    'A private, AI-ready personal wiki. Track everything about your life in markdown notes that live on your own device.',
   openGraph: {
     title: 'personal-md',
-    description: 'Your life, fully documented. Self-hosted, git-native, AI-ready via MCP.',
+    description: 'Your life, fully documented. Private by design.',
     type: 'website',
   },
 }
