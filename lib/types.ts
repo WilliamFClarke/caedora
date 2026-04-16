@@ -41,6 +41,8 @@ export interface DiffResult {
 
 export interface VaultProvider {
   readonly type: 'local' | 'github'
+  /** True when writeFile is already a commit (e.g. GitHub contents API). */
+  readonly writesAreCommits: boolean
   isReady(): boolean
 
   // File operations
@@ -70,7 +72,8 @@ export type VaultStatus =
 export interface PersistedVaultState {
   type: 'local' | 'github'
   directoryHandle?: FileSystemDirectoryHandle  // for local
-  githubToken?: string                          // for github
+  /** GitHub PAT — stored in IndexedDB only, never on our servers. */
+  githubPat?: string
   githubOwner?: string
   githubRepo?: string
   lastOpenedAt: number
@@ -81,8 +84,8 @@ export interface PersistedVaultState {
 export interface VaultContextValue {
   provider: VaultProvider | null
   status: VaultStatus
-  connectLocal: () => Promise<void>
-  connectGitHub: (token: string, owner: string, repo: string) => Promise<void>
+  connectLocal: () => Promise<FileSystemDirectoryHandle | null>
+  connectGitHub: (pat: string, owner: string, repo: string) => Promise<void>
   grantPermission: () => Promise<void>
   disconnect: () => void
 }

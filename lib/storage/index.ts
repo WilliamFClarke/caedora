@@ -1,7 +1,7 @@
 import { loadVaultState, saveVaultState } from './idb'
 import { LocalGitProvider } from './local-provider'
 import { GitHubProvider } from './github-provider'
-import type { VaultProvider } from '../types'
+import type { VaultProvider, FileEntry } from '../types'
 
 export { saveVaultState, loadVaultState, clearVaultState } from './idb'
 export { LocalGitProvider } from './local-provider'
@@ -36,12 +36,12 @@ export async function createProviderFromPersistedState(): Promise<{
 
   if (
     state.type === 'github' &&
-    state.githubToken &&
+    state.githubPat &&
     state.githubOwner &&
     state.githubRepo
   ) {
     const provider = new GitHubProvider(
-      state.githubToken,
+      state.githubPat,
       state.githubOwner,
       state.githubRepo
     )
@@ -52,8 +52,8 @@ export async function createProviderFromPersistedState(): Promise<{
 }
 
 /**
- * Called from the vault "Grant access" button.  Requests permission for the
- * stored handle and returns a ready provider, or null if denied.
+ * Called from the "Grant access" button.  Requests permission for the stored
+ * handle and returns a ready provider, or null if denied.
  * MUST be called from a user gesture (button click).
  */
 export async function requestPermissionAndCreate(): Promise<VaultProvider | null> {
@@ -68,9 +68,42 @@ export async function requestPermissionAndCreate(): Promise<VaultProvider | null
 
 /** Persist GitHub vault state. */
 export async function saveGitHubState(
-  token: string,
+  pat: string,
   owner: string,
   repo: string
 ): Promise<void> {
-  await saveVaultState({ type: 'github', githubToken: token, githubOwner: owner, githubRepo: repo, lastOpenedAt: Date.now() })
+  await saveVaultState({
+    type: 'github',
+    githubPat: pat,
+    githubOwner: owner,
+    githubRepo: repo,
+    lastOpenedAt: Date.now(),
+  })
+}
+
+/**
+ * Recursively list every file and directory in the vault.
+ *
+ * - Local: one call already returns the full tree.
+ * - GitHub: the contents API returns a single directory level; walk subfolders.
+ */
+export async function listFilesRecursive(
+  provider: VaultProvider,
+  dir = ''
+): Promise<FileEntry[]> {
+  if (provider.type === 'local') {
+    return provider.listFiles(dir)
+  }
+  // GitHub: walk
+  const out: FileEntry[] = []
+  const queue: string[] = [dir]
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    const entries = await provider.listFiles(current)
+    for (const e of entries) {
+      out.push(e)
+      if (e.type === 'dir') queue.push(e.path)
+    }
+  }
+  return out
 }

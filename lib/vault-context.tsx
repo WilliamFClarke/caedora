@@ -21,7 +21,7 @@ import type { VaultContextValue, VaultProvider, VaultStatus } from './types'
 const defaultContext: VaultContextValue = {
   provider: null,
   status: { state: 'idle' },
-  connectLocal: async () => {},
+  connectLocal: async () => null,
   connectGitHub: async () => {},
   grantPermission: async () => {},
   disconnect: () => {},
@@ -57,9 +57,12 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
   }, [])
 
   /**
-   * Opens the native folder picker and connects a local git vault.
-   * CRITICAL: this MUST be invoked directly from a user click handler —
-   * showDirectoryPicker() will be blocked if called after an async gap.
+   * Opens the native folder picker and connects a local vault.
+   * CRITICAL: MUST be invoked directly from a user click — showDirectoryPicker
+   * is blocked if called after an async gap.
+   *
+   * Returns the resulting provider (so callers can seed files before navigating)
+   * or null if the user cancelled.
    */
   const connectLocal = useCallback(async () => {
     setStatus({ state: 'connecting' })
@@ -74,30 +77,32 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
       await p.init()
       setProvider(p)
       setStatus({ state: 'ready', providerType: 'local' })
+      return handle
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') {
-        setStatus({ state: 'idle' })  // user cancelled picker
-      } else {
-        setStatus({
-          state: 'error',
-          error: e instanceof Error ? e.message : 'Failed to open folder',
-        })
+        setStatus({ state: 'idle' })
+        return null
       }
+      setStatus({
+        state: 'error',
+        error: e instanceof Error ? e.message : 'Failed to open folder',
+      })
+      return null
     }
   }, [])
 
   const connectGitHub = useCallback(
-    async (token: string, owner: string, repo: string) => {
+    async (pat: string, owner: string, repo: string) => {
       setStatus({ state: 'connecting' })
       try {
         await saveVaultState({
           type: 'github',
-          githubToken: token,
+          githubPat: pat,
           githubOwner: owner,
           githubRepo: repo,
           lastOpenedAt: Date.now(),
         })
-        const p = new GitHubProvider(token, owner, repo)
+        const p = new GitHubProvider(pat, owner, repo)
         setProvider(p)
         setStatus({ state: 'ready', providerType: 'github' })
       } catch (e) {
@@ -112,7 +117,7 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
 
   /**
    * Re-requests FSAA permission for the stored handle.
-   * MUST be called from a user gesture (button click).
+   * MUST be called from a user gesture.
    */
   const grantPermission = useCallback(async () => {
     setStatus({ state: 'connecting' })

@@ -24,6 +24,7 @@ interface GHContent {
 
 export class GitHubProvider implements VaultProvider {
   readonly type = 'github' as const
+  readonly writesAreCommits = true
   /** SHA cache so writes don't need an extra GET. path → blob SHA */
   private shaCache = new Map<string, string>()
 

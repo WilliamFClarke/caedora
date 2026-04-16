@@ -8,6 +8,7 @@ const DIR = '/'
 
 export class LocalGitProvider implements VaultProvider {
   readonly type = 'local' as const
+  readonly writesAreCommits = false
   private fs: ReturnType<typeof createFsAdapter>
   private _ready = false
 

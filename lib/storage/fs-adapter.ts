@@ -99,7 +99,7 @@ export function createFsAdapter(root: FileSystemDirectoryHandle) {
       const handle = await getFile(parts, true)
       invalidate(parts)
       const writable = await handle.createWritable()
-      await writable.write(data)
+      await writable.write(data as FileSystemWriteChunkType)
       await writable.close()
     },
 
