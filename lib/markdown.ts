@@ -24,6 +24,8 @@ export interface TiptapDoc {
   content: TiptapNode[]
 }
 
+type Mark = { type: string; attrs?: Record<string, unknown> }
+
 // ─── Markdown → TipTap JSON ───────────────────────────────────────────────────
 
 export function mdToTiptap(md: string): TiptapDoc {
@@ -56,7 +58,23 @@ function mdastBlockToTiptap(node: RootContent): TiptapNode | null {
           .map(mdastBlockToTiptap)
           .filter((n): n is TiptapNode => n !== null),
       }
-    case 'list':
+    case 'list': {
+      const isTaskList =
+        !node.ordered &&
+        node.children.length > 0 &&
+        node.children.every((c) => typeof c.checked === 'boolean')
+      if (isTaskList) {
+        return {
+          type: 'taskList',
+          content: node.children.map((item) => ({
+            type: 'taskItem',
+            attrs: { checked: item.checked === true },
+            content: item.children
+              .map(mdastBlockToTiptap)
+              .filter((n): n is TiptapNode => n !== null),
+          })),
+        }
+      }
       return {
         type: node.ordered ? 'orderedList' : 'bulletList',
         content: node.children.map((item) => ({
@@ -66,6 +84,7 @@ function mdastBlockToTiptap(node: RootContent): TiptapNode | null {
             .filter((n): n is TiptapNode => n !== null),
         })),
       }
+    }
     case 'code':
       return {
         type: 'codeBlock',
@@ -94,7 +113,7 @@ function phrasingToTiptap(nodes: PhrasingContent[]): TiptapNode[] {
 
 function phrasingNodeToTiptap(
   node: PhrasingContent,
-  marks: Array<{ type: string }>
+  marks: Array<Mark>
 ): TiptapNode[] | TiptapNode | null {
   switch (node.type) {
     case 'text':
@@ -123,9 +142,11 @@ function phrasingNodeToTiptap(
     case 'break':
       return { type: 'hardBreak' }
     case 'link':
-      // StarterKit has no link mark; render as plain text with the URL.
       return node.children.flatMap((c) => {
-        const r = phrasingNodeToTiptap(c, marks)
+        const r = phrasingNodeToTiptap(c, [
+          ...marks,
+          { type: 'link', attrs: { href: node.url } },
+        ])
         return Array.isArray(r) ? r : r ? [r] : []
       })
     case 'image':
@@ -187,6 +208,22 @@ function tiptapBlockToMdast(node: TiptapNode): RootContent | null {
           >,
         })),
       }
+    case 'taskList':
+      return {
+        type: 'list',
+        ordered: false,
+        spread: false,
+        children: (node.content ?? []).map((item) => ({
+          type: 'listItem',
+          spread: false,
+          checked: item.attrs?.checked === true,
+          children: (item.content ?? [])
+            .map(tiptapBlockToMdast)
+            .filter((n): n is RootContent => n !== null) as Array<
+            Extract<RootContent, { type: 'paragraph' | 'list' | 'blockquote' | 'code' }>
+          >,
+        })),
+      }
     case 'codeBlock':
       return {
         type: 'code',
@@ -218,6 +255,11 @@ function tiptapInlineToMdast(nodes: TiptapNode[]): PhrasingContent[] {
     if (marks.includes('bold')) node = { type: 'strong', children: [node] } as PhrasingContent
     if (marks.includes('italic')) node = { type: 'emphasis', children: [node] } as PhrasingContent
     if (marks.includes('strike')) node = { type: 'delete', children: [node] } as PhrasingContent
+    const linkMark = n.marks?.find((m) => m.type === 'link')
+    if (linkMark) {
+      const href = typeof linkMark.attrs?.href === 'string' ? (linkMark.attrs.href as string) : ''
+      node = { type: 'link', url: href, children: [node] } as PhrasingContent
+    }
     out.push(node)
   }
   return out

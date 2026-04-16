@@ -3,8 +3,12 @@
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import Link from '@tiptap/extension-link'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
 import { useEffect, useRef } from 'react'
 import { mdToTiptap, tiptapToMd, type TiptapDoc } from '@/lib/markdown'
+import { EditorToolbar } from './editor-toolbar'
 
 interface EditorProps {
   /** Markdown loaded from disk. Changes to this prop load a new document. */
@@ -21,6 +25,13 @@ export function Editor({ initialMarkdown, onChange, fileKey }: EditorProps) {
     extensions: [
       StarterKit.configure({}),
       Placeholder.configure({ placeholder: 'Start writing…' }),
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
+      }),
+      TaskList,
+      TaskItem.configure({ nested: true }),
     ],
     content: mdToTiptap(initialMarkdown) as unknown as Record<string, unknown>,
     editorProps: {
@@ -44,5 +55,10 @@ export function Editor({ initialMarkdown, onChange, fileKey }: EditorProps) {
     editor.commands.setContent(mdToTiptap(initialMarkdown) as unknown as Record<string, unknown>, false)
   }, [editor, fileKey, initialMarkdown])
 
-  return <EditorContent editor={editor} />
+  return (
+    <div className="flex h-full flex-col">
+      <EditorToolbar editor={editor} />
+      <EditorContent editor={editor} />
+    </div>
+  )
 }
