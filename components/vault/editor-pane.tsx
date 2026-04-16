@@ -75,11 +75,7 @@ export function EditorPane({ provider, path }: EditorPaneProps) {
         <SyncIndicator status={status} />
       </div>
       <div className="flex-1 overflow-auto">
-        <Editor
-          fileKey={path}
-          initialMarkdown={loaded.content}
-          onChange={setLiveContent}
-        />
+        <Editor />
       </div>
     </div>
   )
