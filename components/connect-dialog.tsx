@@ -27,6 +27,11 @@ interface ConnectDialogProps {
 }
 
 export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) {
+  const defaultTab =
+    typeof window !== 'undefined' && 'showDirectoryPicker' in window
+      ? 'local'
+      : 'github'
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -41,7 +46,7 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="local" className="mt-2">
+        <Tabs defaultValue={defaultTab} className="mt-2">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="local">
               <Folder className="mr-1 size-4" />
@@ -117,7 +122,7 @@ function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
         {mode === 'create' ? 'Choose folder' : 'Open folder'}
       </Button>
       {error && <p className="text-destructive text-sm">{error}</p>}
-      <p className="text-muted-foreground text-xs">
+      <p className="text-destructive text-xs">
         Requires a Chromium browser (Chrome, Edge, Arc, Brave).
       </p>
     </div>
