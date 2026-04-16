@@ -5,21 +5,33 @@
 import { LocalGitProvider } from './storage/local-provider'
 
 const WELCOME_PATH = 'welcome.md'
-const WELCOME_BODY = `# Welcome to your vault
+const WELCOME_BODY = `# Getting started
 
-This vault is yours. Everything you write here is a plain markdown file stored
-on your own computer or in your own GitHub repository — never on our servers.
+Welcome to the Simple Editor template! This template integrates open source UI components and Tiptap extensions licensed under MIT.
 
-## Ideas to get started
+Integrate it by following the Tiptap UI Components docs or using our CLI tool.
 
-- A shopping list
-- Your favourite foods
-- An inventory of what you own
-- Your bills and subscriptions
-- Health notes and medications
+\`\`\`
+npx @tiptap/cli init
+\`\`\`
 
-Click **+ New note** in the sidebar to create your first note. Your changes
-save automatically.
+## Features
+
+A fully responsive rich text editor with built-in support for common formatting and layout tools. Type markdown \`**\` or use keyboard shortcuts \`⌘+B\` for most all common markdown marks. 🪄
+
+Add images, customize alignment, and apply advanced formatting to make your writing more engaging and professional.
+
+- Superscript (x2) and Subscript (H2O) for precision.
+- Typographic conversion: automatically convert to -> an arrow →.
+
+→ Learn more
+
+## Make it your own
+
+Switch between light and dark modes, and tailor the editor's appearance with customizable CSS to match your style.
+
+- Test template
+- Integrate the free template
 `
 
 const GITIGNORE_PATH = '.gitignore'

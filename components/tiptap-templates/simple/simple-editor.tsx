@@ -73,7 +73,16 @@ import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 // --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss"
 
-import content from "@/components/tiptap-templates/simple/data/content.json"
+import defaultContent from "@/components/tiptap-templates/simple/data/content.json"
+
+export interface SimpleEditorProps {
+  /** Initial Tiptap JSON or HTML. Falls back to the template's sample content. */
+  content?: unknown
+  /** Called with the editor on every document change. */
+  onUpdate?: (editor: import("@tiptap/react").Editor) => void
+  /** Stable key (e.g. file path) — triggers content reload on change. */
+  contentKey?: string
+}
 
 const MainToolbarContent = ({
   onHighlighterClick,
@@ -183,7 +192,7 @@ const MobileToolbarContent = ({
   </>
 )
 
-export function SimpleEditor() {
+export function SimpleEditor({ content, onUpdate, contentKey }: SimpleEditorProps = {}) {
   const isMobile = useIsMobile()
   const { height } = useWindowSize()
   const [mobileView, setMobileView] = React.useState<
@@ -229,8 +238,17 @@ export function SimpleEditor() {
         onError: (error) => console.error("Upload failed:", error),
       }),
     ],
-    content,
+    content: content ?? defaultContent,
+    onUpdate: onUpdate ? ({ editor }) => onUpdate(editor) : undefined,
   })
+
+  const loadedKey = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    if (!editor || contentKey === undefined) return
+    if (loadedKey.current === contentKey) return
+    loadedKey.current = contentKey
+    editor.commands.setContent((content ?? defaultContent) as Parameters<typeof editor.commands.setContent>[0], { emitUpdate: false })
+  }, [editor, contentKey, content])
 
   const rect = useCursorVisibility({
     editor,
