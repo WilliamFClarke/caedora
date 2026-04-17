@@ -21,6 +21,7 @@ import { TipTapFloatingMenu } from "@/components/tiptap/extensions/floating-menu
 import { FloatingToolbar } from "@/components/tiptap/extensions/floating-toolbar";
 import { EditorToolbar } from "./toolbars/editor-toolbar";
 import Placeholder from "@tiptap/extension-placeholder";
+import { NoteMetaWidget } from "@/components/tiptap/extensions/note-meta-widget";
 import { content } from "@/lib/content";
 
 const extensions = [
@@ -79,6 +80,7 @@ export interface RichTextEditorProps {
   content?: unknown;
   onUpdate?: (editor: TiptapEditor) => void;
   contentKey?: string;
+  onMetaAnchorChange?: (el: HTMLElement | null) => void;
 }
 
 export function RichTextEditorDemo({
@@ -86,10 +88,26 @@ export function RichTextEditorDemo({
   content: contentProp,
   onUpdate,
   contentKey,
+  onMetaAnchorChange,
 }: RichTextEditorProps) {
+  const anchorCbRef = React.useRef(onMetaAnchorChange);
+  React.useEffect(() => {
+    anchorCbRef.current = onMetaAnchorChange;
+  }, [onMetaAnchorChange]);
+
+  const allExtensions = React.useMemo(
+    () => [
+      ...extensions,
+      NoteMetaWidget.configure({
+        onAnchorChange: (el) => anchorCbRef.current?.(el),
+      }),
+    ],
+    []
+  );
+
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: extensions as Extension[],
+    extensions: allExtensions as Extension[],
     content: contentProp ?? content,
     editorProps: {
       attributes: {

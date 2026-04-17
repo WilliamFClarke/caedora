@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, CloudOff, GitBranch, Loader2, Plus, Star, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Check, CloudOff, GitBranch, Loader2 } from 'lucide-react'
 import { Editor } from './editor'
+import { NoteMeta } from './note-meta'
 import { useAutosave, type SyncStatus } from '@/lib/autosave'
 import {
   combine,
-  normalizeTag,
   parseFrontmatter,
   type Frontmatter,
 } from '@/lib/frontmatter'
@@ -51,6 +52,15 @@ function titleFromPath(path: string): string {
   return name.endsWith('.md') ? name.slice(0, -3) : name
 }
 
+function extractH1(markdown: string): string | null {
+  const match = markdown.match(/^\s*#\s+(.+?)\s*$/m)
+  return match ? match[1].trim() : null
+}
+
+function sanitizeFilename(raw: string): string {
+  return raw.replace(/[\\/:*?"<>|]/g, '').trim()
+}
+
 export function EditorPane({
   provider,
   path,
@@ -69,6 +79,7 @@ export function EditorPane({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [branch, setBranch] = useState<string>('')
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [metaAnchor, setMetaAnchor] = useState<HTMLElement | null>(null)
   const [, forceTick] = useState(0)
 
   useEffect(() => {
@@ -95,8 +106,10 @@ export function EditorPane({
       .then((content) => {
         if (cancelled) return
         const { frontmatter, body } = parseFrontmatter(content)
-        setLoaded({ path, body, frontmatter })
-        setLiveBody(body)
+        const stem = titleFromPath(path)
+        const ensuredBody = /^\s*#\s+/.test(body) ? body : `# ${stem}\n\n${body}`
+        setLoaded({ path, body: ensuredBody, frontmatter })
+        setLiveBody(ensuredBody)
         setTags(frontmatter.tags)
         setSavedAt(lastModified ?? Date.now())
       })
@@ -109,7 +122,6 @@ export function EditorPane({
     }
   }, [provider, path, lastModified])
 
-  // Tick every 30s so "Edited X ago" stays current without re-render churn.
   useEffect(() => {
     const id = setInterval(() => forceTick((t) => t + 1), 30_000)
     return () => clearInterval(id)
@@ -127,13 +139,38 @@ export function EditorPane({
 
   const status = useAutosave({ provider, path, content: fullContent })
 
-  // Track last saved timestamp so the meta row can show "Edited just now" etc.
   useEffect(() => {
     if (status === 'saved') setSavedAt(Date.now())
   }, [status])
 
   const words = useMemo(() => countWords(liveBody ?? ''), [liveBody])
   const readMinutes = Math.max(1, Math.ceil(words / 225))
+
+  // Debounced H1 → filename sync. When the first H1's text diverges from the
+  // current filename stem, rename the file. Guard rename loops by comparing
+  // against the live `path` (which updates after each successful rename).
+  const renamingRef = useRef(false)
+  useEffect(() => {
+    if (!path || liveBody === null) return
+    const h1 = extractH1(liveBody)
+    if (!h1) return
+    const currentStem = titleFromPath(path)
+    const nextStem = sanitizeFilename(h1)
+    if (!nextStem || nextStem === currentStem) return
+    const timer = setTimeout(async () => {
+      if (renamingRef.current) return
+      const parent = path.split('/').slice(0, -1).join('/')
+      const to = parent ? `${parent}/${nextStem}.md` : `${nextStem}.md`
+      if (to === path) return
+      renamingRef.current = true
+      try {
+        await onRename(path, to)
+      } finally {
+        renamingRef.current = false
+      }
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [liveBody, path, onRename])
 
   if (!path) {
     return (
@@ -162,35 +199,30 @@ export function EditorPane({
   }
 
   const displayPath = path
-  const title = titleFromPath(displayPath)
-  const renameFile = async (nextTitle: string) => {
-    const trimmed = nextTitle.trim()
-    if (!trimmed || trimmed === title) return
-    const parent = displayPath.split('/').slice(0, -1).join('/')
-    const newName = trimmed.endsWith('.md') ? trimmed : `${trimmed}.md`
-    const to = parent ? `${parent}/${newName}` : newName
-    await onRename(displayPath, to)
-  }
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b px-6 pt-6 pb-4">
-        <TitleRow
-          title={title}
-          isPinned={isPinned}
-          onCommit={renameFile}
-          onTogglePin={() => onTogglePin(displayPath)}
-        />
-        <MetaRow savedAt={savedAt} words={words} readMinutes={readMinutes} />
-        <TagRow tags={tags} onChange={setTags} />
-      </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         <Editor
           fileKey={loaded.path}
           initialMarkdown={loaded.body}
           onChange={setLiveBody}
+          onMetaAnchorChange={setMetaAnchor}
         />
       </div>
+      {metaAnchor &&
+        createPortal(
+          <NoteMeta
+            savedAt={savedAt}
+            words={words}
+            readMinutes={readMinutes}
+            tags={tags}
+            onTagsChange={setTags}
+            isPinned={isPinned}
+            onTogglePin={() => onTogglePin(displayPath)}
+          />,
+          metaAnchor
+        )}
       <StatusBar
         status={status}
         path={displayPath}
@@ -198,157 +230,6 @@ export function EditorPane({
         words={words}
         savedAt={savedAt}
       />
-    </div>
-  )
-}
-
-function TitleRow({
-  title,
-  isPinned,
-  onCommit,
-  onTogglePin,
-}: {
-  title: string
-  isPinned: boolean
-  onCommit: (next: string) => void | Promise<void>
-  onTogglePin: () => void
-}) {
-  const [value, setValue] = useState(title)
-  const committedRef = useRef(title)
-  // Sync when the selected file changes
-  useEffect(() => {
-    setValue(title)
-    committedRef.current = title
-  }, [title])
-
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => {
-          const next = value.trim() || 'Untitled'
-          setValue(next)
-          if (next !== committedRef.current) {
-            committedRef.current = next
-            void onCommit(next)
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            e.currentTarget.blur()
-          } else if (e.key === 'Escape') {
-            e.preventDefault()
-            setValue(committedRef.current)
-            e.currentTarget.blur()
-          }
-        }}
-        placeholder="Untitled"
-        className="min-w-0 flex-1 bg-transparent text-2xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground"
-      />
-      <button
-        type="button"
-        onClick={onTogglePin}
-        aria-label={isPinned ? 'Unpin note' : 'Pin note'}
-        className={cn(
-          'text-muted-foreground hover:text-foreground flex size-8 items-center justify-center rounded-md transition',
-          isPinned && 'text-primary hover:text-primary'
-        )}
-      >
-        <Star className={cn('size-4', isPinned && 'fill-current')} />
-      </button>
-    </div>
-  )
-}
-
-function MetaRow({
-  savedAt,
-  words,
-  readMinutes,
-}: {
-  savedAt: number | null
-  words: number
-  readMinutes: number
-}) {
-  return (
-    <div className="text-muted-foreground mt-2 flex items-center gap-2 font-mono text-[11px]">
-      <span>Edited {formatRelative(savedAt)}</span>
-      <span className="text-border">·</span>
-      <span>
-        {words} word{words === 1 ? '' : 's'}
-      </span>
-      <span className="text-border">·</span>
-      <span>{readMinutes} min read</span>
-    </div>
-  )
-}
-
-function TagRow({
-  tags,
-  onChange,
-}: {
-  tags: string[]
-  onChange: (next: string[]) => void
-}) {
-  const [adding, setAdding] = useState(false)
-  const [draft, setDraft] = useState('')
-
-  const commit = () => {
-    const tag = normalizeTag(draft)
-    setDraft('')
-    setAdding(false)
-    if (!tag || tags.includes(tag)) return
-    onChange([...tags, tag])
-  }
-
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-1.5">
-      {tags.map((t) => (
-        <span
-          key={t}
-          className="bg-accent text-accent-foreground group/tag inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[11px]"
-        >
-          #{t}
-          <button
-            type="button"
-            onClick={() => onChange(tags.filter((x) => x !== t))}
-            aria-label={`Remove ${t}`}
-            className="text-muted-foreground hover:text-foreground opacity-0 transition group-hover/tag:opacity-100"
-          >
-            <X className="size-3" />
-          </button>
-        </span>
-      ))}
-      {adding ? (
-        <input
-          autoFocus
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              commit()
-            } else if (e.key === 'Escape') {
-              e.preventDefault()
-              setDraft('')
-              setAdding(false)
-            }
-          }}
-          placeholder="tag"
-          className="bg-background h-6 w-20 rounded-full border px-2 font-mono text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 font-mono text-[11px] transition"
-        >
-          <Plus className="size-2.5" />
-          tag
-        </button>
-      )}
     </div>
   )
 }
