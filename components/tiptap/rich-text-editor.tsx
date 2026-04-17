@@ -112,7 +112,7 @@ export function RichTextEditorDemo({
   return (
     <div
       className={cn(
-        "relative max-h-[calc(100dvh-6rem)]  w-full overflow-hidden overflow-y-scroll border bg-card pb-[60px] sm:pb-0",
+        "relative flex h-full w-full flex-col overflow-hidden border bg-card",
         className
       )}
     >
@@ -121,7 +121,7 @@ export function RichTextEditorDemo({
       <TipTapFloatingMenu editor={editor} />
       <EditorContent
         editor={editor}
-        className=" min-h-[600px] w-full min-w-full cursor-text sm:p-6"
+        className="min-h-0 w-full min-w-full flex-1 cursor-text overflow-y-auto sm:p-6"
       />
     </div>
   );

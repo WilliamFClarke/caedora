@@ -100,7 +100,7 @@ export function EditorPane({ provider, path }: EditorPaneProps) {
         <span className="text-border">·</span>
         <span>{readMinutes} min read</span>
       </div>
-      <div className="flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <Editor
           fileKey={path}
           initialMarkdown={loaded.content}
