@@ -147,6 +147,16 @@ function displayName(name: string): string {
   return name.endsWith('.md') ? name.slice(0, -3) : name
 }
 
+function nextUntitledFromTree(children: TreeNodeT[], kind: 'file' | 'folder'): string {
+  const names = new Set(children.map((c) => c.name))
+  for (let i = 1; i < 1000; i++) {
+    const base = `Untitled ${i}`
+    const candidate = kind === 'file' ? `${base}.md` : base
+    if (!names.has(candidate)) return base
+  }
+  return `Untitled ${Date.now()}`
+}
+
 export function AppSidebar({
   entries,
   selected,
@@ -296,7 +306,8 @@ export function AppSidebar({
               {creating?.parent === '' && (
                 <SidebarMenuItem>
                   <InlineInput
-                    placeholder={creating.kind === 'folder' ? 'New folder' : 'New note'}
+                    initial={nextUntitledFromTree(tree.children, creating.kind)}
+                    selectOnFocus
                     onSubmit={async (name) => {
                       try {
                         if (creating.kind === 'file') await onCreateFile('', name)
@@ -472,7 +483,8 @@ function FolderRow(props: TreeRowProps) {
             {creating?.parent === node.path && (
               <SidebarMenuItem>
                 <InlineInput
-                  placeholder={creating.kind === 'folder' ? 'New folder' : 'New note'}
+                  initial={nextUntitledFromTree(node.children, creating.kind)}
+                  selectOnFocus
                   onSubmit={async (name) => {
                     try {
                       if (creating.kind === 'file') await onCreateFile(node.path, name)
@@ -585,11 +597,13 @@ function FileRow(props: TreeRowProps) {
 function InlineInput({
   initial = '',
   placeholder,
+  selectOnFocus,
   onSubmit,
   onCancel,
 }: {
   initial?: string
   placeholder?: string
+  selectOnFocus?: boolean
   onSubmit: (name: string) => void | Promise<void>
   onCancel: () => void
 }) {
@@ -600,6 +614,9 @@ function InlineInput({
       autoFocus
       value={value}
       placeholder={placeholder}
+      onFocus={(e) => {
+        if (selectOnFocus) e.currentTarget.select()
+      }}
       onChange={(e) => setValue(e.target.value)}
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {

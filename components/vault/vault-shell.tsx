@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
@@ -36,6 +36,9 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [virtualFolders, setVirtualFolders] = useState<Set<string>>(new Set())
   const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
+  const didAutoSelect = useRef(false)
+  const initialPathRef = useRef(initialPath)
+  initialPathRef.current = initialPath
 
   useEffect(() => {
     if (status.state === 'idle' || status.state === 'permission-required') {
@@ -52,7 +55,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     try {
       const all = await listFilesRecursive(provider)
       const mdEntries = all.filter((e) => e.type === 'dir' || e.name.endsWith('.md'))
-      setEntries(mdEntries)
+      setEntries((prev) => (sameEntries(prev, mdEntries) ? prev : mdEntries))
       setLoadError(null)
 
       // Prune virtual folders that now exist as real paths
@@ -69,9 +72,10 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         return next
       })
 
-      if (!initialPath) {
+      if (!initialPathRef.current && !didAutoSelect.current) {
         const firstFile = mdEntries.find((e) => e.type === 'file')
         if (firstFile) {
+          didAutoSelect.current = true
           setSelected(firstFile.path)
           router.replace(`/vault/${firstFile.path}`)
         }
@@ -79,7 +83,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load notes')
     }
-  }, [provider, initialPath, router])
+  }, [provider, router])
 
   useEffect(() => {
     void refreshEntries()
@@ -292,6 +296,14 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       </SidebarInset>
     </SidebarProvider>
   )
+}
+
+function sameEntries(a: FileEntry[], b: FileEntry[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].path !== b[i].path || a[i].type !== b[i].type) return false
+  }
+  return true
 }
 
 function ancestors(path: string): string[] {
