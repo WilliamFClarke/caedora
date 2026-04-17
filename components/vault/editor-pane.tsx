@@ -85,7 +85,7 @@ export function EditorPane({ provider, path }: EditorPaneProps) {
     )
   }
 
-  if (!loaded || loaded.path !== path) {
+  if (!loaded) {
     return (
       <div className="flex h-full items-center justify-center">
         <p className="text-muted-foreground text-sm">Loading…</p>
@@ -93,6 +93,9 @@ export function EditorPane({ provider, path }: EditorPaneProps) {
     )
   }
 
+  // Render with the last-loaded file's content/key until the new file
+  // resolves. That keeps the editor mounted across navigation (no flash
+  // of the loading state), and TipTap swaps content when fileKey updates.
   return (
     <div className="flex h-full flex-col">
       <div className="text-muted-foreground flex items-center gap-3 border-b px-6 py-2 font-mono text-[10px] uppercase tracking-wide">
@@ -102,7 +105,7 @@ export function EditorPane({ provider, path }: EditorPaneProps) {
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         <Editor
-          fileKey={path}
+          fileKey={loaded.path}
           initialMarkdown={loaded.content}
           onChange={setLiveContent}
         />
