@@ -118,7 +118,10 @@ export function RichTextEditorDemo({
   });
 
   const loadedKey = React.useRef<string | null>(null);
-  React.useEffect(() => {
+  // useLayoutEffect so setContent runs in the same commit as the prop change —
+  // otherwise the browser paints once with the new file's key/meta but the old
+  // TipTap DOM, producing a visible one-frame flicker on file switch.
+  React.useLayoutEffect(() => {
     if (!editor || contentKey === undefined) return;
     if (loadedKey.current === contentKey) return;
     loadedKey.current = contentKey;
