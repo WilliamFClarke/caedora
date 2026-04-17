@@ -290,7 +290,18 @@ export function VaultShell({ initialPath }: VaultShellProps) {
               <p className="text-destructive text-sm">{loadError}</p>
             </div>
           ) : (
-            <EditorPane provider={provider} path={selected} />
+            <EditorPane
+              provider={provider}
+              path={selected}
+              lastModified={
+                selected
+                  ? entries.find((e) => e.path === selected)?.lastModified
+                  : undefined
+              }
+              isPinned={selected ? pinned.has(selected) : false}
+              onTogglePin={togglePin}
+              onRename={onRenamePath}
+            />
           )}
         </div>
       </SidebarInset>
