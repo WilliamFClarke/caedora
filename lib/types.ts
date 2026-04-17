@@ -51,6 +51,10 @@ export interface VaultProvider {
   deleteFile(path: string): Promise<void>
   listFiles(dir?: string): Promise<FileEntry[]>
 
+  // Path operations (work on files or folders; folders recurse over descendants)
+  renamePath(from: string, to: string): Promise<void>
+  deletePath(path: string): Promise<void>
+
   // Git operations
   commit(message: string, paths: string[]): Promise<string>  // returns commit oid
   log(path?: string, limit?: number): Promise<CommitEntry[]>
