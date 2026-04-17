@@ -80,6 +80,52 @@ export class GitHubProvider implements VaultProvider {
     this.shaCache.delete(path)
   }
 
+  async renamePath(from: string, to: string): Promise<void> {
+    const files = await this._listAllDescendantFiles(from)
+    if (files.length === 0) {
+      const content = await this.readFile(from)
+      await this.writeFile(to, content)
+      await this.deleteFile(from)
+      return
+    }
+    for (const filePath of files) {
+      const content = await this.readFile(filePath)
+      const newPath = `${to}${filePath.slice(from.length)}`
+      await this.writeFile(newPath, content)
+      await this.deleteFile(filePath)
+    }
+  }
+
+  async deletePath(path: string): Promise<void> {
+    const files = await this._listAllDescendantFiles(path)
+    if (files.length === 0) {
+      await this.deleteFile(path)
+      return
+    }
+    for (const filePath of files) {
+      await this.deleteFile(filePath)
+    }
+  }
+
+  private async _listAllDescendantFiles(path: string): Promise<string[]> {
+    const out: string[] = []
+    const queue = [path]
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      let entries: FileEntry[]
+      try {
+        entries = await this.listFiles(current)
+      } catch {
+        return out
+      }
+      for (const e of entries) {
+        if (e.type === 'dir') queue.push(e.path)
+        else out.push(e.path)
+      }
+    }
+    return out
+  }
+
   private async _fetchSha(path: string): Promise<string> {
     const res = await fetch(`${this.base}/contents/${path}`, {
       headers: apiHeaders(this.token),

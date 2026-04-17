@@ -44,6 +44,56 @@ export class LocalGitProvider implements VaultProvider {
     await this.fs.promises.unlink(`/${path}`)
   }
 
+  async renamePath(from: string, to: string): Promise<void> {
+    const stat = await this.fs.promises.stat(`/${from}`)
+    if (stat.isDirectory()) {
+      const files: FileEntry[] = []
+      await this._walk(from, files)
+      for (const entry of files.filter((e) => e.type === 'file')) {
+        const newPath = `${to}${entry.path.slice(from.length)}`
+        const content = await this.fs.promises.readFile(`/${entry.path}`, { encoding: 'utf8' }) as string
+        await this.fs.promises.writeFile(`/${newPath}`, content)
+        await git.add({ fs: this.fs, dir: DIR, filepath: newPath })
+        await this.fs.promises.unlink(`/${entry.path}`)
+        await git.remove({ fs: this.fs, dir: DIR, filepath: entry.path })
+      }
+      try {
+        await this.fs.promises.rmdir(`/${from}`, { recursive: true })
+      } catch {
+        // folder may already be gone
+      }
+    } else {
+      await this.fs.promises.rename(`/${from}`, `/${to}`)
+      await git.add({ fs: this.fs, dir: DIR, filepath: to })
+      await git.remove({ fs: this.fs, dir: DIR, filepath: from })
+    }
+  }
+
+  async deletePath(path: string): Promise<void> {
+    let isDir = false
+    try {
+      const stat = await this.fs.promises.stat(`/${path}`)
+      isDir = stat.isDirectory()
+    } catch {
+      return
+    }
+    if (isDir) {
+      const files: FileEntry[] = []
+      await this._walk(path, files)
+      for (const entry of files.filter((e) => e.type === 'file')) {
+        await this.fs.promises.unlink(`/${entry.path}`)
+        await git.remove({ fs: this.fs, dir: DIR, filepath: entry.path })
+      }
+      try {
+        await this.fs.promises.rmdir(`/${path}`, { recursive: true })
+      } catch {
+        // already gone
+      }
+    } else {
+      await this.deleteFile(path)
+    }
+  }
+
   async listFiles(dir = ''): Promise<FileEntry[]> {
     const entries: FileEntry[] = []
     await this._walk(dir, entries)
