@@ -277,6 +277,14 @@ export function AppSidebar({
         <SidebarGroup>
           <SidebarGroupLabel>Files</SidebarGroupLabel>
           <SidebarGroupAction
+            title="New folder"
+            className="right-9"
+            onClick={() => setCreating({ parent: '', kind: 'folder' })}
+          >
+            <FolderPlus />
+            <span className="sr-only">New folder</span>
+          </SidebarGroupAction>
+          <SidebarGroupAction
             title="New file"
             onClick={() => setCreating({ parent: '', kind: 'file' })}
           >

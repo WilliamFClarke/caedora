@@ -115,12 +115,18 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       }
       const display = fileName.replace(/\.md$/, '')
       await provider.writeFile(fullPath, `# ${display}\n\n`)
+      // Optimistic: show the new file in the sidebar and open it immediately
+      setEntries((prev) =>
+        prev.some((e) => e.path === fullPath)
+          ? prev
+          : [...prev, { path: fullPath, name: fileName, type: 'file' }]
+      )
+      setSelected(fullPath)
+      router.push(`/vault/${fullPath}`)
       if (!provider.writesAreCommits) {
         await provider.commit(`Create ${fullPath}`, [fullPath])
       }
-      await refreshEntries()
-      setSelected(fullPath)
-      router.push(`/vault/${fullPath}`)
+      void refreshEntries()
     },
     [provider, refreshEntries, router]
   )
