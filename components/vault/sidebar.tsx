@@ -1,21 +1,27 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  Calendar,
   ChevronRight,
   FileText,
   FilePlus,
+  Folder,
   FolderPlus,
+  GitBranch,
+  Hash,
+  Inbox,
   LogOut,
   Pencil,
   Search,
+  Star,
   Trash2,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ModeToggle } from '@/components/mode-toggle'
 import { useVault } from '@/lib/vault-context'
-import type { FileEntry } from '@/lib/types'
+import type { FileEntry, VaultProvider } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import {
   Collapsible,
@@ -39,6 +45,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -48,6 +55,9 @@ import {
 interface AppSidebarProps {
   entries: FileEntry[]
   selected: string | null
+  provider: VaultProvider
+  pinned: Set<string>
+  onTogglePin: (path: string) => void
   onSelect: (path: string) => void
   onCreateFile: (parent: string, name: string) => Promise<void>
   onCreateFolder: (parent: string, name: string) => void
@@ -116,9 +126,33 @@ function buildTree(entries: FileEntry[]): TreeNodeT {
   return root
 }
 
+function folderIconFor(name: string) {
+  const n = name.toLowerCase()
+  if (n === 'daily' || n === 'journal') return Calendar
+  if (n === 'meetings' || n === 'inbox') return Inbox
+  if (n === 'reading' || n === 'tags') return Hash
+  return Folder
+}
+
+function countFiles(node: TreeNodeT): number {
+  let n = 0
+  for (const c of node.children) {
+    if (c.type === 'file') n++
+    else n += countFiles(c)
+  }
+  return n
+}
+
+function displayName(name: string): string {
+  return name.endsWith('.md') ? name.slice(0, -3) : name
+}
+
 export function AppSidebar({
   entries,
   selected,
+  provider,
+  pinned,
+  onTogglePin,
   onSelect,
   onCreateFile,
   onCreateFolder,
@@ -129,8 +163,18 @@ export function AppSidebar({
   const { disconnect, status } = useVault()
   const [search, setSearch] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
-  /** Parent folder path + kind of new entry being created inline ('' for root). */
   const [creating, setCreating] = useState<{ parent: string; kind: 'file' | 'folder' } | null>(null)
+  const [branch, setBranch] = useState<string>('')
+
+  useEffect(() => {
+    let alive = true
+    provider.currentBranch().then((b) => {
+      if (alive) setBranch(b)
+    }).catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [provider])
 
   const tree = useMemo(() => buildTree(entries), [entries])
   const lowered = search.trim().toLowerCase()
@@ -141,26 +185,57 @@ export function AppSidebar({
     )
   }, [entries, lowered])
 
+  const pinnedFiles = useMemo(() => {
+    const fileSet = new Set(entries.filter((e) => e.type === 'file').map((e) => e.path))
+    return [...pinned].filter((p) => fileSet.has(p)).sort()
+  }, [pinned, entries])
+
   function onDisconnect() {
     disconnect()
     router.push('/')
   }
 
-  const vaultLabel =
-    status.state === 'ready' && status.providerType === 'github' ? 'GitHub vault' : 'Local vault'
+  const vaultType = status.state === 'ready' ? status.providerType : 'local'
+  const sharedRow: Omit<TreeRowProps, 'node'> = {
+    selected,
+    matches,
+    pinned,
+    onTogglePin,
+    onSelect,
+    renaming,
+    setRenaming,
+    creating,
+    setCreating,
+    onCreateFile,
+    onCreateFolder,
+    onRenamePath,
+    onDeletePath,
+  }
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="flex items-center justify-between gap-2 px-2 pt-1">
           <div className="flex items-center gap-2">
-            <FileText className="size-4" />
+            <div className="bg-primary text-primary-foreground flex size-5 items-center justify-center rounded-sm font-mono text-[10px] font-semibold">
+              pm
+            </div>
             <span className="text-sm font-semibold group-data-[collapsible=icon]:hidden">
               personal-md
             </span>
           </div>
           <div className="group-data-[collapsible=icon]:hidden">
             <ModeToggle />
+          </div>
+        </div>
+        <div className="group-data-[collapsible=icon]:hidden">
+          <div className="border-border bg-background flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs">
+            <span className="text-muted-foreground truncate">
+              {vaultType === 'github' ? 'GitHub vault' : 'Local vault'}
+            </span>
+            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+              {vaultType}
+            </span>
           </div>
         </div>
         <div className="relative group-data-[collapsible=icon]:hidden">
@@ -175,6 +250,30 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
+        {pinnedFiles.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Pinned</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {pinnedFiles.map((path) => {
+                  const name = path.split('/').pop() ?? path
+                  return (
+                    <SidebarMenuItem key={`pin-${path}`}>
+                      <SidebarMenuButton
+                        isActive={selected === path}
+                        onClick={() => onSelect(path)}
+                      >
+                        <Star className="fill-primary text-primary" />
+                        <span className="truncate">{displayName(name)}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         <SidebarGroup>
           <SidebarGroupLabel>Files</SidebarGroupLabel>
           <SidebarGroupAction
@@ -208,21 +307,7 @@ export function AppSidebar({
                 </p>
               ) : (
                 tree.children.map((child) => (
-                  <TreeRow
-                    key={child.path}
-                    node={child}
-                    selected={selected}
-                    matches={matches}
-                    onSelect={onSelect}
-                    renaming={renaming}
-                    setRenaming={setRenaming}
-                    creating={creating}
-                    setCreating={setCreating}
-                    onCreateFile={onCreateFile}
-                    onCreateFolder={onCreateFolder}
-                    onRenamePath={onRenamePath}
-                    onDeletePath={onDeletePath}
-                  />
+                  <TreeRow key={child.path} node={child} {...sharedRow} />
                 ))
               )}
             </SidebarMenu>
@@ -231,8 +316,19 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="flex items-center justify-between px-2 pb-1 group-data-[collapsible=icon]:hidden">
-          <span className="text-muted-foreground text-xs">{vaultLabel}</span>
+        <div className="flex items-center justify-between gap-2 px-2 pb-1 group-data-[collapsible=icon]:hidden">
+          <div className="flex min-w-0 items-center gap-1.5 text-xs">
+            <span
+              className="bg-good relative inline-flex size-1.5 rounded-full"
+              aria-hidden
+            >
+              <span className="bg-good absolute inline-flex size-full animate-ping rounded-full opacity-60" />
+            </span>
+            <GitBranch className="text-muted-foreground size-3" />
+            <span className="text-muted-foreground truncate font-mono text-[10px]">
+              {branch || '…'}
+            </span>
+          </div>
           <button
             type="button"
             onClick={onDisconnect}
@@ -253,6 +349,8 @@ interface TreeRowProps {
   node: TreeNodeT
   selected: string | null
   matches: Set<string> | null
+  pinned: Set<string>
+  onTogglePin: (path: string) => void
   onSelect: (path: string) => void
   renaming: string | null
   setRenaming: (path: string | null) => void
@@ -266,9 +364,7 @@ interface TreeRowProps {
 
 function TreeRow(props: TreeRowProps) {
   const { node, matches } = props
-  if (matches) {
-    if (!containsMatch(node, matches)) return null
-  }
+  if (matches && !containsMatch(node, matches)) return null
   if (node.type === 'dir') return <FolderRow {...props} />
   return <FileRow {...props} />
 }
@@ -276,9 +372,6 @@ function TreeRow(props: TreeRowProps) {
 function FolderRow(props: TreeRowProps) {
   const {
     node,
-    selected,
-    matches,
-    onSelect,
     renaming,
     setRenaming,
     creating,
@@ -290,35 +383,45 @@ function FolderRow(props: TreeRowProps) {
   } = props
   const [open, setOpen] = useState(true)
   const isRenaming = renaming === node.path
+  const Icon = folderIconFor(node.name)
+  const fileCount = countFiles(node)
 
   return (
     <SidebarMenuItem>
       <Collapsible
         open={open}
         onOpenChange={setOpen}
-        className="group/collapsible [&[data-state=open]>button>svg:first-child]:rotate-90"
+        className="group/collapsible [&[data-state=open]>div>button>svg:first-child]:rotate-90"
       >
         <ContextMenu>
           <ContextMenuTrigger asChild>
-            <CollapsibleTrigger asChild>
-              <SidebarMenuButton>
-                <ChevronRight className="transition-transform" />
-                {isRenaming ? (
-                  <InlineInput
-                    initial={node.name}
-                    onSubmit={async (name) => {
-                      setRenaming(null)
-                      const parent = node.path.split('/').slice(0, -1).join('/')
-                      const to = parent ? `${parent}/${name}` : name
-                      if (to !== node.path) await onRenamePath(node.path, to)
-                    }}
-                    onCancel={() => setRenaming(null)}
-                  />
-                ) : (
-                  <span className="truncate">{node.name}</span>
-                )}
-              </SidebarMenuButton>
-            </CollapsibleTrigger>
+            <div className="relative">
+              <CollapsibleTrigger asChild>
+                <SidebarMenuButton>
+                  <ChevronRight className="transition-transform" />
+                  <Icon className="text-muted-foreground" />
+                  {isRenaming ? (
+                    <InlineInput
+                      initial={node.name}
+                      onSubmit={async (name) => {
+                        setRenaming(null)
+                        const parent = node.path.split('/').slice(0, -1).join('/')
+                        const to = parent ? `${parent}/${name}` : name
+                        if (to !== node.path) await onRenamePath(node.path, to)
+                      }}
+                      onCancel={() => setRenaming(null)}
+                    />
+                  ) : (
+                    <span className="truncate">{node.name}</span>
+                  )}
+                </SidebarMenuButton>
+              </CollapsibleTrigger>
+              {fileCount > 0 && !isRenaming && (
+                <SidebarMenuBadge className="font-mono text-[10px]">
+                  {fileCount}
+                </SidebarMenuBadge>
+              )}
+            </div>
           </ContextMenuTrigger>
           <ContextMenuContent>
             <ContextMenuItem
@@ -374,23 +477,11 @@ function FolderRow(props: TreeRowProps) {
                 />
               </SidebarMenuItem>
             )}
-            {node.children.map((c) => (
-              <TreeRow
-                key={c.path}
-                node={c}
-                selected={selected}
-                matches={matches}
-                onSelect={onSelect}
-                renaming={renaming}
-                setRenaming={setRenaming}
-                creating={creating}
-                setCreating={setCreating}
-                onCreateFile={onCreateFile}
-                onCreateFolder={onCreateFolder}
-                onRenamePath={onRenamePath}
-                onDeletePath={onDeletePath}
-              />
-            ))}
+            {node.children.map((c) => {
+              const { node: _n, ...rest } = props
+              void _n
+              return <TreeRow key={c.path} node={c} {...rest} />
+            })}
           </SidebarMenuSub>
         </CollapsibleContent>
       </Collapsible>
@@ -399,12 +490,23 @@ function FolderRow(props: TreeRowProps) {
 }
 
 function FileRow(props: TreeRowProps) {
-  const { node, selected, onSelect, renaming, setRenaming, onRenamePath, onDeletePath } = props
+  const {
+    node,
+    selected,
+    pinned,
+    onTogglePin,
+    onSelect,
+    renaming,
+    setRenaming,
+    onRenamePath,
+    onDeletePath,
+  } = props
   const isRenaming = renaming === node.path
   const isSel = selected === node.path
+  const isPinned = pinned.has(node.path)
 
   return (
-    <SidebarMenuItem>
+    <SidebarMenuItem className="group/file">
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <SidebarMenuButton
@@ -432,6 +534,11 @@ function FileRow(props: TreeRowProps) {
           </SidebarMenuButton>
         </ContextMenuTrigger>
         <ContextMenuContent>
+          <ContextMenuItem onSelect={() => onTogglePin(node.path)}>
+            <Star className={cn(isPinned && 'fill-current')} />
+            {isPinned ? 'Unpin' : 'Pin'}
+          </ContextMenuItem>
+          <ContextMenuSeparator />
           <ContextMenuItem onSelect={() => setRenaming(node.path)}>
             <Pencil />
             Rename
@@ -447,6 +554,22 @@ function FileRow(props: TreeRowProps) {
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+      {!isRenaming && (
+        <button
+          type="button"
+          aria-label={isPinned ? 'Unpin' : 'Pin'}
+          onClick={(e) => {
+            e.stopPropagation()
+            onTogglePin(node.path)
+          }}
+          className={cn(
+            'text-muted-foreground hover:text-foreground absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center rounded-sm opacity-0 transition group-hover/file:opacity-100',
+            isPinned && 'text-primary opacity-100'
+          )}
+        >
+          <Star className={cn('size-3', isPinned && 'fill-current')} />
+        </button>
+      )}
     </SidebarMenuItem>
   )
 }
@@ -498,8 +621,4 @@ function InlineInput({
 function containsMatch(node: TreeNodeT, matches: Set<string>): boolean {
   if (matches.has(node.path)) return true
   return node.children.some((c) => containsMatch(c, matches))
-}
-
-function displayName(name: string): string {
-  return name.endsWith('.md') ? name.slice(0, -3) : name
 }

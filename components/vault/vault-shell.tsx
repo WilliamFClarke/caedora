@@ -6,6 +6,7 @@ import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
+import { usePinned } from '@/hooks/use-pinned'
 import type { FileEntry } from '@/lib/types'
 import {
   Breadcrumb,
@@ -34,6 +35,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [selected, setSelected] = useState<string | null>(initialPath)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [virtualFolders, setVirtualFolders] = useState<Set<string>>(new Set())
+  const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
 
   useEffect(() => {
     if (status.state === 'idle' || status.state === 'permission-required') {
@@ -146,6 +148,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         return
       }
       await provider.renamePath(from, to)
+      renamePinned(from, to)
       if (!provider.writesAreCommits) {
         await provider.commit(`Rename ${from} to ${to}`, [to])
       }
@@ -159,7 +162,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       }
       await refreshEntries()
     },
-    [provider, virtualFolders, selected, refreshEntries, router]
+    [provider, virtualFolders, selected, refreshEntries, router, renamePinned]
   )
 
   const onDeletePath = useCallback(
@@ -177,6 +180,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         return
       }
       await provider.deletePath(path)
+      removePinned(path)
       if (!provider.writesAreCommits) {
         await provider.commit(`Delete ${path}`, [])
       }
@@ -186,7 +190,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       }
       await refreshEntries()
     },
-    [provider, virtualFolders, selected, refreshEntries, router]
+    [provider, virtualFolders, selected, refreshEntries, router, removePinned]
   )
 
   const breadcrumbSegments = useMemo(() => {
@@ -212,6 +216,9 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       <AppSidebar
         entries={combinedEntries}
         selected={selected}
+        provider={provider}
+        pinned={pinned}
+        onTogglePin={togglePin}
         onSelect={onSelect}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
@@ -227,14 +234,22 @@ export function VaultShell({ initialPath }: VaultShellProps) {
           />
           <Breadcrumb>
             <BreadcrumbList>
+              <BreadcrumbItem>
+                <span className="text-muted-foreground font-mono text-[10px] uppercase tracking-wider">
+                  vault
+                </span>
+              </BreadcrumbItem>
               {breadcrumbSegments.length === 0 ? (
-                <BreadcrumbItem>
-                  <BreadcrumbPage>Vault</BreadcrumbPage>
-                </BreadcrumbItem>
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Home</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
               ) : (
-                breadcrumbSegments.map((seg, i) => (
+                breadcrumbSegments.map((seg) => (
                   <div key={seg.path} className="flex items-center gap-1.5 sm:gap-2.5">
-                    {i > 0 && <BreadcrumbSeparator />}
+                    <BreadcrumbSeparator />
                     <BreadcrumbItem>
                       {seg.isLast ? (
                         <BreadcrumbPage>{seg.name}</BreadcrumbPage>
