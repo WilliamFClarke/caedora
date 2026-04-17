@@ -1,48 +1,32 @@
 'use client'
 
-import { useEditor, EditorContent } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Placeholder from '@tiptap/extension-placeholder'
-import { useEffect, useRef } from 'react'
+import { useMemo } from 'react'
+import type { Editor as TiptapEditor } from '@tiptap/react'
+import { RichTextEditorDemo } from '@/components/tiptap/rich-text-editor'
 import { mdToTiptap, tiptapToMd, type TiptapDoc } from '@/lib/markdown'
 
 interface EditorProps {
-  /** Markdown loaded from disk. Changes to this prop load a new document. */
   initialMarkdown: string
-  /** Called whenever the editor content changes, with the new markdown. */
   onChange: (markdown: string) => void
-  /** Stable key (e.g. file path) — used to detect file switches. */
   fileKey: string
 }
 
 export function Editor({ initialMarkdown, onChange, fileKey }: EditorProps) {
-  const loadedKey = useRef<string | null>(null)
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({}),
-      Placeholder.configure({ placeholder: 'Start writing…' }),
-    ],
-    content: mdToTiptap(initialMarkdown) as unknown as Record<string, unknown>,
-    editorProps: {
-      attributes: {
-        class:
-          'prose dark:prose-invert max-w-none focus:outline-none min-h-[calc(100vh-10rem)] px-12 py-10',
-      },
-    },
-    onUpdate: ({ editor: ed }) => {
-      const json = ed.getJSON() as unknown as TiptapDoc
-      onChange(tiptapToMd(json))
-    },
-    immediatelyRender: false,
-  })
+  const initialContent = useMemo(
+    () => mdToTiptap(initialMarkdown) as unknown,
+    [fileKey],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  )
 
-  // Reload content when file switches
-  useEffect(() => {
-    if (!editor) return
-    if (loadedKey.current === fileKey) return
-    loadedKey.current = fileKey
-    editor.commands.setContent(mdToTiptap(initialMarkdown) as unknown as Record<string, unknown>, false)
-  }, [editor, fileKey, initialMarkdown])
-
-  return <EditorContent editor={editor} />
+  return (
+    <RichTextEditorDemo
+      className="h-full border-0"
+      contentKey={fileKey}
+      content={initialContent}
+      onUpdate={(editor: TiptapEditor) => {
+        const json = editor.getJSON() as unknown as TiptapDoc
+        onChange(tiptapToMd(json))
+      }}
+    />
+  )
 }
