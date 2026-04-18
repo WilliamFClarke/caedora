@@ -40,6 +40,18 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const initialPathRef = useRef(initialPath)
   initialPathRef.current = initialPath
 
+  // Update the URL without triggering a Next.js route transition. router.push
+  // would refetch the RSC for /vault/[...path], painting an empty frame between
+  // the old and new trees — the "black flicker" on file switch. The URL is
+  // just a bookmark for `selected`; client state drives the UI.
+  const syncUrl = useCallback((path: string | null, mode: 'push' | 'replace' = 'push') => {
+    if (typeof window === 'undefined') return
+    const url = path ? `/vault/${path}` : '/vault'
+    if (window.location.pathname === url) return
+    if (mode === 'replace') window.history.replaceState(null, '', url)
+    else window.history.pushState(null, '', url)
+  }, [])
+
   useEffect(() => {
     if (status.state === 'idle' || status.state === 'permission-required') {
       router.replace('/')
@@ -49,6 +61,18 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   useEffect(() => {
     setSelected(initialPath)
   }, [initialPath])
+
+  // Browser back/forward: re-derive `selected` from the URL without routing.
+  useEffect(() => {
+    const onPop = () => {
+      const { pathname } = window.location
+      if (!pathname.startsWith('/vault')) return
+      const rest = pathname.slice('/vault'.length).replace(/^\//, '')
+      setSelected(rest ? decodeURIComponent(rest) : null)
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
 
   const refreshEntries = useCallback(async () => {
     if (!provider) return
@@ -77,13 +101,13 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         if (firstFile) {
           didAutoSelect.current = true
           setSelected(firstFile.path)
-          router.replace(`/vault/${firstFile.path}`)
+          syncUrl(firstFile.path, 'replace')
         }
       }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load notes')
     }
-  }, [provider, router])
+  }, [provider, syncUrl])
 
   useEffect(() => {
     void refreshEntries()
@@ -103,9 +127,9 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const onSelect = useCallback(
     (path: string) => {
       setSelected(path)
-      router.push(`/vault/${path}`)
+      syncUrl(path)
     },
-    [router]
+    [syncUrl]
   )
 
   const onCreateFile = useCallback(
@@ -126,13 +150,13 @@ export function VaultShell({ initialPath }: VaultShellProps) {
           : [...prev, { path: fullPath, name: fileName, type: 'file' }]
       )
       setSelected(fullPath)
-      router.push(`/vault/${fullPath}`)
+      syncUrl(fullPath)
       if (!provider.writesAreCommits) {
         await provider.commit(`Create ${fullPath}`, [fullPath])
       }
       void refreshEntries()
     },
-    [provider, refreshEntries, router]
+    [provider, refreshEntries, syncUrl]
   )
 
   const onCreateFolder = useCallback((parent: string, name: string) => {
@@ -164,15 +188,15 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       }
       if (selected === from) {
         setSelected(to)
-        router.replace(`/vault/${to}`)
+        syncUrl(to, 'replace')
       } else if (selected && selected.startsWith(`${from}/`)) {
         const newSelected = `${to}${selected.slice(from.length)}`
         setSelected(newSelected)
-        router.replace(`/vault/${newSelected}`)
+        syncUrl(newSelected, 'replace')
       }
       await refreshEntries()
     },
-    [provider, virtualFolders, selected, refreshEntries, router, renamePinned]
+    [provider, virtualFolders, selected, refreshEntries, syncUrl, renamePinned]
   )
 
   const onDeletePath = useCallback(
@@ -196,11 +220,11 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       }
       if (selected === path || selected?.startsWith(`${path}/`)) {
         setSelected(null)
-        router.replace('/vault')
+        syncUrl(null, 'replace')
       }
       await refreshEntries()
     },
-    [provider, virtualFolders, selected, refreshEntries, router, removePinned]
+    [provider, virtualFolders, selected, refreshEntries, syncUrl, removePinned]
   )
 
   const breadcrumbSegments = useMemo(() => {
