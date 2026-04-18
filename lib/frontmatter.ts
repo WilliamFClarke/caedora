@@ -76,3 +76,25 @@ export function normalizeTag(raw: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '')
 }
+
+/**
+ * Kebab-case a user-entered filename stem so URLs stay clean.
+ * "My Project Notes" -> "my-project-notes".
+ * Preserves the `.md` extension if present.
+ *
+ * Matches the convention used by Jekyll/Hugo/most markdown wikis —
+ * filename is a URL-safe slug; the H1 inside the file keeps its
+ * natural display casing ("# My Project Notes").
+ */
+export function slugifyFilename(raw: string): string {
+  const hasMd = /\.md$/i.test(raw)
+  const stem = hasMd ? raw.slice(0, -3) : raw
+  const slug = stem
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '') // strip combining marks (accents)
+    .toLowerCase()
+    .replace(/['"]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || 'untitled'
+}

@@ -7,6 +7,7 @@ import { EditorPane } from './editor-pane'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
 import { seedEmptyVault, WELCOME_PATH, SKILL_PATH } from '@/lib/vault-create'
+import { slugifyFilename } from '@/lib/frontmatter'
 import { usePinned } from '@/hooks/use-pinned'
 import type { FileEntry, VaultProvider } from '@/lib/types'
 import {
@@ -164,13 +165,13 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const onCreateFile = useCallback(
     async (parent: string, name: string) => {
       if (!provider) return
-      const fileName = name.endsWith('.md') ? name : `${name}.md`
+      const display = name.replace(/\.md$/i, '').trim() || 'Untitled'
+      const fileName = `${slugifyFilename(display)}.md`
       const fullPath = parent ? `${parent}/${fileName}` : fileName
       const all = await listFilesRecursive(provider)
       if (all.some((e) => e.path === fullPath)) {
         throw new Error('A note with that name already exists.')
       }
-      const display = fileName.replace(/\.md$/, '')
       await provider.writeFile(fullPath, `# ${display}\n\n`)
       // Optimistic: show the new file in the sidebar and open it immediately
       setEntries((prev) =>
@@ -189,13 +190,22 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   )
 
   const onCreateFolder = useCallback((parent: string, name: string) => {
-    const fullPath = parent ? `${parent}/${name}` : name
+    const slug = slugifyFilename(name)
+    const fullPath = parent ? `${parent}/${slug}` : slug
     setVirtualFolders((prev) => new Set(prev).add(fullPath))
   }, [])
 
   const onRenamePath = useCallback(
     async (from: string, to: string) => {
       if (!provider) return
+      // Slugify just the final segment of the destination, keeping parent
+      // folders untouched. Renames of folder paths also get a clean slug.
+      const parts = to.split('/')
+      const last = parts[parts.length - 1]
+      const isMd = /\.md$/i.test(last)
+      const stem = isMd ? last.slice(0, -3) : last
+      parts[parts.length - 1] = `${slugifyFilename(stem)}${isMd ? '.md' : ''}`
+      to = parts.join('/')
       if (from === to) return
       // Virtual-folder-only rename: update state, don't hit provider
       if (virtualFolders.has(from)) {

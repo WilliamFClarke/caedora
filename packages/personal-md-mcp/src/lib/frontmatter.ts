@@ -78,3 +78,20 @@ export function normalizeTag(raw: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '')
 }
+
+/**
+ * Kebab-case a user-entered filename stem so URLs stay clean.
+ * Mirrors lib/frontmatter.ts in the web app — keep in sync.
+ */
+export function slugifyFilename(raw: string): string {
+  const hasMd = /\.md$/i.test(raw)
+  const stem = hasMd ? raw.slice(0, -3) : raw
+  const slug = stem
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/['"]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || 'untitled'
+}

@@ -6,10 +6,10 @@ import { LocalGitProvider } from './storage/local-provider'
 import { savePinned, loadPinned } from './storage/idb'
 import type { VaultProvider } from './types'
 
-// Filename matches the H1 so the editor's H1 → filename sync doesn't
-// immediately rename the seeded note on first load (which briefly shows
-// two entries in the sidebar while the rename settles).
-export const WELCOME_PATH = 'Welcome to your vault.md'
+// Kebab-case filename for a clean URL; the H1 inside can be the display
+// title ("Welcome to your vault"). Filename and H1 are intentionally
+// independent — see the editor decoupling notes.
+export const WELCOME_PATH = 'welcome.md'
 const WELCOME_BODY = `---
 tags: [example-tag]
 ---
@@ -193,7 +193,12 @@ Everything lives in plain markdown files — no database, no server, no lock-in.
    \`#fitness\` sprinkled in the body. You may add tags when useful; always
    normalise (trim, lowercase, replace spaces with \`-\`, strip leading \`#\`).
 
-4. **No \`.gitkeep\`.** Empty folders are virtual in the UI and shouldn't be
+4. **Filenames are kebab-case slugs.** \`welcome.md\`,
+   \`project-atlas-brief.md\`, \`2026-04-15-daily.md\`. URLs stay clean; the
+   H1 inside carries the display title with spaces and capitals
+   ("# Project Atlas Brief").
+
+5. **No \`.gitkeep\`.** Empty folders are virtual in the UI and shouldn't be
    committed.
 
 ## How to find things
