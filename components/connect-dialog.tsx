@@ -20,6 +20,8 @@ import {
   isFolderEmpty,
   WELCOME_PATH,
   WELCOME_MARKDOWN,
+  SKILL_PATH,
+  SKILL_MARKDOWN,
   pinInitial,
 } from '@/lib/vault-create'
 import { Folder, Github, Loader2 } from 'lucide-react'
@@ -198,22 +200,28 @@ function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
         const created = (await resp.json()) as { owner: { login: string } }
         const actualOwner = created.owner.login
 
-        // Seed welcome.md using the shared welcome body.
-        await fetch(
-          `https://api.github.com/repos/${actualOwner}/${repo}/contents/${WELCOME_PATH}`,
-          {
-            method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${pat}`,
-              Accept: 'application/vnd.github+json',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              message: 'Initial vault setup',
-              content: btoa(unescape(encodeURIComponent(WELCOME_MARKDOWN))),
-            }),
-          }
-        )
+        // Seed welcome.md + SKILL.md using the shared bodies.
+        const seeds: Array<{ path: string; body: string }> = [
+          { path: WELCOME_PATH, body: WELCOME_MARKDOWN },
+          { path: SKILL_PATH, body: SKILL_MARKDOWN },
+        ]
+        for (const { path, body } of seeds) {
+          await fetch(
+            `https://api.github.com/repos/${actualOwner}/${repo}/contents/${encodeURIComponent(path)}`,
+            {
+              method: 'PUT',
+              headers: {
+                Authorization: `Bearer ${pat}`,
+                Accept: 'application/vnd.github+json',
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                message: 'Initial vault setup',
+                content: btoa(unescape(encodeURIComponent(body))),
+              }),
+            }
+          )
+        }
         await pinInitial(WELCOME_PATH)
 
         await connectGitHub(pat, actualOwner, repo)

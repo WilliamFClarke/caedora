@@ -12,6 +12,7 @@ import {
   GitBranch,
   Hash,
   Inbox,
+  Sparkles,
   LogOut,
   Pencil,
   Search,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ModeToggle } from '@/components/mode-toggle'
+import { ConnectAiDialog } from './connect-ai-dialog'
 import { useVault } from '@/lib/vault-context'
 import type { FileEntry, VaultProvider } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -165,6 +167,7 @@ export function AppSidebar({
   const [renaming, setRenaming] = useState<string | null>(null)
   const [creating, setCreating] = useState<{ parent: string; kind: 'file' | 'folder' } | null>(null)
   const [branch, setBranch] = useState<string>('')
+  const [aiOpen, setAiOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -325,6 +328,14 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter>
+        <button
+          type="button"
+          onClick={() => setAiOpen(true)}
+          className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition group-data-[collapsible=icon]:hidden"
+        >
+          <Sparkles className="size-3.5" />
+          Connect your AI
+        </button>
         <div className="flex items-center justify-between gap-2 px-2 pb-1 group-data-[collapsible=icon]:hidden">
           <div className="flex min-w-0 items-center gap-1.5 text-xs">
             <span
@@ -350,6 +361,7 @@ export function AppSidebar({
         </div>
       </SidebarFooter>
       <SidebarRail />
+      <ConnectAiDialog open={aiOpen} onOpenChange={setAiOpen} provider={provider} />
     </Sidebar>
   )
 }

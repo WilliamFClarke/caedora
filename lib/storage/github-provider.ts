@@ -30,8 +30,8 @@ export class GitHubProvider implements VaultProvider {
 
   constructor(
     private token: string,
-    private owner: string,
-    private repo: string
+    public readonly owner: string,
+    public readonly repo: string
   ) {}
 
   isReady(): boolean {

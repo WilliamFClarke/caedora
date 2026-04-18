@@ -16,6 +16,11 @@ export class LocalGitProvider implements VaultProvider {
     this.fs = createFsAdapter(handle)
   }
 
+  /** The folder name the user selected (File System Access doesn't expose path). */
+  get folderName(): string {
+    return this.handle.name
+  }
+
   /** Call after construction to ensure the directory is a git repo. */
   async init(): Promise<void> {
     try {
