@@ -373,7 +373,6 @@ export function VaultShell({ initialPath }: VaultShellProps) {
               syncNonce={syncNonce}
               isPinned={selected ? pinned.has(selected) : false}
               onTogglePin={togglePin}
-              onRename={onRenamePath}
             />
           )}
         </div>

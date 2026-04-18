@@ -170,8 +170,9 @@ Everything lives in plain markdown files — no database, no server, no lock-in.
 ## Conventions every note follows
 
 1. **The first H1 is the title.** A note starts with \`# Title of note\`.
-   The filename is a sanitised version of the H1 (\`Welcome to your vault.md\`
-   for an H1 of "Welcome to your vault"). When renaming, keep them in sync.
+   New notes are seeded with an H1 derived from the filename, but the two
+   are **independent** afterwards — editing the H1 doesn't rename the file,
+   and vice versa. Change whichever you want; the other stays put.
 
 2. **YAML frontmatter for metadata.** If a note has tags or other metadata,
    it starts with a \`---\` fence:
@@ -208,8 +209,10 @@ Everything lives in plain markdown files — no database, no server, no lock-in.
 When you create or update a note:
 
 - **Always open with an H1.** If you're creating a note from scratch, the
-  first line is \`# Some Title\`.
-- **Filename matches the H1** (or rename the file afterwards so they agree).
+  first line is \`# Some Title\`. Seed it from the intended filename.
+- **Filename and H1 are independent.** Don't auto-rename a file when the H1
+  changes, and don't rewrite the H1 when a file is renamed — the user edits
+  them on their own terms.
 - **Preserve existing frontmatter \`extra\` keys.** Read, modify, write back.
 - **Don't rewrite a file to rename it.** Use git \`mv\` (or the \`rename_note\`
   MCP tool) so history follows.
