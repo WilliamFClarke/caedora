@@ -42,7 +42,10 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>
             {mode === 'create' ? 'Create a new vault' : 'Open an existing vault'}
@@ -160,6 +163,36 @@ function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
 
 // ─── GitHub panel ─────────────────────────────────────────────────────────────
 
+async function waitForGithubListing(
+  pat: string,
+  owner: string,
+  repo: string,
+  expectedPaths: string[],
+  maxAttempts = 10,
+  delayMs = 500
+): Promise<void> {
+  const need = new Set(expectedPaths)
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, {
+        headers: {
+          Authorization: `Bearer ${pat}`,
+          Accept: 'application/vnd.github+json',
+        },
+      })
+      if (res.ok) {
+        const items = (await res.json()) as Array<{ path: string }>
+        const present = new Set(items.map((item) => item.path))
+        if ([...need].every((p) => present.has(p))) return
+      }
+    } catch {
+      // ignore, retry
+    }
+    await new Promise((r) => setTimeout(r, delayMs))
+  }
+  // Give up silently — the in-app seed-fallback will pick up the slack.
+}
+
 function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
   const router = useRouter()
   const { connectGitHub } = useVault()
@@ -223,6 +256,15 @@ function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
           )
         }
         await pinInitial(WELCOME_PATH)
+
+        // Wait for GitHub's contents listing to reflect the seeds before
+        // navigating. Without this, VaultShell can mount, list an empty tree
+        // (GitHub propagation lag on fresh repos), and show a blank sidebar
+        // until the user does something that triggers another refresh.
+        await waitForGithubListing(pat, actualOwner, repo, [
+          WELCOME_PATH,
+          SKILL_PATH,
+        ])
 
         await connectGitHub(pat, actualOwner, repo)
       } else {

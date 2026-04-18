@@ -81,11 +81,14 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     try {
       let all = await listFilesRecursive(provider)
 
-      // First-open seed: if the repo/folder has no markdown files yet, seed
-      // welcome.md + SKILL.md so the user lands on the same out-of-the-box
-      // state Create gives them. Runs once per session.
-      const hasMarkdown = all.some((e) => e.type === 'file' && e.name.endsWith('.md'))
-      if (!hasMarkdown && !didAutoSeed.current) {
+      // First-open seed: if the repo/folder has no README at all, treat it
+      // as a pre-personal-md repo and seed welcome.md + SKILL.md so the user
+      // gets the same out-of-the-box state Create gives them. Runs once per
+      // session so a manual delete of the README afterwards won't re-seed.
+      const hasReadme = all.some(
+        (e) => e.type === 'file' && /^readme(\.|$)/i.test(e.name)
+      )
+      if (!hasReadme && !didAutoSeed.current) {
         didAutoSeed.current = true
         const seeded = await seedEmptyVault(provider)
         if (seeded.length > 0) {

@@ -141,12 +141,14 @@ Thumbs.db
 *.swp
 `
 
-export const SKILL_PATH = 'SKILL.md'
+export const SKILL_PATH = 'AGENTS.md'
 // Instructions for any AI assistant (Claude Code, Claude Desktop, claude.ai
-// GitHub connector, Cursor, etc.) that is pointed at a vault. Keep this file
-// in sync with conventions enforced by the editor and the personal-md-mcp
-// package.
-export const SKILL_MARKDOWN = `# SKILL.md — instructions for AI assistants
+// GitHub connector, Cursor, Codex, etc.) that is pointed at a vault.
+// AGENTS.md is the emerging cross-tool convention for agent-readable project
+// instructions (Codex, Cursor); Claude Code auto-loads CLAUDE.md so users
+// targeting Claude Code can symlink AGENTS.md -> CLAUDE.md. Keep in sync
+// with conventions enforced by the editor and the personal-md-mcp package.
+export const SKILL_MARKDOWN = `# AGENTS.md — instructions for AI assistants
 
 You are looking at a **personal-md vault**. This repository is one person's
 "life OS": a private, markdown-first wiki of work, projects, health, finances,
@@ -214,7 +216,7 @@ When you create or update a note:
 - **Use real commits.** If you're running via the \`personal-md-mcp\` server
   against a GitHub repo, writes become commits automatically. Against a local
   folder, stage + commit as you go with a descriptive message.
-- **Leave \`welcome.md\` and this \`SKILL.md\` alone** unless the owner asks
+- **Leave \`welcome.md\` and this \`AGENTS.md\` alone** unless the owner asks
   you to update them.
 
 ## What you're good for
@@ -261,7 +263,7 @@ export async function seedLocalVault(provider: LocalGitProvider): Promise<void> 
 
 /**
  * Seed an empty vault through the generic VaultProvider interface — writes
- * welcome.md and SKILL.md if they're missing. Used when the user opens a
+ * welcome.md and AGENTS.md if they're missing. Used when the user opens a
  * pre-existing-but-empty vault (e.g. a GitHub repo they created manually)
  * so they get the same out-of-the-box experience as Create.
  */

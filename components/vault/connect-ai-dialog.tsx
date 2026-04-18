@@ -83,7 +83,7 @@ function ClaudeCodeTab({
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-muted-foreground">
         Claude Code already has file tools. Open your vault folder and start
-        a session — the <code className="bg-muted rounded px-1">SKILL.md</code>{' '}
+        a session — the <code className="bg-muted rounded px-1">AGENTS.md</code>{' '}
         at the root tells it how your vault is structured.
       </p>
       <Snippet label="Terminal" value={cdCommand} />
@@ -167,7 +167,7 @@ function WebTab({ gh }: { gh: GitHubProvider | null }) {
       </ol>
       <Snippet label="Repo" value={repoUrl} />
       <p className="text-muted-foreground text-xs">
-        The <code className="bg-muted rounded px-1">SKILL.md</code> at the root
+        The <code className="bg-muted rounded px-1">AGENTS.md</code> at the root
         of your vault gets picked up automatically — Claude will use it to
         understand your conventions.
       </p>

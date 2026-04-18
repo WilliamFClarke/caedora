@@ -49,7 +49,12 @@ export class GitHubProvider implements VaultProvider {
     if (!res.ok) throw new Error(`GitHub: failed to read ${path} (${res.status})`)
     const data = (await res.json()) as GHContent
     this.shaCache.set(path, data.sha)
-    return atob(data.content.replace(/\n/g, ''))
+    // `atob` returns a "binary string" of bytes; re-interpret as UTF-8 so
+    // non-ASCII characters (em-dash, emoji, accented letters) round-trip
+    // correctly instead of coming back as mojibake.
+    const binary = atob(data.content.replace(/\n/g, ''))
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+    return new TextDecoder('utf-8').decode(bytes)
   }
 
   async writeFile(path: string, content: string): Promise<void> {
