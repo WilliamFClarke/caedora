@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, CloudOff, GitBranch, Loader2 } from 'lucide-react'
 import { Editor } from './editor'
@@ -18,9 +18,10 @@ interface EditorPaneProps {
   provider: VaultProvider
   path: string | null
   lastModified?: number
+  /** Bumped by VaultShell when the user clicks Sync; forces a re-read. */
+  syncNonce?: number
   isPinned: boolean
   onTogglePin: (path: string) => void
-  onRename: (from: string, to: string) => Promise<void>
 }
 
 function countWords(markdown: string): number {
@@ -52,22 +53,13 @@ function titleFromPath(path: string): string {
   return name.endsWith('.md') ? name.slice(0, -3) : name
 }
 
-function extractH1(markdown: string): string | null {
-  const match = markdown.match(/^\s*#\s+(.+?)\s*$/m)
-  return match ? match[1].trim() : null
-}
-
-function sanitizeFilename(raw: string): string {
-  return raw.replace(/[\\/:*?"<>|]/g, '').trim()
-}
-
 export function EditorPane({
   provider,
   path,
   lastModified,
+  syncNonce = 0,
   isPinned,
   onTogglePin,
-  onRename,
 }: EditorPaneProps) {
   const [loaded, setLoaded] = useState<{
     path: string
@@ -120,7 +112,7 @@ export function EditorPane({
     return () => {
       cancelled = true
     }
-  }, [provider, path, lastModified])
+  }, [provider, path, lastModified, syncNonce])
 
   useEffect(() => {
     const id = setInterval(() => forceTick((t) => t + 1), 30_000)
@@ -145,32 +137,6 @@ export function EditorPane({
 
   const words = useMemo(() => countWords(liveBody ?? ''), [liveBody])
   const readMinutes = Math.max(1, Math.ceil(words / 225))
-
-  // Debounced H1 → filename sync. When the first H1's text diverges from the
-  // current filename stem, rename the file. Guard rename loops by comparing
-  // against the live `path` (which updates after each successful rename).
-  const renamingRef = useRef(false)
-  useEffect(() => {
-    if (!path || liveBody === null) return
-    const h1 = extractH1(liveBody)
-    if (!h1) return
-    const currentStem = titleFromPath(path)
-    const nextStem = sanitizeFilename(h1)
-    if (!nextStem || nextStem === currentStem) return
-    const timer = setTimeout(async () => {
-      if (renamingRef.current) return
-      const parent = path.split('/').slice(0, -1).join('/')
-      const to = parent ? `${parent}/${nextStem}.md` : `${nextStem}.md`
-      if (to === path) return
-      renamingRef.current = true
-      try {
-        await onRename(path, to)
-      } finally {
-        renamingRef.current = false
-      }
-    }, 800)
-    return () => clearTimeout(timer)
-  }, [liveBody, path, onRename])
 
   if (!path) {
     return (

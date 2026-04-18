@@ -1,9 +1,27 @@
-import { loadVaultState, saveVaultState } from './idb'
+import {
+  loadActiveVault,
+  upsertVault,
+  getVault,
+  listVaults as listVaultsIdb,
+} from './idb'
 import { LocalGitProvider } from './local-provider'
 import { GitHubProvider } from './github-provider'
-import type { VaultProvider, FileEntry } from '../types'
+import type { VaultProvider, FileEntry, PersistedVaultState } from '../types'
 
-export { saveVaultState, loadVaultState, clearVaultState } from './idb'
+export {
+  upsertVault,
+  listVaults,
+  getVault,
+  removeVault,
+  getActiveVaultId,
+  setActiveVaultId,
+  loadActiveVault,
+  vaultId,
+  // Back-compat
+  saveVaultState,
+  loadVaultState,
+  clearVaultState,
+} from './idb'
 export { LocalGitProvider } from './local-provider'
 export { GitHubProvider } from './github-provider'
 
@@ -19,7 +37,7 @@ export async function createProviderFromPersistedState(): Promise<{
   needsPermission: boolean
   folderName?: string
 }> {
-  const state = await loadVaultState()
+  const state = await loadActiveVault()
   if (!state) return { provider: null, needsPermission: false }
 
   if (state.type === 'local' && state.directoryHandle) {
@@ -57,7 +75,7 @@ export async function createProviderFromPersistedState(): Promise<{
  * MUST be called from a user gesture (button click).
  */
 export async function requestPermissionAndCreate(): Promise<VaultProvider | null> {
-  const state = await loadVaultState()
+  const state = await loadActiveVault()
   if (!state?.directoryHandle) return null
   const permission = await state.directoryHandle.requestPermission({ mode: 'readwrite' })
   if (permission !== 'granted') return null
@@ -66,19 +84,48 @@ export async function requestPermissionAndCreate(): Promise<VaultProvider | null
   return provider
 }
 
-/** Persist GitHub vault state. */
-export async function saveGitHubState(
-  pat: string,
-  owner: string,
-  repo: string
-): Promise<void> {
-  await saveVaultState({
-    type: 'github',
-    githubPat: pat,
-    githubOwner: owner,
-    githubRepo: repo,
-    lastOpenedAt: Date.now(),
-  })
+/**
+ * Reconnect to a previously-stored vault by its id. For GitHub that's
+ * instant (PAT is already cached); for local it queries / requests
+ * filesystem permission (must be called from a user gesture).
+ */
+export async function createProviderFromStoredVault(id: string): Promise<{
+  provider: VaultProvider | null
+  needsPermission: boolean
+  folderName?: string
+  state?: PersistedVaultState
+}> {
+  const state = await getVault(id)
+  if (!state) return { provider: null, needsPermission: false }
+
+  if (state.type === 'local' && state.directoryHandle) {
+    const handle = state.directoryHandle
+    const existing = await handle.queryPermission({ mode: 'readwrite' })
+    let permission = existing
+    if (permission !== 'granted') {
+      permission = await handle.requestPermission({ mode: 'readwrite' })
+    }
+    if (permission !== 'granted') {
+      return { provider: null, needsPermission: true, folderName: handle.name, state }
+    }
+    const provider = new LocalGitProvider(handle)
+    await provider.init()
+    await upsertVault(state)
+    return { provider, needsPermission: false, folderName: handle.name, state }
+  }
+
+  if (state.type === 'github' && state.githubPat && state.githubOwner && state.githubRepo) {
+    const provider = new GitHubProvider(state.githubPat, state.githubOwner, state.githubRepo)
+    await upsertVault(state)
+    return { provider, needsPermission: false, state }
+  }
+
+  return { provider: null, needsPermission: false, state }
+}
+
+/** Convenience: mark a vault as used. Equivalent to upsertVault(state). */
+export async function touchVault(state: PersistedVaultState): Promise<void> {
+  await upsertVault(state)
 }
 
 /**

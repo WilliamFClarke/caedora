@@ -4,11 +4,12 @@
  */
 import { LocalGitProvider } from './storage/local-provider'
 import { savePinned, loadPinned } from './storage/idb'
+import type { VaultProvider } from './types'
 
-// Filename matches the H1 so the editor's H1 → filename sync doesn't
-// immediately rename the seeded note on first load (which briefly shows
-// two entries in the sidebar while the rename settles).
-export const WELCOME_PATH = 'Welcome to your vault.md'
+// Kebab-case filename for a clean URL; the H1 inside can be the display
+// title ("Welcome to your vault"). Filename and H1 are intentionally
+// independent — see the editor decoupling notes.
+export const WELCOME_PATH = 'welcome.md'
 const WELCOME_BODY = `---
 tags: [example-tag]
 ---
@@ -140,6 +141,107 @@ Thumbs.db
 *.swp
 `
 
+export const SKILL_PATH = 'AGENTS.md'
+// Instructions for any AI assistant (Claude Code, Claude Desktop, claude.ai
+// GitHub connector, Cursor, Codex, etc.) that is pointed at a vault.
+// AGENTS.md is the emerging cross-tool convention for agent-readable project
+// instructions (Codex, Cursor); Claude Code auto-loads CLAUDE.md so users
+// targeting Claude Code can symlink AGENTS.md -> CLAUDE.md. Keep in sync
+// with conventions enforced by the editor and the personal-md-mcp package.
+export const SKILL_MARKDOWN = `# AGENTS.md — instructions for AI assistants
+
+You are looking at a **personal-md vault**. This repository is one person's
+"life OS": a private, markdown-first wiki of work, projects, health, finances,
+travel, reading, and anything else worth remembering. Your job is to help the
+owner read, maintain, and extend it.
+
+Everything lives in plain markdown files — no database, no server, no lock-in.
+
+## File layout
+
+- Every note is a \`.md\` file somewhere in this repo.
+- Folders are topical and created freely by the owner (e.g. \`Work/\`,
+  \`Projects/\`, \`Health/\`, \`Daily/\`). Nesting is allowed.
+- \`welcome.md\` / \`Welcome to your vault.md\` at the root is the onboarding
+  note; don't treat it as load-bearing content.
+- \`.gitignore\`, \`.git/\`, and any \`.personal-md/\` folder are system files;
+  ignore them unless asked.
+
+## Conventions every note follows
+
+1. **The first H1 is the title.** A note starts with \`# Title of note\`.
+   New notes are seeded with an H1 derived from the filename, but the two
+   are **independent** afterwards — editing the H1 doesn't rename the file,
+   and vice versa. Change whichever you want; the other stays put.
+
+2. **YAML frontmatter for metadata.** If a note has tags or other metadata,
+   it starts with a \`---\` fence:
+
+   \`\`\`
+   ---
+   tags: [project, active, q2-2026]
+   ---
+   # Title
+   ...
+   \`\`\`
+
+   - \`tags\` is a flat list of lowercase kebab-case strings.
+   - **Preserve any unknown frontmatter keys** you encounter (e.g. \`cssclass:\`
+     or \`aliases:\` from Obsidian). Round-trip them untouched.
+
+3. **Tags live in frontmatter, not inline.** Prefer \`tags: [fitness]\` over
+   \`#fitness\` sprinkled in the body. You may add tags when useful; always
+   normalise (trim, lowercase, replace spaces with \`-\`, strip leading \`#\`).
+
+4. **Filenames are kebab-case slugs.** \`welcome.md\`,
+   \`project-atlas-brief.md\`, \`2026-04-15-daily.md\`. URLs stay clean; the
+   H1 inside carries the display title with spaces and capitals
+   ("# Project Atlas Brief").
+
+5. **No \`.gitkeep\`.** Empty folders are virtual in the UI and shouldn't be
+   committed.
+
+## How to find things
+
+- **By tag**: grep for \`tags:\` and match the tag list, or (if you have the
+  \`personal-md-mcp\` tools) call \`notes_by_tag(name)\`.
+- **Full-text**: \`grep -r "query" .\` or the \`search_notes\` MCP tool.
+- **By folder**: \`ls Projects/\` — folder names are the owner's taxonomy.
+- **Recent work**: \`git log --oneline -20\` shows what's been edited lately.
+
+## How to write / maintain
+
+When you create or update a note:
+
+- **Always open with an H1.** If you're creating a note from scratch, the
+  first line is \`# Some Title\`. Seed it from the intended filename.
+- **Filename and H1 are independent.** Don't auto-rename a file when the H1
+  changes, and don't rewrite the H1 when a file is renamed — the user edits
+  them on their own terms.
+- **Preserve existing frontmatter \`extra\` keys.** Read, modify, write back.
+- **Don't rewrite a file to rename it.** Use git \`mv\` (or the \`rename_note\`
+  MCP tool) so history follows.
+- **Use real commits.** If you're running via the \`personal-md-mcp\` server
+  against a GitHub repo, writes become commits automatically. Against a local
+  folder, stage + commit as you go with a descriptive message.
+- **Leave \`welcome.md\` and this \`AGENTS.md\` alone** unless the owner asks
+  you to update them.
+
+## What you're good for
+
+- Answering questions grounded in the owner's actual notes ("what did we
+  decide about the payments migration last month?").
+- Drafting from prior material ("follow-up email to Priya based on our last
+  1:1").
+- Ongoing maintenance — retagging, fixing formatting drift, merging duplicate
+  notes, extracting themes across many notes.
+- Pulling summaries across whole topics ("everything I've written about
+  Project Atlas this quarter").
+
+Stay in scope. Don't invent facts you can't cite to a note.
+`
+
+
 /**
  * Run once for a freshly-created local vault. Idempotent — safe to call even
  * if the folder already has a welcome.md (it won't overwrite existing files).
@@ -151,6 +253,10 @@ export async function seedLocalVault(provider: LocalGitProvider): Promise<void> 
     await provider.writeFile(WELCOME_PATH, WELCOME_BODY)
     seeded.push(WELCOME_PATH)
   }
+  if (!(await fileExists(provider, SKILL_PATH))) {
+    await provider.writeFile(SKILL_PATH, SKILL_MARKDOWN)
+    seeded.push(SKILL_PATH)
+  }
   if (!(await fileExists(provider, GITIGNORE_PATH))) {
     await provider.writeFile(GITIGNORE_PATH, GITIGNORE_BODY)
     seeded.push(GITIGNORE_PATH)
@@ -160,6 +266,40 @@ export async function seedLocalVault(provider: LocalGitProvider): Promise<void> 
   }
   if (seeded.includes(WELCOME_PATH)) {
     await pinInitial(WELCOME_PATH)
+  }
+}
+
+/**
+ * Seed an empty vault through the generic VaultProvider interface — writes
+ * welcome.md and AGENTS.md if they're missing. Used when the user opens a
+ * pre-existing-but-empty vault (e.g. a GitHub repo they created manually)
+ * so they get the same out-of-the-box experience as Create.
+ */
+export async function seedEmptyVault(provider: VaultProvider): Promise<string[]> {
+  const seeded: string[] = []
+  if (!(await providerHasFile(provider, WELCOME_PATH))) {
+    await provider.writeFile(WELCOME_PATH, WELCOME_BODY)
+    seeded.push(WELCOME_PATH)
+  }
+  if (!(await providerHasFile(provider, SKILL_PATH))) {
+    await provider.writeFile(SKILL_PATH, SKILL_MARKDOWN)
+    seeded.push(SKILL_PATH)
+  }
+  if (seeded.length > 0 && !provider.writesAreCommits) {
+    await provider.commit('Initial vault setup', seeded)
+  }
+  if (seeded.includes(WELCOME_PATH)) {
+    await pinInitial(WELCOME_PATH)
+  }
+  return seeded
+}
+
+async function providerHasFile(provider: VaultProvider, path: string): Promise<boolean> {
+  try {
+    await provider.readFile(path)
+    return true
+  } catch {
+    return false
   }
 }
 

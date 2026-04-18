@@ -30,8 +30,8 @@ export class GitHubProvider implements VaultProvider {
 
   constructor(
     private token: string,
-    private owner: string,
-    private repo: string
+    public readonly owner: string,
+    public readonly repo: string
   ) {}
 
   isReady(): boolean {
@@ -49,7 +49,12 @@ export class GitHubProvider implements VaultProvider {
     if (!res.ok) throw new Error(`GitHub: failed to read ${path} (${res.status})`)
     const data = (await res.json()) as GHContent
     this.shaCache.set(path, data.sha)
-    return atob(data.content.replace(/\n/g, ''))
+    // `atob` returns a "binary string" of bytes; re-interpret as UTF-8 so
+    // non-ASCII characters (em-dash, emoji, accented letters) round-trip
+    // correctly instead of coming back as mojibake.
+    const binary = atob(data.content.replace(/\n/g, ''))
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+    return new TextDecoder('utf-8').decode(bytes)
   }
 
   async writeFile(path: string, content: string): Promise<void> {
@@ -141,6 +146,14 @@ export class GitHubProvider implements VaultProvider {
       ? `${this.base}/contents/${dir}`
       : `${this.base}/contents`
     const res = await fetch(url, { headers: apiHeaders(this.token) })
+    if (res.status === 404) {
+      // Two benign causes both yield 404:
+      //  - the folder genuinely doesn't exist yet (user hasn't created it)
+      //  - the repo has no commits (`"This repository is empty."`)
+      // Either way we return an empty list so the UI shows an empty vault
+      // rather than blowing up.
+      return []
+    }
     if (!res.ok) throw new Error(`GitHub: failed to list ${dir || '/'} (${res.status})`)
     const items = (await res.json()) as GHContent[]
     return (Array.isArray(items) ? items : [items]).map((item) => ({

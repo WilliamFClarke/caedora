@@ -1,8 +1,10 @@
 /**
  * Minimal YAML-frontmatter reader/writer for .md notes.
- * Only supports the keys we care about today: `tags` as a list.
- * Unknown keys are preserved as raw lines so third-party tools (Obsidian,
- * Dataview, etc.) don't lose metadata when we round-trip through the editor.
+ *
+ * DUPLICATE of ../../../../lib/frontmatter.ts (the web app's copy). Keep the
+ * two in sync — identical semantics are required so that the MCP server's
+ * writes round-trip exactly like the editor's. When changing one, change
+ * both.
  */
 
 export interface Frontmatter {
@@ -79,19 +81,14 @@ export function normalizeTag(raw: string): string {
 
 /**
  * Kebab-case a user-entered filename stem so URLs stay clean.
- * "My Project Notes" -> "my-project-notes".
- * Preserves the `.md` extension if present.
- *
- * Matches the convention used by Jekyll/Hugo/most markdown wikis —
- * filename is a URL-safe slug; the H1 inside the file keeps its
- * natural display casing ("# My Project Notes").
+ * Mirrors lib/frontmatter.ts in the web app — keep in sync.
  */
 export function slugifyFilename(raw: string): string {
   const hasMd = /\.md$/i.test(raw)
   const stem = hasMd ? raw.slice(0, -3) : raw
   const slug = stem
     .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '') // strip combining marks (accents)
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/['"]/g, '')
     .replace(/[^a-z0-9]+/g, '-')

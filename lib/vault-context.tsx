@@ -10,9 +10,10 @@ import {
 } from 'react'
 import {
   createProviderFromPersistedState,
+  createProviderFromStoredVault,
   requestPermissionAndCreate,
   saveVaultState,
-  clearVaultState,
+  setActiveVaultId,
   LocalGitProvider,
   GitHubProvider,
 } from './storage'
@@ -23,6 +24,7 @@ const defaultContext: VaultContextValue = {
   status: { state: 'idle' },
   connectLocal: async () => null,
   connectGitHub: async () => {},
+  connectToVault: async () => {},
   grantPermission: async () => {},
   disconnect: () => {},
 }
@@ -116,6 +118,32 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
   )
 
   /**
+   * Reconnect to a previously-stored vault by id. Instant for GitHub
+   * (PAT is cached); for local it may prompt for filesystem permission,
+   * which requires this to be called from a user gesture.
+   */
+  const connectToVault = useCallback(async (id: string) => {
+    setStatus({ state: 'connecting' })
+    try {
+      const { provider: p, needsPermission, folderName } =
+        await createProviderFromStoredVault(id)
+      if (p) {
+        setProvider(p)
+        setStatus({ state: 'ready', providerType: p.type })
+      } else if (needsPermission && folderName) {
+        setStatus({ state: 'permission-required', folderName })
+      } else {
+        setStatus({ state: 'idle' })
+      }
+    } catch (e) {
+      setStatus({
+        state: 'error',
+        error: e instanceof Error ? e.message : 'Could not reconnect to vault',
+      })
+    }
+  }, [])
+
+  /**
    * Re-requests FSAA permission for the stored handle.
    * MUST be called from a user gesture.
    */
@@ -140,12 +168,22 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
   const disconnect = useCallback(() => {
     setProvider(null)
     setStatus({ state: 'idle' })
-    void clearVaultState()
+    // Keep the vault in the saved list — just clear the "active" pointer so
+    // the user lands on the home page and can pick a different vault.
+    void setActiveVaultId(null)
   }, [])
 
   return (
     <VaultContext.Provider
-      value={{ provider, status, connectLocal, connectGitHub, grantPermission, disconnect }}
+      value={{
+        provider,
+        status,
+        connectLocal,
+        connectGitHub,
+        connectToVault,
+        grantPermission,
+        disconnect,
+      }}
     >
       {children}
     </VaultContext.Provider>
