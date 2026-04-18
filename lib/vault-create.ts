@@ -5,7 +5,10 @@
 import { LocalGitProvider } from './storage/local-provider'
 import { savePinned, loadPinned } from './storage/idb'
 
-export const WELCOME_PATH = 'welcome.md'
+// Filename matches the H1 so the editor's H1 → filename sync doesn't
+// immediately rename the seeded note on first load (which briefly shows
+// two entries in the sidebar while the rename settles).
+export const WELCOME_PATH = 'Welcome to your vault.md'
 const WELCOME_BODY = `---
 tags: [example-tag]
 ---
