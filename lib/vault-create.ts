@@ -4,6 +4,7 @@
  */
 import { LocalGitProvider } from './storage/local-provider'
 import { savePinned, loadPinned } from './storage/idb'
+import type { VaultProvider } from './types'
 
 // Filename matches the H1 so the editor's H1 → filename sync doesn't
 // immediately rename the seeded note on first load (which briefly shows
@@ -255,6 +256,40 @@ export async function seedLocalVault(provider: LocalGitProvider): Promise<void> 
   }
   if (seeded.includes(WELCOME_PATH)) {
     await pinInitial(WELCOME_PATH)
+  }
+}
+
+/**
+ * Seed an empty vault through the generic VaultProvider interface — writes
+ * welcome.md and SKILL.md if they're missing. Used when the user opens a
+ * pre-existing-but-empty vault (e.g. a GitHub repo they created manually)
+ * so they get the same out-of-the-box experience as Create.
+ */
+export async function seedEmptyVault(provider: VaultProvider): Promise<string[]> {
+  const seeded: string[] = []
+  if (!(await providerHasFile(provider, WELCOME_PATH))) {
+    await provider.writeFile(WELCOME_PATH, WELCOME_BODY)
+    seeded.push(WELCOME_PATH)
+  }
+  if (!(await providerHasFile(provider, SKILL_PATH))) {
+    await provider.writeFile(SKILL_PATH, SKILL_MARKDOWN)
+    seeded.push(SKILL_PATH)
+  }
+  if (seeded.length > 0 && !provider.writesAreCommits) {
+    await provider.commit('Initial vault setup', seeded)
+  }
+  if (seeded.includes(WELCOME_PATH)) {
+    await pinInitial(WELCOME_PATH)
+  }
+  return seeded
+}
+
+async function providerHasFile(provider: VaultProvider, path: string): Promise<boolean> {
+  try {
+    await provider.readFile(path)
+    return true
+  } catch {
+    return false
   }
 }
 

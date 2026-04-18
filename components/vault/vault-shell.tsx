@@ -6,6 +6,7 @@ import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
+import { seedEmptyVault } from '@/lib/vault-create'
 import { usePinned } from '@/hooks/use-pinned'
 import type { FileEntry } from '@/lib/types'
 import {
@@ -37,6 +38,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [virtualFolders, setVirtualFolders] = useState<Set<string>>(new Set())
   const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
   const didAutoSelect = useRef(false)
+  const didAutoSeed = useRef(false)
   const initialPathRef = useRef(initialPath)
   initialPathRef.current = initialPath
 
@@ -77,7 +79,20 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const refreshEntries = useCallback(async () => {
     if (!provider) return
     try {
-      const all = await listFilesRecursive(provider)
+      let all = await listFilesRecursive(provider)
+
+      // First-open seed: if the repo/folder has no markdown files yet, seed
+      // welcome.md + SKILL.md so the user lands on the same out-of-the-box
+      // state Create gives them. Runs once per session.
+      const hasMarkdown = all.some((e) => e.type === 'file' && e.name.endsWith('.md'))
+      if (!hasMarkdown && !didAutoSeed.current) {
+        didAutoSeed.current = true
+        const seeded = await seedEmptyVault(provider)
+        if (seeded.length > 0) {
+          all = await listFilesRecursive(provider)
+        }
+      }
+
       const mdEntries = all.filter((e) => e.type === 'dir' || e.name.endsWith('.md'))
       setEntries((prev) => (sameEntries(prev, mdEntries) ? prev : mdEntries))
       setLoadError(null)
