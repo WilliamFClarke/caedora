@@ -15,7 +15,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useVault } from '@/lib/vault-context'
 import { LocalGitProvider } from '@/lib/storage/local-provider'
-import { seedLocalVault, isFolderEmpty } from '@/lib/vault-create'
+import {
+  seedLocalVault,
+  isFolderEmpty,
+  WELCOME_PATH,
+  WELCOME_MARKDOWN,
+  pinInitial,
+} from '@/lib/vault-create'
 import { Folder, Github, Loader2 } from 'lucide-react'
 
 type Mode = 'create' | 'open'
@@ -102,8 +108,10 @@ function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
           return
         }
         await seedLocalVault(provider)
+        router.push(`/vault/${WELCOME_PATH}`)
+      } else {
+        router.push('/vault')
       }
-      router.push('/vault')
       onDone()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not open folder')
@@ -177,11 +185,9 @@ function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
         const created = (await resp.json()) as { owner: { login: string } }
         const actualOwner = created.owner.login
 
-        // Seed welcome.md
-        const welcome =
-          '# Welcome to your vault\n\nThis vault is yours. Everything you write here is a plain markdown file stored in your own GitHub repository — never on our servers.\n'
+        // Seed welcome.md using the shared welcome body.
         await fetch(
-          `https://api.github.com/repos/${actualOwner}/${repo}/contents/welcome.md`,
+          `https://api.github.com/repos/${actualOwner}/${repo}/contents/${WELCOME_PATH}`,
           {
             method: 'PUT',
             headers: {
@@ -191,10 +197,11 @@ function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
             },
             body: JSON.stringify({
               message: 'Initial vault setup',
-              content: btoa(welcome),
+              content: btoa(unescape(encodeURIComponent(WELCOME_MARKDOWN))),
             }),
           }
         )
+        await pinInitial(WELCOME_PATH)
 
         await connectGitHub(pat, actualOwner, repo)
       } else {
@@ -217,7 +224,7 @@ function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
         }
         await connectGitHub(pat, owner, repo)
       }
-      router.push('/vault')
+      router.push(mode === 'create' ? `/vault/${WELCOME_PATH}` : '/vault')
       onDone()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not connect to GitHub')
