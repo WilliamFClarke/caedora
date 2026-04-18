@@ -2,8 +2,9 @@ import { openDB, type IDBPDatabase } from 'idb'
 import type { PersistedVaultState } from '../types'
 
 const DB_NAME = 'personal-md'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE = 'vault-state'
+const PINNED_STORE = 'pinned'
 
 async function getDB(): Promise<IDBPDatabase> {
   return openDB(DB_NAME, DB_VERSION, {
@@ -11,8 +12,29 @@ async function getDB(): Promise<IDBPDatabase> {
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE)
       }
+      if (!db.objectStoreNames.contains(PINNED_STORE)) {
+        db.createObjectStore(PINNED_STORE)
+      }
     },
   })
+}
+
+export async function savePinned(paths: string[]): Promise<void> {
+  try {
+    const db = await getDB()
+    await db.put(PINNED_STORE, paths, 'current')
+  } catch {
+    // ignore
+  }
+}
+
+export async function loadPinned(): Promise<string[]> {
+  try {
+    const db = await getDB()
+    return ((await db.get(PINNED_STORE, 'current')) as string[] | undefined) ?? []
+  } catch {
+    return []
+  }
 }
 
 export async function saveVaultState(state: PersistedVaultState): Promise<void> {

@@ -21,6 +21,7 @@ import { TipTapFloatingMenu } from "@/components/tiptap/extensions/floating-menu
 import { FloatingToolbar } from "@/components/tiptap/extensions/floating-toolbar";
 import { EditorToolbar } from "./toolbars/editor-toolbar";
 import Placeholder from "@tiptap/extension-placeholder";
+import { NoteMetaWidget } from "@/components/tiptap/extensions/note-meta-widget";
 import { content } from "@/lib/content";
 
 const extensions = [
@@ -79,6 +80,7 @@ export interface RichTextEditorProps {
   content?: unknown;
   onUpdate?: (editor: TiptapEditor) => void;
   contentKey?: string;
+  onMetaAnchorChange?: (el: HTMLElement | null) => void;
 }
 
 export function RichTextEditorDemo({
@@ -86,10 +88,26 @@ export function RichTextEditorDemo({
   content: contentProp,
   onUpdate,
   contentKey,
+  onMetaAnchorChange,
 }: RichTextEditorProps) {
+  const anchorCbRef = React.useRef(onMetaAnchorChange);
+  React.useEffect(() => {
+    anchorCbRef.current = onMetaAnchorChange;
+  }, [onMetaAnchorChange]);
+
+  const allExtensions = React.useMemo(
+    () => [
+      ...extensions,
+      NoteMetaWidget.configure({
+        onAnchorChange: (el) => anchorCbRef.current?.(el),
+      }),
+    ],
+    []
+  );
+
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: extensions as Extension[],
+    extensions: allExtensions as Extension[],
     content: contentProp ?? content,
     editorProps: {
       attributes: {
@@ -100,7 +118,10 @@ export function RichTextEditorDemo({
   });
 
   const loadedKey = React.useRef<string | null>(null);
-  React.useEffect(() => {
+  // useLayoutEffect so setContent runs in the same commit as the prop change —
+  // otherwise the browser paints once with the new file's key/meta but the old
+  // TipTap DOM, producing a visible one-frame flicker on file switch.
+  React.useLayoutEffect(() => {
     if (!editor || contentKey === undefined) return;
     if (loadedKey.current === contentKey) return;
     loadedKey.current = contentKey;
@@ -112,7 +133,7 @@ export function RichTextEditorDemo({
   return (
     <div
       className={cn(
-        "relative max-h-[calc(100dvh-6rem)]  w-full overflow-hidden overflow-y-scroll border bg-card pb-[60px] sm:pb-0",
+        "relative flex h-full w-full flex-col overflow-hidden border bg-card",
         className
       )}
     >
@@ -121,7 +142,7 @@ export function RichTextEditorDemo({
       <TipTapFloatingMenu editor={editor} />
       <EditorContent
         editor={editor}
-        className=" min-h-[600px] w-full min-w-full cursor-text sm:p-6"
+        className="min-h-0 w-full min-w-full flex-1 cursor-text overflow-y-auto sm:p-6"
       />
     </div>
   );

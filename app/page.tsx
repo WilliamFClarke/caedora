@@ -13,10 +13,14 @@ export default function Home() {
   const { status, grantPermission } = useVault()
   const [dialogMode, setDialogMode] = useState<'create' | 'open' | null>(null)
 
-  // If a vault is already connected, jump straight in
+  // If a vault is already connected, jump straight in. But stay put while the
+  // connect dialog is open — dialog-driven flows (create) navigate to a
+  // specific note (e.g. /vault/welcome.md) themselves, and we don't want this
+  // effect to race them to `/vault`.
   useEffect(() => {
+    if (dialogMode !== null) return
     if (status.state === 'ready') router.replace('/vault')
-  }, [status.state, router])
+  }, [status.state, router, dialogMode])
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center px-6">

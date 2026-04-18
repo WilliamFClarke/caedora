@@ -9,9 +9,10 @@ interface EditorProps {
   initialMarkdown: string
   onChange: (markdown: string) => void
   fileKey: string
+  onMetaAnchorChange?: (el: HTMLElement | null) => void
 }
 
-export function Editor({ initialMarkdown, onChange, fileKey }: EditorProps) {
+export function Editor({ initialMarkdown, onChange, fileKey, onMetaAnchorChange }: EditorProps) {
   const initialContent = useMemo(
     () => mdToTiptap(initialMarkdown) as unknown,
     [fileKey],
@@ -23,6 +24,7 @@ export function Editor({ initialMarkdown, onChange, fileKey }: EditorProps) {
       className="h-full border-0"
       contentKey={fileKey}
       content={initialContent}
+      onMetaAnchorChange={onMetaAnchorChange}
       onUpdate={(editor: TiptapEditor) => {
         const json = editor.getJSON() as unknown as TiptapDoc
         onChange(tiptapToMd(json))

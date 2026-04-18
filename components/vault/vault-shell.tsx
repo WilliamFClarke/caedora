@@ -1,11 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
+import { usePinned } from '@/hooks/use-pinned'
 import type { FileEntry } from '@/lib/types'
 import {
   Breadcrumb,
@@ -34,6 +35,22 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [selected, setSelected] = useState<string | null>(initialPath)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [virtualFolders, setVirtualFolders] = useState<Set<string>>(new Set())
+  const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
+  const didAutoSelect = useRef(false)
+  const initialPathRef = useRef(initialPath)
+  initialPathRef.current = initialPath
+
+  // Update the URL without triggering a Next.js route transition. router.push
+  // would refetch the RSC for /vault/[...path], painting an empty frame between
+  // the old and new trees — the "black flicker" on file switch. The URL is
+  // just a bookmark for `selected`; client state drives the UI.
+  const syncUrl = useCallback((path: string | null, mode: 'push' | 'replace' = 'push') => {
+    if (typeof window === 'undefined') return
+    const url = path ? `/vault/${path}` : '/vault'
+    if (window.location.pathname === url) return
+    if (mode === 'replace') window.history.replaceState(null, '', url)
+    else window.history.pushState(null, '', url)
+  }, [])
 
   useEffect(() => {
     if (status.state === 'idle' || status.state === 'permission-required') {
@@ -45,12 +62,24 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     setSelected(initialPath)
   }, [initialPath])
 
+  // Browser back/forward: re-derive `selected` from the URL without routing.
+  useEffect(() => {
+    const onPop = () => {
+      const { pathname } = window.location
+      if (!pathname.startsWith('/vault')) return
+      const rest = pathname.slice('/vault'.length).replace(/^\//, '')
+      setSelected(rest ? decodeURIComponent(rest) : null)
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
   const refreshEntries = useCallback(async () => {
     if (!provider) return
     try {
       const all = await listFilesRecursive(provider)
       const mdEntries = all.filter((e) => e.type === 'dir' || e.name.endsWith('.md'))
-      setEntries(mdEntries)
+      setEntries((prev) => (sameEntries(prev, mdEntries) ? prev : mdEntries))
       setLoadError(null)
 
       // Prune virtual folders that now exist as real paths
@@ -67,17 +96,18 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         return next
       })
 
-      if (!initialPath) {
+      if (!initialPathRef.current && !didAutoSelect.current) {
         const firstFile = mdEntries.find((e) => e.type === 'file')
         if (firstFile) {
+          didAutoSelect.current = true
           setSelected(firstFile.path)
-          router.replace(`/vault/${firstFile.path}`)
+          syncUrl(firstFile.path, 'replace')
         }
       }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load notes')
     }
-  }, [provider, initialPath, router])
+  }, [provider, syncUrl])
 
   useEffect(() => {
     void refreshEntries()
@@ -97,9 +127,9 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const onSelect = useCallback(
     (path: string) => {
       setSelected(path)
-      router.push(`/vault/${path}`)
+      syncUrl(path)
     },
-    [router]
+    [syncUrl]
   )
 
   const onCreateFile = useCallback(
@@ -113,14 +143,20 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       }
       const display = fileName.replace(/\.md$/, '')
       await provider.writeFile(fullPath, `# ${display}\n\n`)
+      // Optimistic: show the new file in the sidebar and open it immediately
+      setEntries((prev) =>
+        prev.some((e) => e.path === fullPath)
+          ? prev
+          : [...prev, { path: fullPath, name: fileName, type: 'file' }]
+      )
+      setSelected(fullPath)
+      syncUrl(fullPath)
       if (!provider.writesAreCommits) {
         await provider.commit(`Create ${fullPath}`, [fullPath])
       }
-      await refreshEntries()
-      setSelected(fullPath)
-      router.push(`/vault/${fullPath}`)
+      void refreshEntries()
     },
-    [provider, refreshEntries, router]
+    [provider, refreshEntries, syncUrl]
   )
 
   const onCreateFolder = useCallback((parent: string, name: string) => {
@@ -146,20 +182,21 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         return
       }
       await provider.renamePath(from, to)
+      renamePinned(from, to)
       if (!provider.writesAreCommits) {
         await provider.commit(`Rename ${from} to ${to}`, [to])
       }
       if (selected === from) {
         setSelected(to)
-        router.replace(`/vault/${to}`)
+        syncUrl(to, 'replace')
       } else if (selected && selected.startsWith(`${from}/`)) {
         const newSelected = `${to}${selected.slice(from.length)}`
         setSelected(newSelected)
-        router.replace(`/vault/${newSelected}`)
+        syncUrl(newSelected, 'replace')
       }
       await refreshEntries()
     },
-    [provider, virtualFolders, selected, refreshEntries, router]
+    [provider, virtualFolders, selected, refreshEntries, syncUrl, renamePinned]
   )
 
   const onDeletePath = useCallback(
@@ -177,16 +214,17 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         return
       }
       await provider.deletePath(path)
+      removePinned(path)
       if (!provider.writesAreCommits) {
         await provider.commit(`Delete ${path}`, [])
       }
       if (selected === path || selected?.startsWith(`${path}/`)) {
         setSelected(null)
-        router.replace('/vault')
+        syncUrl(null, 'replace')
       }
       await refreshEntries()
     },
-    [provider, virtualFolders, selected, refreshEntries, router]
+    [provider, virtualFolders, selected, refreshEntries, syncUrl, removePinned]
   )
 
   const breadcrumbSegments = useMemo(() => {
@@ -212,6 +250,9 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       <AppSidebar
         entries={combinedEntries}
         selected={selected}
+        provider={provider}
+        pinned={pinned}
+        onTogglePin={togglePin}
         onSelect={onSelect}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
@@ -227,14 +268,22 @@ export function VaultShell({ initialPath }: VaultShellProps) {
           />
           <Breadcrumb>
             <BreadcrumbList>
+              <BreadcrumbItem>
+                <span className="text-muted-foreground font-mono text-[10px] uppercase tracking-wider">
+                  vault
+                </span>
+              </BreadcrumbItem>
               {breadcrumbSegments.length === 0 ? (
-                <BreadcrumbItem>
-                  <BreadcrumbPage>Vault</BreadcrumbPage>
-                </BreadcrumbItem>
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Home</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
               ) : (
-                breadcrumbSegments.map((seg, i) => (
+                breadcrumbSegments.map((seg) => (
                   <div key={seg.path} className="flex items-center gap-1.5 sm:gap-2.5">
-                    {i > 0 && <BreadcrumbSeparator />}
+                    <BreadcrumbSeparator />
                     <BreadcrumbItem>
                       {seg.isLast ? (
                         <BreadcrumbPage>{seg.name}</BreadcrumbPage>
@@ -265,12 +314,31 @@ export function VaultShell({ initialPath }: VaultShellProps) {
               <p className="text-destructive text-sm">{loadError}</p>
             </div>
           ) : (
-            <EditorPane provider={provider} path={selected} />
+            <EditorPane
+              provider={provider}
+              path={selected}
+              lastModified={
+                selected
+                  ? entries.find((e) => e.path === selected)?.lastModified
+                  : undefined
+              }
+              isPinned={selected ? pinned.has(selected) : false}
+              onTogglePin={togglePin}
+              onRename={onRenamePath}
+            />
           )}
         </div>
       </SidebarInset>
     </SidebarProvider>
   )
+}
+
+function sameEntries(a: FileEntry[], b: FileEntry[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].path !== b[i].path || a[i].type !== b[i].type) return false
+  }
+  return true
 }
 
 function ancestors(path: string): string[] {
