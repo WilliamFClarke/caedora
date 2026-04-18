@@ -18,6 +18,8 @@ interface EditorPaneProps {
   provider: VaultProvider
   path: string | null
   lastModified?: number
+  /** Bumped by VaultShell when the user clicks Sync; forces a re-read. */
+  syncNonce?: number
   isPinned: boolean
   onTogglePin: (path: string) => void
   onRename: (from: string, to: string) => Promise<void>
@@ -65,6 +67,7 @@ export function EditorPane({
   provider,
   path,
   lastModified,
+  syncNonce = 0,
   isPinned,
   onTogglePin,
   onRename,
@@ -120,7 +123,7 @@ export function EditorPane({
     return () => {
       cancelled = true
     }
-  }, [provider, path, lastModified])
+  }, [provider, path, lastModified, syncNonce])
 
   useEffect(() => {
     const id = setInterval(() => forceTick((t) => t + 1), 30_000)

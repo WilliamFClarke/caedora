@@ -6,9 +6,9 @@ import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
-import { seedEmptyVault } from '@/lib/vault-create'
+import { seedEmptyVault, WELCOME_PATH, SKILL_PATH } from '@/lib/vault-create'
 import { usePinned } from '@/hooks/use-pinned'
-import type { FileEntry } from '@/lib/types'
+import type { FileEntry, VaultProvider } from '@/lib/types'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -36,6 +36,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [selected, setSelected] = useState<string | null>(initialPath)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [virtualFolders, setVirtualFolders] = useState<Set<string>>(new Set())
+  const [seeding, setSeeding] = useState(false)
+  const [syncNonce, setSyncNonce] = useState(0)
   const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
   const didAutoSelect = useRef(false)
   const didAutoSeed = useRef(false)
@@ -90,9 +92,18 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       )
       if (!hasReadme && !didAutoSeed.current) {
         didAutoSeed.current = true
-        const seeded = await seedEmptyVault(provider)
-        if (seeded.length > 0) {
-          all = await listFilesRecursive(provider)
+        setSeeding(true)
+        try {
+          const seeded = await seedEmptyVault(provider)
+          if (seeded.length > 0) {
+            // GitHub's Contents API can lag a beat between a PUT and the
+            // next listing reflecting it. Poll until welcome.md + AGENTS.md
+            // are visible (or give up after ~5s) so the UI doesn't flash
+            // an empty sidebar.
+            all = await waitForSeedVisible(provider, [WELCOME_PATH, SKILL_PATH])
+          }
+        } finally {
+          setSeeding(false)
         }
       }
 
@@ -255,10 +266,28 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     }))
   }, [selected])
 
+  const onSync = useCallback(async () => {
+    await refreshEntries()
+    // Bump the nonce so EditorPane re-reads the currently-open note from
+    // the provider (refreshEntries alone doesn't force a re-read).
+    setSyncNonce((n) => n + 1)
+  }, [refreshEntries])
+
   if (status.state !== 'ready' || !provider) {
     return (
       <div className="flex h-screen items-center justify-center">
         <p className="text-muted-foreground text-sm">Loading your vault…</p>
+      </div>
+    )
+  }
+
+  if (seeding) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-3">
+        <div className="border-muted-foreground/30 border-t-foreground size-6 animate-spin rounded-full border-2" />
+        <p className="text-muted-foreground text-sm">
+          Setting up your vault — writing welcome + AGENTS files…
+        </p>
       </div>
     )
   }
@@ -276,6 +305,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         onCreateFolder={onCreateFolder}
         onRenamePath={onRenamePath}
         onDeletePath={onDeletePath}
+        onSync={onSync}
       />
       <SidebarInset>
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
@@ -340,6 +370,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
                   ? entries.find((e) => e.path === selected)?.lastModified
                   : undefined
               }
+              syncNonce={syncNonce}
               isPinned={selected ? pinned.has(selected) : false}
               onTogglePin={togglePin}
               onRename={onRenamePath}
@@ -349,6 +380,23 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       </SidebarInset>
     </SidebarProvider>
   )
+}
+
+async function waitForSeedVisible(
+  provider: VaultProvider,
+  expected: string[],
+  maxAttempts = 10,
+  delayMs = 500
+): Promise<FileEntry[]> {
+  const need = new Set(expected)
+  let latest: FileEntry[] = []
+  for (let i = 0; i < maxAttempts; i++) {
+    latest = await listFilesRecursive(provider)
+    const present = new Set(latest.map((e) => e.path))
+    if ([...need].every((p) => present.has(p))) return latest
+    await new Promise((r) => setTimeout(r, delayMs))
+  }
+  return latest
 }
 
 function sameEntries(a: FileEntry[], b: FileEntry[]): boolean {
