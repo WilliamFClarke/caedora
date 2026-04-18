@@ -72,6 +72,11 @@ export class GitHubNodeProvider implements VaultProvider {
       ? `${this.base}/contents/${encodeURI(dir)}`
       : `${this.base}/contents`
     const res = await fetch(url, { headers: apiHeaders(this.token) })
+    if (res.status === 404) {
+      // Empty folder, or an empty repo ("This repository is empty."). Treat
+      // both as no entries rather than erroring.
+      return []
+    }
     if (!res.ok) throw new Error(`GitHub: failed to list ${dir || '/'} (${res.status})`)
     const items = (await res.json()) as GHContent[]
     return (Array.isArray(items) ? items : [items]).map((item) => ({

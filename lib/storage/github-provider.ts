@@ -141,6 +141,14 @@ export class GitHubProvider implements VaultProvider {
       ? `${this.base}/contents/${dir}`
       : `${this.base}/contents`
     const res = await fetch(url, { headers: apiHeaders(this.token) })
+    if (res.status === 404) {
+      // Two benign causes both yield 404:
+      //  - the folder genuinely doesn't exist yet (user hasn't created it)
+      //  - the repo has no commits (`"This repository is empty."`)
+      // Either way we return an empty list so the UI shows an empty vault
+      // rather than blowing up.
+      return []
+    }
     if (!res.ok) throw new Error(`GitHub: failed to list ${dir || '/'} (${res.status})`)
     const items = (await res.json()) as GHContent[]
     return (Array.isArray(items) ? items : [items]).map((item) => ({
