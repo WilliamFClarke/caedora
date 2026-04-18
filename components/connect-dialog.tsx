@@ -77,10 +77,12 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
 
 // ─── Local panel ──────────────────────────────────────────────────────────────
 
+type Phase = 'idle' | 'picking' | 'preparing'
+
 function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
   const router = useRouter()
   const { connectLocal } = useVault()
-  const [busy, setBusy] = useState(false)
+  const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
   const [showChromiumWarning, setShowChromiumWarning] = useState(false)
 
@@ -90,11 +92,11 @@ function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
 
   async function onPick() {
     setError(null)
-    setBusy(true)
+    setPhase('picking')
     try {
       const handle = await connectLocal()
       if (!handle) {
-        setBusy(false)
+        setPhase('idle')
         return
       }
       const provider = new LocalGitProvider(handle)
@@ -104,27 +106,33 @@ function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
           setError(
             'That folder already has files. Pick an empty folder, or choose "Open" instead.'
           )
-          setBusy(false)
+          setPhase('idle')
           return
         }
+        setPhase('preparing')
         await seedLocalVault(provider)
         router.push(`/vault/${WELCOME_PATH}`)
+        // Don't close the dialog — the route change unmounts it and prevents a
+        // race with the home page's auto-redirect.
       } else {
         router.push('/vault')
+        onDone()
       }
-      onDone()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not open folder')
-      setBusy(false)
+      setPhase('idle')
     }
   }
 
+  const busy = phase !== 'idle'
   return (
     <div className="flex flex-col gap-3 py-4">
       <p className="text-muted-foreground text-sm">
-        {mode === 'create'
-          ? 'Pick an empty folder on your computer. We will use it as your vault.'
-          : 'Pick the folder that already contains your vault.'}
+        {phase === 'preparing'
+          ? 'Preparing your vault — writing your welcome note and setting up git…'
+          : mode === 'create'
+            ? 'Pick an empty folder on your computer. We will use it as your vault.'
+            : 'Pick the folder that already contains your vault.'}
       </p>
       <Button onClick={onPick} disabled={busy} size="lg" className="w-full">
         {busy ? (
@@ -132,7 +140,11 @@ function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
         ) : (
           <Folder className="size-4" />
         )}
-        {mode === 'create' ? 'Choose folder' : 'Open folder'}
+        {phase === 'preparing'
+          ? 'Preparing your vault…'
+          : mode === 'create'
+            ? 'Choose folder'
+            : 'Open folder'}
       </Button>
       {error && <p className="text-destructive text-sm">{error}</p>}
       {showChromiumWarning && (
@@ -152,15 +164,16 @@ function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
   const [pat, setPat] = useState('')
   const [owner, setOwner] = useState('')
   const [repo, setRepo] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    setBusy(true)
+    setPhase('picking')
     try {
       if (mode === 'create') {
+        setPhase('preparing')
         // Create repo on GitHub
         const resp = await fetch('https://api.github.com/user/repos', {
           method: 'POST',
@@ -224,14 +237,21 @@ function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
         }
         await connectGitHub(pat, owner, repo)
       }
-      router.push(mode === 'create' ? `/vault/${WELCOME_PATH}` : '/vault')
-      onDone()
+      if (mode === 'create') {
+        router.push(`/vault/${WELCOME_PATH}`)
+        // Let the route change unmount the dialog — avoids racing the home
+        // page's auto-redirect to `/vault`.
+      } else {
+        router.push('/vault')
+        onDone()
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not connect to GitHub')
-    } finally {
-      setBusy(false)
+      setPhase('idle')
     }
   }
+
+  const busy = phase !== 'idle'
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4 py-4">
@@ -284,10 +304,19 @@ function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
           required
         />
       </div>
+      {phase === 'preparing' && (
+        <p className="text-muted-foreground text-sm">
+          Preparing your vault — creating the repo and writing your welcome note…
+        </p>
+      )}
       {error && <p className="text-destructive text-sm">{error}</p>}
       <Button type="submit" disabled={busy || !pat || !repo} size="lg">
         {busy && <Loader2 className="size-4 animate-spin" />}
-        {mode === 'create' ? 'Create vault on GitHub' : 'Open vault'}
+        {phase === 'preparing'
+          ? 'Preparing your vault…'
+          : mode === 'create'
+            ? 'Create vault on GitHub'
+            : 'Open vault'}
       </Button>
     </form>
   )
