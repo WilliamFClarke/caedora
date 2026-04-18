@@ -45,7 +45,6 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -132,15 +131,6 @@ function folderIconFor(name: string) {
   if (n === 'meetings' || n === 'inbox') return Inbox
   if (n === 'reading' || n === 'tags') return Hash
   return Folder
-}
-
-function countFiles(node: TreeNodeT): number {
-  let n = 0
-  for (const c of node.children) {
-    if (c.type === 'file') n++
-    else n += countFiles(c)
-  }
-  return n
 }
 
 function displayName(name: string): string {
@@ -403,7 +393,6 @@ function FolderRow(props: TreeRowProps) {
   const [open, setOpen] = useState(true)
   const isRenaming = renaming === node.path
   const Icon = folderIconFor(node.name)
-  const fileCount = countFiles(node)
 
   return (
     <SidebarMenuItem>
@@ -435,11 +424,6 @@ function FolderRow(props: TreeRowProps) {
                   )}
                 </SidebarMenuButton>
               </CollapsibleTrigger>
-              {fileCount > 0 && !isRenaming && (
-                <SidebarMenuBadge className="font-mono text-[10px]">
-                  {fileCount}
-                </SidebarMenuBadge>
-              )}
             </div>
           </ContextMenuTrigger>
           <ContextMenuContent>

@@ -5,10 +5,75 @@
 import { LocalGitProvider } from './storage/local-provider'
 
 const WELCOME_PATH = 'welcome.md'
-const WELCOME_BODY = `# Welcome to your vault
+const WELCOME_BODY = `---
+tags: [example-tag]
+---
+# Welcome to your vault
 
-This vault is yours. Everything you write here is a plain markdown file stored
-on your own computer or in your own GitHub repository — never on our servers.
+This vault is yours. Everything here is a plain markdown file stored on your
+own computer or in your own GitHub repository — never on our servers.
+
+## Formatting cheatsheet
+
+You can write **bold**, *italic*, ~~strikethrough~~, and \`inline code\`.
+Combine them for ***bold italics*** when you need emphasis on emphasis.
+
+### Headings
+
+Use \`#\`, \`##\`, \`###\`, \`####\` for heading levels 1–4. Every note gets
+an H1 — rename it here and the file renames itself.
+
+### Lists
+
+- Unordered lists use dashes
+- Nest them by indenting
+  - Like this
+  - And this
+- Back out to continue at the top level
+
+1. Ordered lists use numbers
+2. They renumber themselves
+3. Mix in **formatting** as you go
+
+- [ ] Checkboxes work too
+- [x] Tick them off as you finish
+
+### Quotes & callouts
+
+> Block quotes lean left and set off a voice that isn't yours — a citation,
+> a reminder, something you want to sit apart from the flow.
+
+### Code
+
+Inline \`const answer = 42\` sits flush with the text. For anything longer,
+fence a block:
+
+\`\`\`ts
+function greet(name: string): string {
+  return \`Hello, \${name}!\`
+}
+\`\`\`
+
+### Links & images
+
+Links look like [this](https://example.com). Images use the same syntax
+with a leading \`!\`:
+
+![A placeholder](https://placehold.co/600x200)
+
+### Tables
+
+| Thing        | Why it's useful              |
+| ------------ | ---------------------------- |
+| Shopping     | Stop forgetting the milk     |
+| Meetings     | Searchable past decisions    |
+| Reading list | Everything you want to read  |
+
+### Horizontal rules
+
+Three dashes on their own line draw a divider:
+
+---
 
 ## Ideas to get started
 
@@ -18,6 +83,8 @@ on your own computer or in your own GitHub repository — never on our servers.
 - Your bills and subscriptions
 - Health notes and medications
 
+Add tags to any note via the **+ tag** chip under the title — they're stored
+as YAML frontmatter so Obsidian, Dataview, and friends can see them too.
 Click **+ New note** in the sidebar to create your first note. Your changes
 save automatically.
 `
