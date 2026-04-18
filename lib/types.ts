@@ -90,6 +90,7 @@ export interface VaultContextValue {
   status: VaultStatus
   connectLocal: () => Promise<FileSystemDirectoryHandle | null>
   connectGitHub: (pat: string, owner: string, repo: string) => Promise<void>
+  connectToVault: (id: string) => Promise<void>
   grantPermission: () => Promise<void>
   disconnect: () => void
 }
