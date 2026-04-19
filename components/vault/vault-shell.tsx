@@ -143,6 +143,28 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     void refreshEntries()
   }, [refreshEntries])
 
+  // ── Background auto-refresh ───────────────────────────────────────────────
+  // Poll to pick up external changes (other devices, direct GitHub edits).
+  // Gated on tab visibility so background tabs don't hammer the API.
+  // GitHub: 30 s (each refresh walks the tree — one API call per folder).
+  // Local: 10 s (FSAA reads are cheap and instant).
+  const isGitHub = status.state === 'ready' && status.providerType === 'github'
+  const pollMs = isGitHub ? 30_000 : 10_000
+
+  useEffect(() => {
+    const poll = setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshEntries()
+    }, pollMs)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refreshEntries()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(poll)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [refreshEntries, pollMs])
+
   const combinedEntries = useMemo(() => {
     if (virtualFolders.size === 0) return entries
     const existing = new Set(entries.filter((e) => e.type === 'dir').map((e) => e.path))
@@ -173,7 +195,12 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         throw new Error('A note with that name already exists.')
       }
       await provider.writeFile(fullPath, `# ${display}\n\n`)
-      // Optimistic: show the new file in the sidebar and open it immediately
+      if (!provider.writesAreCommits) {
+        await provider.commit(`Create ${fullPath}`, [fullPath])
+      }
+      // Optimistic: show the new file immediately. Don't call refreshEntries
+      // here — for GitHub the API lags and a stale listing would overwrite this.
+      // Polling reconciles within 10–30 s.
       setEntries((prev) =>
         prev.some((e) => e.path === fullPath)
           ? prev
@@ -181,12 +208,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       )
       setSelected(fullPath)
       syncUrl(fullPath)
-      if (!provider.writesAreCommits) {
-        await provider.commit(`Create ${fullPath}`, [fullPath])
-      }
-      void refreshEntries()
     },
-    [provider, refreshEntries, syncUrl]
+    [provider, syncUrl]
   )
 
   const onCreateFolder = useCallback((parent: string, name: string) => {
@@ -225,6 +248,19 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       if (!provider.writesAreCommits) {
         await provider.commit(`Rename ${from} to ${to}`, [to])
       }
+      // Optimistic: update entries immediately so the sidebar reflects the
+      // rename without waiting for a refresh (which may return stale data on
+      // GitHub). Polling will reconcile within 10–30 s.
+      setEntries((prev) =>
+        prev.map((e) => {
+          if (e.path === from) return { ...e, path: to, name: to.split('/').pop() ?? to }
+          if (e.path.startsWith(`${from}/`)) {
+            const newPath = `${to}${e.path.slice(from.length)}`
+            return { ...e, path: newPath, name: newPath.split('/').pop() ?? newPath }
+          }
+          return e
+        })
+      )
       if (selected === from) {
         setSelected(to)
         syncUrl(to, 'replace')
@@ -233,9 +269,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         setSelected(newSelected)
         syncUrl(newSelected, 'replace')
       }
-      await refreshEntries()
     },
-    [provider, virtualFolders, selected, refreshEntries, syncUrl, renamePinned]
+    [provider, virtualFolders, selected, syncUrl, renamePinned]
   )
 
   const onDeletePath = useCallback(
@@ -257,13 +292,16 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       if (!provider.writesAreCommits) {
         await provider.commit(`Delete ${path}`, [])
       }
+      // Optimistic: remove from entries immediately; polling reconciles.
+      setEntries((prev) =>
+        prev.filter((e) => e.path !== path && !e.path.startsWith(`${path}/`))
+      )
       if (selected === path || selected?.startsWith(`${path}/`)) {
         setSelected(null)
         syncUrl(null, 'replace')
       }
-      await refreshEntries()
     },
-    [provider, virtualFolders, selected, refreshEntries, syncUrl, removePinned]
+    [provider, virtualFolders, selected, syncUrl, removePinned]
   )
 
   const breadcrumbSegments = useMemo(() => {
