@@ -6,7 +6,8 @@ import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
-import { seedEmptyVault, WELCOME_PATH, SKILL_PATH } from '@/lib/vault-create'
+import { seedEmptyVault, WELCOME_PATH, SKILL_PATH, INDEX_PATH } from '@/lib/vault-create'
+import { rebuildVaultIndex } from '@/lib/vault-index'
 import { slugifyFilename } from '@/lib/frontmatter'
 import { usePinned } from '@/hooks/use-pinned'
 import type { FileEntry, VaultProvider } from '@/lib/types'
@@ -90,8 +91,12 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       // as a pre-personal-md repo and seed welcome.md + SKILL.md so the user
       // gets the same out-of-the-box state Create gives them. Runs once per
       // session so a manual delete of the README afterwards won't re-seed.
+      // Treat any readme or welcome file (including the legacy 'welcome.md'
+      // from vaults created before the filename was updated) as "already seeded".
       const hasReadme = all.some(
-        (e) => e.type === 'file' && /^readme(\.|$)/i.test(e.name)
+        (e) =>
+          e.type === 'file' &&
+          (/^readme(\.|$)/i.test(e.name) || /^welcome(-[a-z-]+)?\.md$/i.test(e.name))
       )
       if (!hasReadme && !didAutoSeed.current) {
         didAutoSeed.current = true
@@ -166,6 +171,25 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [refreshEntries, pollMs])
+
+  // ── Auto index ───────────────────────────────────────────────────────────
+  // Rebuild index.md whenever the file list changes. Debounced so rapid
+  // creates/deletes coalesce into one rebuild. index.md itself changing
+  // doesn't trigger a re-render (sameEntries ignores it once it's present).
+  const indexRebuildTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const indexableEntries = entries.filter(
+      (e) => e.type === 'file' && e.name.endsWith('.md') && e.path !== INDEX_PATH
+    )
+    if (!provider || indexableEntries.length === 0) return
+    if (indexRebuildTimer.current) clearTimeout(indexRebuildTimer.current)
+    indexRebuildTimer.current = setTimeout(() => {
+      void rebuildVaultIndex(provider, entries)
+    }, 3_000)
+    return () => {
+      if (indexRebuildTimer.current) clearTimeout(indexRebuildTimer.current)
+    }
+  }, [provider, entries])
 
   const combinedEntries = useMemo(() => {
     if (virtualFolders.size === 0) return entries

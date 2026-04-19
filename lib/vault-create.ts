@@ -4,12 +4,13 @@
  */
 import { LocalGitProvider } from './storage/local-provider'
 import { savePinned, loadPinned } from './storage/idb'
+import { rebuildVaultIndex, INDEX_PATH } from './vault-index'
 import type { VaultProvider } from './types'
 
-// Kebab-case filename for a clean URL; the H1 inside can be the display
-// title ("Welcome to your vault"). Filename and H1 are intentionally
-// independent — see the editor decoupling notes.
-export const WELCOME_PATH = 'welcome.md'
+export { INDEX_PATH }
+
+// Filename matches the H1 title slug so the sidebar label and the title are in sync.
+export const WELCOME_PATH = 'welcome-to-your-vault.md'
 const WELCOME_BODY = `---
 tags: [example-tag]
 ---
@@ -602,6 +603,10 @@ export async function seedLocalVault(
   if (seeded.includes(WELCOME_PATH)) {
     await pinInitial(WELCOME_PATH)
   }
+  // Build initial index so the LLM can discover files from the first open.
+  await rebuildVaultIndex(provider, seeded.filter(p => p.endsWith('.md') && p !== INDEX_PATH).map(p => ({
+    path: p, name: p.split('/').pop() ?? p, type: 'file' as const,
+  })))
 }
 
 /**
@@ -625,6 +630,11 @@ export async function seedEmptyVault(provider: VaultProvider): Promise<string[]>
   }
   if (seeded.includes(WELCOME_PATH)) {
     await pinInitial(WELCOME_PATH)
+  }
+  if (seeded.length > 0) {
+    await rebuildVaultIndex(provider, seeded.filter(p => p.endsWith('.md') && p !== INDEX_PATH).map(p => ({
+      path: p, name: p.split('/').pop() ?? p, type: 'file' as const,
+    })))
   }
   return seeded
 }
