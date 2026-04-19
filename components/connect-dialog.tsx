@@ -23,8 +23,11 @@ import {
   SKILL_PATH,
   SKILL_MARKDOWN,
   pinInitial,
+  templateFilesFor,
+  type VaultTemplate,
 } from '@/lib/vault-create'
-import { Folder, Github, Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { BriefcaseBusiness, Folder, Github, Loader2, User } from 'lucide-react'
 
 type Mode = 'create' | 'open'
 
@@ -39,6 +42,13 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
     typeof window !== 'undefined' && 'showDirectoryPicker' in window
       ? 'local'
       : 'github'
+
+  const [vaultTemplate, setVaultTemplate] = useState<VaultTemplate>('default')
+
+  // Reset template choice whenever the dialog opens
+  useEffect(() => {
+    if (open) setVaultTemplate('default')
+  }, [open])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -57,6 +67,37 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
           </DialogDescription>
         </DialogHeader>
 
+        {mode === 'create' && (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium">What will you use this vault for?</p>
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  { value: 'personal', label: 'Personal', Icon: User, desc: 'Shopping, health, travel, contacts' },
+                  { value: 'work', label: 'Work', Icon: BriefcaseBusiness, desc: 'Meetings, projects, reviews' },
+                  { value: 'default', label: 'Blank', Icon: Folder, desc: 'Start with just a welcome note' },
+                ] as const
+              ).map(({ value, label, Icon, desc }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setVaultTemplate(value)}
+                  className={cn(
+                    'flex flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-center text-xs transition-colors',
+                    vaultTemplate === value
+                      ? 'border-primary bg-primary/5 text-foreground'
+                      : 'border-border text-muted-foreground hover:border-border/80 hover:bg-accent/50'
+                  )}
+                >
+                  <Icon className={cn('size-5', vaultTemplate === value && 'text-primary')} />
+                  <span className="font-medium">{label}</span>
+                  <span className="leading-tight opacity-80">{desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <Tabs defaultValue={defaultTab} className="mt-2">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="local">
@@ -69,10 +110,10 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
             </TabsTrigger>
           </TabsList>
           <TabsContent value="local">
-            <LocalPanel mode={mode} onDone={() => onOpenChange(false)} />
+            <LocalPanel mode={mode} vaultTemplate={vaultTemplate} onDone={() => onOpenChange(false)} />
           </TabsContent>
           <TabsContent value="github">
-            <GitHubPanel mode={mode} onDone={() => onOpenChange(false)} />
+            <GitHubPanel mode={mode} vaultTemplate={vaultTemplate} onDone={() => onOpenChange(false)} />
           </TabsContent>
         </Tabs>
       </DialogContent>
@@ -84,7 +125,15 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
 
 type Phase = 'idle' | 'picking' | 'preparing'
 
-function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
+function LocalPanel({
+  mode,
+  vaultTemplate,
+  onDone,
+}: {
+  mode: Mode
+  vaultTemplate: VaultTemplate
+  onDone: () => void
+}) {
   const router = useRouter()
   const { connectLocal } = useVault()
   const [phase, setPhase] = useState<Phase>('idle')
@@ -115,7 +164,7 @@ function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
           return
         }
         setPhase('preparing')
-        await seedLocalVault(provider)
+        await seedLocalVault(provider, vaultTemplate)
         router.push(`/vault/${WELCOME_PATH}`)
         // Don't close the dialog — the route change unmounts it and prevents a
         // race with the home page's auto-redirect.
@@ -193,7 +242,15 @@ async function waitForGithubListing(
   // Give up silently — the in-app seed-fallback will pick up the slack.
 }
 
-function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
+function GitHubPanel({
+  mode,
+  vaultTemplate,
+  onDone,
+}: {
+  mode: Mode
+  vaultTemplate: VaultTemplate
+  onDone: () => void
+}) {
   const router = useRouter()
   const { connectGitHub } = useVault()
   const [pat, setPat] = useState('')
@@ -233,10 +290,12 @@ function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
         const created = (await resp.json()) as { owner: { login: string } }
         const actualOwner = created.owner.login
 
-        // Seed welcome.md + SKILL.md using the shared bodies.
+        // Seed welcome.md + AGENTS.md + template files
+        const templateFiles = templateFilesFor(vaultTemplate)
         const seeds: Array<{ path: string; body: string }> = [
           { path: WELCOME_PATH, body: WELCOME_MARKDOWN },
           { path: SKILL_PATH, body: SKILL_MARKDOWN },
+          ...templateFiles.map(([path, body]) => ({ path, body })),
         ]
         for (const { path, body } of seeds) {
           await fetch(

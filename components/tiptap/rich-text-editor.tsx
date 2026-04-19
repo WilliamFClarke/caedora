@@ -112,6 +112,11 @@ export function RichTextEditorDemo({
     editorProps: {
       attributes: {
         class: "max-w-full focus:outline-none",
+        autocomplete: "off",
+        autocorrect: "off",
+        autocapitalize: "sentences",
+        "data-form-type": "other",
+        spellcheck: "true",
       },
     },
     onUpdate: onUpdate ? ({ editor }) => onUpdate(editor) : undefined,

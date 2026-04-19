@@ -242,11 +242,340 @@ Stay in scope. Don't invent facts you can't cite to a note.
 `
 
 
+// ─── Template system ─────────────────────────────────────────────────────────
+
+export type VaultTemplate = 'personal' | 'work' | 'default'
+
+const SHOPPING_LIST_BODY = `---
+tags: [shopping, lists]
+---
+# Shopping List
+
+Use this note to keep a running shopping list. An AI assistant with access
+to your vault can add, remove, or tick items off on your behalf.
+
+## Groceries
+
+- [ ] Milk
+- [ ] Bread
+- [ ] Eggs
+- [ ] Butter
+- [ ] Coffee
+
+## Household
+
+- [ ] Washing-up liquid
+- [ ] Bin bags
+- [ ] Toilet roll
+
+## Pharmacy
+
+- [ ] (add items here)
+
+## Other
+
+- [ ] (add items here)
+`
+
+const HEALTH_BODY_BODY = `---
+tags: [health, personal, reference]
+---
+# Health & Body
+
+A private reference for your health metrics and sizing details. An AI
+assistant reading this vault can use these to give personalised
+recommendations without you having to repeat yourself every time.
+
+## Body measurements
+
+| Measurement | Value |
+| ----------- | ----- |
+| Height      |       |
+| Weight      |       |
+| Waist       |       |
+
+## Clothing sizes
+
+| Item        | Size | Notes |
+| ----------- | ---- | ----- |
+| Top / shirt |      |       |
+| Trousers    |      |       |
+| Shoes       |      |       |
+| Jacket      |      |       |
+| Jeans waist |      |       |
+| Jeans leg   |      |       |
+
+## Medical
+
+| Detail               | Value |
+| -------------------- | ----- |
+| Blood type           |       |
+| Allergies            |       |
+| Dietary requirements |       |
+| GP / Doctor name     |       |
+| GP phone             |       |
+
+## Current medications
+
+| Medication | Dose | Frequency | Notes |
+| ---------- | ---- | --------- | ----- |
+|            |      |           |       |
+
+## Vaccinations
+
+| Vaccine | Date received | Next due |
+| ------- | ------------- | -------- |
+|         |               |          |
+
+## Past conditions / operations
+
+(Add any significant medical history here)
+`
+
+const EMERGENCY_CONTACTS_BODY = `---
+tags: [contacts, emergency, personal, reference]
+---
+# Emergency Contacts
+
+Key contacts for emergencies. An AI assistant can look these up quickly
+when you need them.
+
+## Family
+
+| Name | Relationship | Phone | Notes |
+| ---- | ------------ | ----- | ----- |
+|      |              |       |       |
+
+## Doctor / GP
+
+| Name | Phone | Address |
+| ---- | ----- | ------- |
+|      |       |         |
+
+## Other important contacts
+
+| Who                       | Phone | Notes |
+| ------------------------- | ----- | ----- |
+| Dentist                   |       |       |
+| Vet                       |       |       |
+| Landlord / property agent |       |       |
+| Solicitor / lawyer        |       |       |
+`
+
+const TRAVEL_DOCS_BODY = `---
+tags: [travel, documents, personal, reference]
+---
+# Travel Documents
+
+A private record of travel document details and loyalty programme accounts.
+
+> **Security note:** This file lives in your own storage only — never on
+> personal-md servers. Treat it like a locked drawer.
+
+## Passport
+
+| Detail          | Value |
+| --------------- | ----- |
+| Full name       |       |
+| Passport number |       |
+| Nationality     |       |
+| Issued          |       |
+| Expires         |       |
+
+## Driving licence
+
+| Detail  | Value |
+| ------- | ----- |
+| Number  |       |
+| Expires |       |
+
+## Loyalty programmes
+
+| Programme | Number / username | Status | Notes |
+| --------- | ----------------- | ------ | ----- |
+|           |                   |        |       |
+|           |                   |        |       |
+
+## Upcoming travel
+
+| Trip | Dates | Booking ref | Notes |
+| ---- | ----- | ----------- | ----- |
+|      |       |             |       |
+`
+
+const MEETING_NOTES_TEMPLATE_BODY = `---
+tags: [meetings, template, work]
+---
+# Meeting Notes Template
+
+Copy this file for each meeting. Rename it to something like
+\`2026-04-19-team-standup.md\` and move it into a \`Meetings/\` folder.
+
+---
+
+## Meeting: [Name / Topic]
+
+**Date:** YYYY-MM-DD
+**Attendees:**
+
+- Name (role)
+- Name (role)
+
+## Agenda
+
+1. Item one
+2. Item two
+
+## Notes
+
+(Write as the meeting progresses)
+
+## Decisions
+
+- Decision 1
+- Decision 2
+
+## Action items
+
+| Action | Owner | Due |
+| ------ | ----- | --- |
+|        |       |     |
+
+## Next meeting
+
+**Date:**
+**Agenda preview:**
+`
+
+const PROJECT_BRIEF_TEMPLATE_BODY = `---
+tags: [project, brief, template, work]
+---
+# Project Brief Template
+
+Copy this file for each project. Rename it to \`project-name-brief.md\`
+and move it into a \`Projects/\` folder.
+
+---
+
+## Project: [Name]
+
+**Owner:**
+**Start date:**
+**Target date:**
+**Status:** Planning / Active / Complete / On hold
+
+## Problem statement
+
+(What problem are we solving, and for whom?)
+
+## Goals
+
+- Goal 1
+- Goal 2
+
+## Out of scope
+
+- (What we are explicitly not doing)
+
+## Stakeholders
+
+| Name | Role | Input needed |
+| ---- | ---- | ------------ |
+|      |      |              |
+
+## Key decisions
+
+| Decision | Rationale | Date |
+| -------- | --------- | ---- |
+|          |           |      |
+
+## Open questions
+
+- [ ] Question 1
+- [ ] Question 2
+
+## Milestones
+
+| Milestone | Due | Status |
+| --------- | --- | ------ |
+|           |     |        |
+
+## Links
+
+- Design / Figma:
+- Repo / code:
+- Tickets:
+`
+
+const WEEKLY_REVIEW_BODY = `---
+tags: [review, weekly, work]
+---
+# Weekly Review
+
+A running log of weekly reviews. Add a new entry each Friday (or whenever
+suits you). An AI assistant can summarise patterns across entries or help
+draft the next one.
+
+---
+
+## Week of YYYY-MM-DD
+
+### What shipped
+
+-
+
+### What didn't ship (and why)
+
+-
+
+### Highlights
+
+-
+
+### Challenges
+
+-
+
+### Next week's priorities
+
+- [ ]
+- [ ]
+- [ ]
+
+---
+
+(Copy the section above for each new week)
+`
+
+const PERSONAL_TEMPLATE_FILES: Array<[string, string]> = [
+  ['shopping-list.md', SHOPPING_LIST_BODY],
+  ['health-and-body.md', HEALTH_BODY_BODY],
+  ['emergency-contacts.md', EMERGENCY_CONTACTS_BODY],
+  ['travel-documents.md', TRAVEL_DOCS_BODY],
+]
+
+const WORK_TEMPLATE_FILES: Array<[string, string]> = [
+  ['meeting-notes-template.md', MEETING_NOTES_TEMPLATE_BODY],
+  ['project-brief-template.md', PROJECT_BRIEF_TEMPLATE_BODY],
+  ['weekly-review.md', WEEKLY_REVIEW_BODY],
+]
+
+export function templateFilesFor(template: VaultTemplate): Array<[string, string]> {
+  if (template === 'personal') return PERSONAL_TEMPLATE_FILES
+  if (template === 'work') return WORK_TEMPLATE_FILES
+  return []
+}
+
+// ─── Seeding ─────────────────────────────────────────────────────────────────
+
 /**
  * Run once for a freshly-created local vault. Idempotent — safe to call even
  * if the folder already has a welcome.md (it won't overwrite existing files).
  */
-export async function seedLocalVault(provider: LocalGitProvider): Promise<void> {
+export async function seedLocalVault(
+  provider: LocalGitProvider,
+  template: VaultTemplate = 'default'
+): Promise<void> {
   const seeded: string[] = []
 
   if (!(await fileExists(provider, WELCOME_PATH))) {
@@ -260,6 +589,12 @@ export async function seedLocalVault(provider: LocalGitProvider): Promise<void> 
   if (!(await fileExists(provider, GITIGNORE_PATH))) {
     await provider.writeFile(GITIGNORE_PATH, GITIGNORE_BODY)
     seeded.push(GITIGNORE_PATH)
+  }
+  for (const [path, body] of templateFilesFor(template)) {
+    if (!(await fileExists(provider, path))) {
+      await provider.writeFile(path, body)
+      seeded.push(path)
+    }
   }
   if (seeded.length > 0) {
     await provider.commit('Initial vault setup', seeded)
