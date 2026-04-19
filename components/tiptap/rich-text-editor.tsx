@@ -145,10 +145,18 @@ export function RichTextEditorDemo({
       <EditorToolbar editor={editor} />
       <FloatingToolbar editor={editor} />
       <TipTapFloatingMenu editor={editor} />
-      <EditorContent
-        editor={editor}
+      {/* Clicks in the empty space below the document content land on this
+          wrapper, not on the ProseMirror element. Detect that and move the
+          cursor to the end so the user can start typing immediately. */}
+      <div
         className="min-h-0 w-full min-w-full flex-1 cursor-text overflow-y-auto sm:p-6"
-      />
+        onClick={(e) => {
+          if (editor.view.dom.contains(e.target as Node)) return;
+          editor.commands.focus("end");
+        }}
+      >
+        <EditorContent editor={editor} className="w-full min-w-full" />
+      </div>
     </div>
   );
 }
