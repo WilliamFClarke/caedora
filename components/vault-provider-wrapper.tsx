@@ -1,6 +1,7 @@
 'use client'
 
 import { VaultContextProvider } from '@/lib/vault-context'
+import { SettingsProvider } from '@/lib/settings-context'
 import type { ReactNode } from 'react'
 
 /**
@@ -8,5 +9,9 @@ import type { ReactNode } from 'react'
  * children with the vault context without itself becoming a Client Component.
  */
 export function VaultProviderWrapper({ children }: { children: ReactNode }) {
-  return <VaultContextProvider>{children}</VaultContextProvider>
+  return (
+    <SettingsProvider>
+      <VaultContextProvider>{children}</VaultContextProvider>
+    </SettingsProvider>
+  )
 }

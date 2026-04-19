@@ -44,6 +44,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const didAutoSeed = useRef(false)
   const initialPathRef = useRef(initialPath)
   initialPathRef.current = initialPath
+  // Holds the editor's saveNow fn so Sync can flush unsaved changes first.
+  const editorSaveRef = useRef<(() => Promise<void>) | null>(null)
 
   // Update the URL without triggering a Next.js route transition. router.push
   // would refetch the RSC for /vault/[...path], painting an empty frame between
@@ -315,6 +317,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   }, [selected])
 
   const onSync = useCallback(async () => {
+    // Flush any unsaved editor content first (important in manual-sync mode).
+    if (editorSaveRef.current) await editorSaveRef.current()
     await refreshEntries()
     // Bump the nonce so EditorPane re-reads the currently-open note from
     // the provider (refreshEntries alone doesn't force a re-read).
@@ -421,6 +425,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
               syncNonce={syncNonce}
               isPinned={selected ? pinned.has(selected) : false}
               onTogglePin={togglePin}
+              onSaveNow={(fn) => { editorSaveRef.current = fn }}
             />
           )}
         </div>

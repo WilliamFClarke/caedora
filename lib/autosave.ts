@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VaultProvider } from './types'
 
-export type SyncStatus = 'idle' | 'saving' | 'saved' | 'error'
+export type SyncStatus = 'idle' | 'saving' | 'saved' | 'unsaved' | 'error'
 
 export interface UseAutosaveOpts {
   provider: VaultProvider | null
@@ -14,36 +14,59 @@ export interface UseAutosaveOpts {
   writeDebounceMs?: number
   /** ms to wait after last write before committing. Ignored when writesAreCommits. */
   commitDebounceMs?: number
+  /** When true, never auto-save. Content changes are tracked but not written. */
+  disabled?: boolean
+}
+
+export interface UseAutosaveResult {
+  status: SyncStatus
+  /** Force an immediate write + commit of any pending changes. */
+  saveNow: () => Promise<void>
 }
 
 /**
  * Debounced autosave:
- *   - writeFile after `writeDebounceMs` of idleness
+ *   - writeFile after `writeDebounceMs` of idleness (skipped when disabled)
  *   - commit after `commitDebounceMs` of further idleness (local provider only)
  *   - commit on blur / beforeunload of the tab
+ *   - saveNow() flushes immediately regardless of disabled flag
  */
 export function useAutosave({
   provider,
   path,
   content,
-  writeDebounceMs = 1000,
+  writeDebounceMs = 1_000,
   commitDebounceMs = 30_000,
-}: UseAutosaveOpts): SyncStatus {
+  disabled = false,
+}: UseAutosaveOpts): UseAutosaveResult {
   const [status, setStatus] = useState<SyncStatus>('idle')
   const writeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastSavedRef = useRef<string | null>(null)
   const dirtyPathsRef = useRef<Set<string>>(new Set())
 
+  // Stable refs so saveNow can always see current values without re-creating
+  const providerRef = useRef(provider)
+  const pathRef = useRef(path)
+  const contentRef = useRef(content)
+  providerRef.current = provider
+  pathRef.current = path
+  contentRef.current = content
+
   // Reset saved baseline when file switches
   useEffect(() => {
     lastSavedRef.current = content
   }, [path]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Schedule a debounced write whenever content changes
+  // Schedule a debounced write (or mark unsaved) whenever content changes
   useEffect(() => {
     if (!provider || !path || content === null) return
     if (content === lastSavedRef.current) return
+
+    if (disabled) {
+      setStatus('unsaved')
+      return
+    }
 
     setStatus('saving')
     if (writeTimer.current) clearTimeout(writeTimer.current)
@@ -54,7 +77,7 @@ export function useAutosave({
         dirtyPathsRef.current.add(path)
         setStatus('saved')
 
-        // Schedule commit (local provider only — GitHub writes are commits)
+        // Schedule commit (local provider only — GitHub writes are already commits)
         if (!provider.writesAreCommits) {
           if (commitTimer.current) clearTimeout(commitTimer.current)
           commitTimer.current = setTimeout(async () => {
@@ -62,12 +85,10 @@ export function useAutosave({
             dirtyPathsRef.current.clear()
             if (paths.length === 0) return
             try {
-              const msg = paths.length === 1
-                ? `Update ${paths[0]}`
-                : `Update ${paths.length} notes`
+              const msg =
+                paths.length === 1 ? `Update ${paths[0]}` : `Update ${paths.length} notes`
               await provider.commit(msg, paths)
             } catch {
-              // Surface as error but don't block further writes
               setStatus('error')
             }
           }, commitDebounceMs)
@@ -80,9 +101,9 @@ export function useAutosave({
     return () => {
       if (writeTimer.current) clearTimeout(writeTimer.current)
     }
-  }, [provider, path, content, writeDebounceMs, commitDebounceMs])
+  }, [provider, path, content, writeDebounceMs, commitDebounceMs, disabled])
 
-  // Flush commit on tab close / visibility change
+  // Flush commit on tab close / visibility change (local only)
   useEffect(() => {
     if (!provider || provider.writesAreCommits) return
     const flush = () => {
@@ -93,9 +114,7 @@ export function useAutosave({
       const paths = [...dirtyPathsRef.current]
       dirtyPathsRef.current.clear()
       if (paths.length === 0) return
-      const msg = paths.length === 1
-        ? `Update ${paths[0]}`
-        : `Update ${paths.length} notes`
+      const msg = paths.length === 1 ? `Update ${paths[0]}` : `Update ${paths.length} notes`
       // Fire and forget — we can't await in beforeunload.
       void provider.commit(msg, paths)
     }
@@ -110,5 +129,36 @@ export function useAutosave({
     }
   }, [provider])
 
-  return status
+  const saveNow = useCallback(async () => {
+    const p = providerRef.current
+    const pt = pathRef.current
+    const c = contentRef.current
+    if (!p || !pt || c === null) return
+    if (c === lastSavedRef.current) return
+
+    // Cancel pending timers — we're flushing now
+    if (writeTimer.current) { clearTimeout(writeTimer.current); writeTimer.current = null }
+    if (commitTimer.current) { clearTimeout(commitTimer.current); commitTimer.current = null }
+
+    setStatus('saving')
+    try {
+      await p.writeFile(pt, c)
+      lastSavedRef.current = c
+      dirtyPathsRef.current.add(pt)
+
+      if (!p.writesAreCommits) {
+        const paths = [...dirtyPathsRef.current]
+        dirtyPathsRef.current.clear()
+        if (paths.length > 0) {
+          const msg = paths.length === 1 ? `Update ${paths[0]}` : `Update ${paths.length} notes`
+          await p.commit(msg, paths)
+        }
+      }
+      setStatus('saved')
+    } catch {
+      setStatus('error')
+    }
+  }, []) // stable — reads via refs
+
+  return { status, saveNow }
 }

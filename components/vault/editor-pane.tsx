@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, CloudOff, GitBranch, Loader2 } from 'lucide-react'
+import { Check, CircleDot, CloudOff, GitBranch, Loader2 } from 'lucide-react'
 import { Editor } from './editor'
 import { NoteMeta } from './note-meta'
 import { useAutosave, type SyncStatus } from '@/lib/autosave'
@@ -12,6 +12,7 @@ import {
   type Frontmatter,
 } from '@/lib/frontmatter'
 import type { VaultProvider } from '@/lib/types'
+import { useSettings } from '@/lib/settings-context'
 import { cn } from '@/lib/utils'
 
 interface EditorPaneProps {
@@ -22,6 +23,8 @@ interface EditorPaneProps {
   syncNonce?: number
   isPinned: boolean
   onTogglePin: (path: string) => void
+  /** Called with a stable saveNow fn so the parent can trigger a flush (e.g. Sync button). */
+  onSaveNow?: (fn: () => Promise<void>) => void
 }
 
 function countWords(markdown: string): number {
@@ -60,6 +63,7 @@ export function EditorPane({
   syncNonce = 0,
   isPinned,
   onTogglePin,
+  onSaveNow,
 }: EditorPaneProps) {
   const [loaded, setLoaded] = useState<{
     path: string
@@ -129,7 +133,26 @@ export function EditorPane({
     return combine(fmForSave, liveBody)
   }, [fmForSave, liveBody])
 
-  const status = useAutosave({ provider, path, content: fullContent })
+  const { settings } = useSettings()
+  const isGitHub = provider.type === 'github'
+  const autoSaveDisabled = settings.syncMode === 'manual'
+  // GitHub: each writeFile IS a commit, so we throttle writes to syncIntervalMs.
+  // Local: disk writes are cheap and stay at 1 s; only the git commit is throttled.
+  const writeDebounceMs = isGitHub ? settings.syncIntervalMs : 1_000
+  const commitDebounceMs = settings.syncIntervalMs
+
+  const { status, saveNow } = useAutosave({
+    provider,
+    path,
+    content: fullContent,
+    writeDebounceMs,
+    commitDebounceMs,
+    disabled: autoSaveDisabled,
+  })
+
+  useEffect(() => {
+    onSaveNow?.(saveNow)
+  }, [saveNow, onSaveNow])
 
   useEffect(() => {
     if (status === 'saved') setSavedAt(Date.now())
@@ -244,6 +267,14 @@ function SavedPill({ status }: { status: SyncStatus }) {
       <span className={cn(base, 'border-border text-muted-foreground')}>
         <Loader2 className="size-2.5 animate-spin" />
         Saving
+      </span>
+    )
+  }
+  if (status === 'unsaved') {
+    return (
+      <span className={cn(base, 'border-amber-500/40 text-amber-600 dark:text-amber-400')}>
+        <CircleDot className="size-2.5" />
+        Unsaved
       </span>
     )
   }

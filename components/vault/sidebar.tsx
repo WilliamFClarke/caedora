@@ -14,6 +14,7 @@ import {
   Hash,
   Inbox,
   RefreshCw,
+  Settings,
   Sparkles,
   LogOut,
   Pencil,
@@ -391,6 +392,15 @@ export function AppSidebar({
                 Sync
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => router.push('/settings')}
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
+              aria-label="Settings"
+            >
+              <Settings className="size-3" />
+              Settings
+            </button>
             <button
               type="button"
               onClick={onDisconnect}
