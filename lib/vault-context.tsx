@@ -66,10 +66,10 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
    * Returns the resulting provider (so callers can seed files before navigating)
    * or null if the user cancelled.
    */
-  const connectLocal = useCallback(async () => {
+  const connectLocal = useCallback(async (preselected?: FileSystemDirectoryHandle) => {
     setStatus({ state: 'connecting' })
     try {
-      const handle = await window.showDirectoryPicker({ mode: 'readwrite' })
+      const handle = preselected ?? (await window.showDirectoryPicker({ mode: 'readwrite' }))
       await saveVaultState({
         type: 'local',
         directoryHandle: handle,

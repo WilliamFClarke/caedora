@@ -88,7 +88,7 @@ export interface PersistedVaultState {
 export interface VaultContextValue {
   provider: VaultProvider | null
   status: VaultStatus
-  connectLocal: () => Promise<FileSystemDirectoryHandle | null>
+  connectLocal: (preselected?: FileSystemDirectoryHandle) => Promise<FileSystemDirectoryHandle | null>
   connectGitHub: (pat: string, owner: string, repo: string) => Promise<void>
   connectToVault: (id: string) => Promise<void>
   grantPermission: () => Promise<void>

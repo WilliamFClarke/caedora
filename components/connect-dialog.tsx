@@ -26,6 +26,7 @@ import {
   templateFilesFor,
   type VaultTemplate,
 } from '@/lib/vault-create'
+import { slugifyFilename } from '@/lib/frontmatter'
 import { cn } from '@/lib/utils'
 import { BriefcaseBusiness, Folder, Github, Loader2, User } from 'lucide-react'
 
@@ -163,6 +164,7 @@ function LocalPanel({
 }) {
   const router = useRouter()
   const { connectLocal } = useVault()
+  const [vaultName, setVaultName] = useState('My Vault')
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
   const [showChromiumWarning, setShowChromiumWarning] = useState(false)
@@ -175,51 +177,104 @@ function LocalPanel({
     onPreparingChange(phase === 'preparing')
   }, [phase, onPreparingChange])
 
+  const folderSlug = slugifyFilename(vaultName)
+
   async function onPick() {
     setError(null)
     setPhase('picking')
     try {
-      const handle = await connectLocal()
-      if (!handle) {
-        setPhase('idle')
-        return
-      }
-      const provider = new LocalGitProvider(handle)
-      await provider.init()
       if (mode === 'create') {
+        // Create flow: pick a PARENT folder, then create/reuse a subfolder
+        // named after the user's vault name. This means the user doesn't need
+        // to manually create an empty folder first.
+        const trimmed = vaultName.trim()
+        if (!trimmed) {
+          setError('Give your vault a name.')
+          setPhase('idle')
+          return
+        }
+        const slug = slugifyFilename(trimmed)
+        if (!slug || slug === 'untitled') {
+          setError('That vault name needs at least one letter or digit.')
+          setPhase('idle')
+          return
+        }
+        const parent = await window.showDirectoryPicker({ mode: 'readwrite' })
+        const handle = await parent.getDirectoryHandle(slug, { create: true })
+        const provider = new LocalGitProvider(handle)
+        await provider.init()
         if (!(await isFolderEmpty(provider))) {
           setError(
-            'That folder already has files. Pick an empty folder, or choose "Open" instead.'
+            `A folder called "${slug}" already exists here and isn't empty. Pick a different vault name, or open it from the "Open vault" flow.`
           )
           setPhase('idle')
           return
         }
         setPhase('preparing')
         await seedLocalVault(provider, vaultTemplate)
+        await connectLocal(handle)
         router.push(`/vault/${WELCOME_PATH}`)
         // Don't close the dialog — the route change unmounts it and prevents a
         // race with the home page's auto-redirect.
       } else {
+        // Open flow: pick the vault folder directly (existing behaviour).
+        const handle = await connectLocal()
+        if (!handle) {
+          setPhase('idle')
+          return
+        }
+        const provider = new LocalGitProvider(handle)
+        await provider.init()
         router.push('/vault')
         onDone()
       }
     } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        setPhase('idle')
+        return
+      }
       setError(e instanceof Error ? e.message : 'Could not open folder')
       setPhase('idle')
     }
   }
 
   const busy = phase !== 'idle'
+  const canSubmit = mode === 'open' || (vaultName.trim().length > 0 && folderSlug !== '' && folderSlug !== 'untitled')
+
   return (
     <div className="flex flex-col gap-3 py-4">
-      <p className="text-muted-foreground text-sm">
-        {phase === 'preparing'
-          ? 'Preparing your vault — writing your welcome note and setting up git…'
-          : mode === 'create'
-            ? 'Pick an empty folder on your computer. We will use it as your vault.'
-            : 'Pick the folder that already contains your vault.'}
-      </p>
-      <Button onClick={onPick} disabled={busy} size="lg" className="w-full">
+      {mode === 'create' ? (
+        <>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="vault-name">Vault name</Label>
+            <Input
+              id="vault-name"
+              value={vaultName}
+              onChange={(e) => setVaultName(e.target.value)}
+              placeholder="My Vault"
+              autoComplete="off"
+              disabled={busy}
+            />
+            <p className="text-muted-foreground text-xs">
+              A folder named{' '}
+              <span className="bg-muted text-foreground rounded px-1 py-0.5 font-mono text-[11px]">
+                {folderSlug || 'your-vault'}
+              </span>{' '}
+              will be created inside the location you pick next.
+            </p>
+          </div>
+          <p className="text-muted-foreground text-sm">
+            {phase === 'preparing'
+              ? 'Preparing your vault — writing your welcome note and setting up git…'
+              : 'Pick the parent folder (e.g. Documents). We\'ll create your vault folder inside it.'}
+          </p>
+        </>
+      ) : (
+        <p className="text-muted-foreground text-sm">
+          Pick the folder that already contains your vault.
+        </p>
+      )}
+      <Button onClick={onPick} disabled={busy || !canSubmit} size="lg" className="w-full">
         {busy ? (
           <Loader2 className="size-4 animate-spin" />
         ) : (
@@ -228,7 +283,7 @@ function LocalPanel({
         {phase === 'preparing'
           ? 'Preparing your vault…'
           : mode === 'create'
-            ? 'Choose folder'
+            ? 'Choose parent folder'
             : 'Open folder'}
       </Button>
       {error && <p className="text-destructive text-sm">{error}</p>}
