@@ -1,5 +1,6 @@
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToolbarProvider } from "./toolbar-provider";
 import { Editor } from "@tiptap/core";
@@ -30,6 +31,10 @@ export const EditorToolbar = ({ editor }: { editor: Editor }) => {
           <ScrollArea className="h-fit py-0.5">
             <div>
               <div className="flex items-center gap-1 px-2">
+                {/* Sidebar toggle */}
+                <SidebarTrigger className="-ml-1 size-7" />
+                <Separator orientation="vertical" className="mx-1 h-7" />
+
                 {/* History Group */}
                 <UndoToolbar />
                 <RedoToolbar />

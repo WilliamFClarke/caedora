@@ -12,18 +12,8 @@ import { slugifyFilename } from '@/lib/frontmatter'
 import { usePinned } from '@/hooks/use-pinned'
 import type { FileEntry, VaultProvider } from '@/lib/types'
 import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb'
-import { Separator } from '@/components/ui/separator'
-import {
   SidebarInset,
   SidebarProvider,
-  SidebarTrigger,
 } from '@/components/ui/sidebar'
 
 interface VaultShellProps {
@@ -336,16 +326,6 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     [provider, virtualFolders, selected, syncUrl, removePinned]
   )
 
-  const breadcrumbSegments = useMemo(() => {
-    if (!selected) return []
-    const parts = selected.split('/')
-    return parts.map((part, i) => ({
-      name: i === parts.length - 1 && part.endsWith('.md') ? part.slice(0, -3) : part,
-      path: parts.slice(0, i + 1).join('/'),
-      isLast: i === parts.length - 1,
-    }))
-  }, [selected])
-
   const onSync = useCallback(async () => {
     // Flush any unsaved editor content first (important in manual-sync mode).
     if (editorSaveRef.current) await editorSaveRef.current()
@@ -390,55 +370,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         onSync={onSync}
       />
       <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
-          <SidebarTrigger className="-ml-1" />
-          <Separator
-            orientation="vertical"
-            className="mr-1 data-[orientation=vertical]:h-4"
-          />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <span className="text-muted-foreground font-mono text-[10px] uppercase tracking-wider">
-                  vault
-                </span>
-              </BreadcrumbItem>
-              {breadcrumbSegments.length === 0 ? (
-                <>
-                  <BreadcrumbSeparator />
-                  <BreadcrumbItem>
-                    <BreadcrumbPage>Home</BreadcrumbPage>
-                  </BreadcrumbItem>
-                </>
-              ) : (
-                breadcrumbSegments.map((seg) => (
-                  <div key={seg.path} className="flex items-center gap-1.5 sm:gap-2.5">
-                    <BreadcrumbSeparator />
-                    <BreadcrumbItem>
-                      {seg.isLast ? (
-                        <BreadcrumbPage>{seg.name}</BreadcrumbPage>
-                      ) : (
-                        <BreadcrumbLink
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            const firstFile = entries.find(
-                              (x) => x.type === 'file' && x.path.startsWith(`${seg.path}/`)
-                            )
-                            if (firstFile) onSelect(firstFile.path)
-                          }}
-                        >
-                          {seg.name}
-                        </BreadcrumbLink>
-                      )}
-                    </BreadcrumbItem>
-                  </div>
-                ))
-              )}
-            </BreadcrumbList>
-          </Breadcrumb>
-        </header>
-        <div className="flex-1 overflow-hidden">
+        <div className="flex h-full flex-1 flex-col overflow-hidden">
           {loadError ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-destructive text-sm">{loadError}</p>
