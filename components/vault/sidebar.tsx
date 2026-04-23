@@ -561,7 +561,10 @@ function FolderRow(props: TreeRowProps) {
         </ContextMenu>
 
         <CollapsibleContent>
-          <SidebarMenuSub>
+          {/* Override the default mx-3.5 px-2.5 so nested rows hover/select
+              flush with the sidebar edge — matches top-level row behaviour.
+              The left border+indent keeps the nesting legible. */}
+          <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
             {node.children.map((c) => {
               const { node: _n, ...rest } = props
               void _n
