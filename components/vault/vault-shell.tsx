@@ -7,7 +7,7 @@ import { EditorPane } from './editor-pane'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
 import { seedEmptyVault, WELCOME_PATH, SKILL_PATH, INDEX_PATH } from '@/lib/vault-create'
-import { rebuildVaultIndex } from '@/lib/vault-index'
+import { rebuildVaultIndex, LOCKED_PATHS } from '@/lib/vault-index'
 import { slugifyFilename } from '@/lib/frontmatter'
 import { usePinned } from '@/hooks/use-pinned'
 import type { FileEntry, VaultProvider } from '@/lib/types'
@@ -247,6 +247,9 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const onRenamePath = useCallback(
     async (from: string, to: string) => {
       if (!provider) return
+      if (LOCKED_PATHS.has(from)) {
+        throw new Error(`${from} is maintained by personal-md and can't be renamed or moved.`)
+      }
       // Slugify just the final segment of the destination, keeping parent
       // folders untouched. Renames of folder paths also get a clean slug.
       const parts = to.split('/')
@@ -302,6 +305,9 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const onDeletePath = useCallback(
     async (path: string) => {
       if (!provider) return
+      if (LOCKED_PATHS.has(path)) {
+        throw new Error(`${path} is maintained by personal-md and can't be deleted.`)
+      }
       if (virtualFolders.has(path)) {
         // Virtual folder — just remove from state
         setVirtualFolders((prev) => {

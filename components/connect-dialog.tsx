@@ -44,17 +44,30 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
       : 'github'
 
   const [vaultTemplate, setVaultTemplate] = useState<VaultTemplate>('default')
+  const [preparing, setPreparing] = useState(false)
 
   // Reset template choice whenever the dialog opens
   useEffect(() => {
-    if (open) setVaultTemplate('default')
+    if (open) {
+      setVaultTemplate('default')
+      setPreparing(false)
+    }
   }, [open])
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (preparing && !next) return
+        onOpenChange(next)
+      }}
+    >
       <DialogContent
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => {
+          if (preparing) e.preventDefault()
+        }}
       >
         <DialogHeader>
           <DialogTitle>
@@ -82,11 +95,13 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
                   key={value}
                   type="button"
                   onClick={() => setVaultTemplate(value)}
+                  disabled={preparing}
                   className={cn(
                     'flex flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-center text-xs transition-colors',
                     vaultTemplate === value
                       ? 'border-primary bg-primary/5 text-foreground'
-                      : 'border-border text-muted-foreground hover:border-border/80 hover:bg-accent/50'
+                      : 'border-border text-muted-foreground hover:border-border/80 hover:bg-accent/50',
+                    preparing && 'cursor-not-allowed opacity-50 hover:bg-transparent'
                   )}
                 >
                   <Icon className={cn('size-5', vaultTemplate === value && 'text-primary')} />
@@ -100,20 +115,30 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
 
         <Tabs defaultValue={defaultTab} className="mt-2">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="local">
+            <TabsTrigger value="local" disabled={preparing}>
               <Folder className="mr-1 size-4" />
               On this computer
             </TabsTrigger>
-            <TabsTrigger value="github">
+            <TabsTrigger value="github" disabled={preparing}>
               <Github className="mr-1 size-4" />
               GitHub
             </TabsTrigger>
           </TabsList>
           <TabsContent value="local">
-            <LocalPanel mode={mode} vaultTemplate={vaultTemplate} onDone={() => onOpenChange(false)} />
+            <LocalPanel
+              mode={mode}
+              vaultTemplate={vaultTemplate}
+              onPreparingChange={setPreparing}
+              onDone={() => onOpenChange(false)}
+            />
           </TabsContent>
           <TabsContent value="github">
-            <GitHubPanel mode={mode} vaultTemplate={vaultTemplate} onDone={() => onOpenChange(false)} />
+            <GitHubPanel
+              mode={mode}
+              vaultTemplate={vaultTemplate}
+              onPreparingChange={setPreparing}
+              onDone={() => onOpenChange(false)}
+            />
           </TabsContent>
         </Tabs>
       </DialogContent>
@@ -128,10 +153,12 @@ type Phase = 'idle' | 'picking' | 'preparing'
 function LocalPanel({
   mode,
   vaultTemplate,
+  onPreparingChange,
   onDone,
 }: {
   mode: Mode
   vaultTemplate: VaultTemplate
+  onPreparingChange: (preparing: boolean) => void
   onDone: () => void
 }) {
   const router = useRouter()
@@ -143,6 +170,10 @@ function LocalPanel({
   useEffect(() => {
     setShowChromiumWarning(!('showDirectoryPicker' in window))
   }, [])
+
+  useEffect(() => {
+    onPreparingChange(phase === 'preparing')
+  }, [phase, onPreparingChange])
 
   async function onPick() {
     setError(null)
@@ -245,10 +276,12 @@ async function waitForGithubListing(
 function GitHubPanel({
   mode,
   vaultTemplate,
+  onPreparingChange,
   onDone,
 }: {
   mode: Mode
   vaultTemplate: VaultTemplate
+  onPreparingChange: (preparing: boolean) => void
   onDone: () => void
 }) {
   const router = useRouter()
@@ -258,6 +291,10 @@ function GitHubPanel({
   const [repo, setRepo] = useState('')
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    onPreparingChange(phase === 'preparing')
+  }, [phase, onPreparingChange])
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()

@@ -29,6 +29,7 @@ import { ModeToggle } from '@/components/mode-toggle'
 import { ConnectAiDialog } from './connect-ai-dialog'
 import { useVault } from '@/lib/vault-context'
 import type { FileEntry, VaultProvider } from '@/lib/types'
+import { LOCKED_PATHS } from '@/lib/vault-index'
 import { cn } from '@/lib/utils'
 import {
   Collapsible,
@@ -589,6 +590,7 @@ function FileRow(props: TreeRowProps) {
   const isRenaming = renaming === node.path
   const isSel = selected === node.path
   const isPinned = pinned.has(node.path)
+  const isLocked = LOCKED_PATHS.has(node.path)
 
   return (
     <SidebarMenuItem className="group/file">
@@ -623,25 +625,29 @@ function FileRow(props: TreeRowProps) {
             <Star className={cn(isPinned && 'fill-current')} />
             {isPinned ? 'Unpin' : 'Pin'}
           </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem onSelect={() => setRenaming(node.path)}>
-            <Pencil />
-            Rename
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={() => setMoving(node.path)}>
-            <FolderInput />
-            Move to folder…
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem
-            variant="destructive"
-            onSelect={() => {
-              void onDeletePath(node.path)
-            }}
-          >
-            <Trash2 />
-            Delete
-          </ContextMenuItem>
+          {!isLocked && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={() => setRenaming(node.path)}>
+                <Pencil />
+                Rename
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => setMoving(node.path)}>
+                <FolderInput />
+                Move to folder…
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() => {
+                  void onDeletePath(node.path)
+                }}
+              >
+                <Trash2 />
+                Delete
+              </ContextMenuItem>
+            </>
+          )}
         </ContextMenuContent>
       </ContextMenu>
       {!isRenaming && (

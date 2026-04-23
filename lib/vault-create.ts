@@ -165,6 +165,8 @@ Everything lives in plain markdown files — no database, no server, no lock-in.
   \`Projects/\`, \`Health/\`, \`Daily/\`). Nesting is allowed.
 - \`welcome.md\` / \`Welcome to your vault.md\` at the root is the onboarding
   note; don't treat it as load-bearing content.
+- \`index.md\` at the root is a machine-maintained map of the vault — see
+  "How to find things" below.
 - \`.gitignore\`, \`.git/\`, and any \`.personal-md/\` folder are system files;
   ignore them unless asked.
 
@@ -204,11 +206,23 @@ Everything lives in plain markdown files — no database, no server, no lock-in.
 
 ## How to find things
 
-- **By tag**: grep for \`tags:\` and match the tag list, or (if you have the
+**Start with \`index.md\`.** It's an auto-maintained map of the whole vault: a
+folder tree plus a flat table of every note with its path, folder, and tags.
+Read it first to orient yourself — it tells you what exists and where, so you
+don't have to scan the whole tree. It's rewritten automatically whenever a
+note is created, renamed, moved, or deleted, so you can trust it to be fresh.
+
+After \`index.md\` narrows down candidates, open specific notes for detail:
+
+- **By tag**: scan the Tags column in \`index.md\`, or (if you have the
   \`personal-md-mcp\` tools) call \`notes_by_tag(name)\`.
 - **Full-text**: \`grep -r "query" .\` or the \`search_notes\` MCP tool.
-- **By folder**: \`ls Projects/\` — folder names are the owner's taxonomy.
+- **By folder**: use the Folder structure tree in \`index.md\`, or \`ls Projects/\`.
 - **Recent work**: \`git log --oneline -20\` shows what's been edited lately.
+
+\`index.md\` and \`AGENTS.md\` are **locked** in the UI — the owner can edit
+their contents but they can't be renamed, moved, or deleted. Treat their
+paths as stable anchors.
 
 ## How to write / maintain
 
