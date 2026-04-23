@@ -48,7 +48,25 @@ const extensions = [
   }),
   Placeholder.configure({
     emptyNodeClass: "is-editor-empty",
-    placeholder: ({ node }) => {
+    placeholder: ({ editor, node, pos }) => {
+      // Suppress inside structural containers — tables and task items already
+      // carry their own visual structure, so "Write, type '/' ..." inside a
+      // cell or next to a checkbox just overlaps borders and confuses users.
+      try {
+        const $pos = editor.state.doc.resolve(pos);
+        for (let d = $pos.depth; d > 0; d--) {
+          const ancestor = $pos.node(d).type.name;
+          if (
+            ancestor === "tableCell" ||
+            ancestor === "tableHeader" ||
+            ancestor === "taskItem"
+          ) {
+            return "";
+          }
+        }
+      } catch {
+        // resolve() can throw mid-transaction; fall through to default.
+      }
       switch (node.type.name) {
         case "heading":
           return `Heading ${node.attrs.level}`;
