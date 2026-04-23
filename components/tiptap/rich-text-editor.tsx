@@ -129,8 +129,39 @@ export function RichTextEditorDemo({
   React.useLayoutEffect(() => {
     if (!editor || contentKey === undefined) return;
     if (loadedKey.current === contentKey) return;
+    const isFirstLoad = loadedKey.current === null;
     loadedKey.current = contentKey;
-    editor.commands.setContent((contentProp ?? content) as Parameters<typeof editor.commands.setContent>[0], false);
+    editor.commands.setContent(
+      (contentProp ?? content) as Parameters<typeof editor.commands.setContent>[0],
+      false
+    );
+
+    // If the doc ends in a heading (typical for a brand-new "# Title\n\n" note),
+    // append an empty paragraph so clicks below the heading have somewhere to
+    // land the cursor and the user can just start typing.
+    const doc = editor.state.doc;
+    const lastChild = doc.lastChild;
+    if (lastChild && lastChild.type.name === "heading") {
+      editor
+        .chain()
+        .insertContentAt(doc.content.size, { type: "paragraph" })
+        .run();
+    }
+
+    // On a freshly-opened note whose body is empty (only the H1), put the
+    // cursor in the body paragraph instead of the title so the user can type
+    // immediately without having to click past the heading. We only do this
+    // when switching into a file (contentKey change), not on every re-render,
+    // and we skip the initial mount so the default-content demo isn't affected.
+    if (!isFirstLoad) {
+      const bodyIsEmpty =
+        editor.state.doc.childCount <= 2 &&
+        editor.state.doc.lastChild?.type.name === "paragraph" &&
+        editor.state.doc.lastChild?.content.size === 0;
+      if (bodyIsEmpty) {
+        editor.commands.focus("end");
+      }
+    }
   }, [editor, contentKey, contentProp]);
 
   if (!editor) return null;
