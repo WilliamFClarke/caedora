@@ -15,6 +15,12 @@ import TextAlign from "@tiptap/extension-text-align";
 import TextStyle from "@tiptap/extension-text-style";
 import Typography from "@tiptap/extension-typography";
 import Underline from "@tiptap/extension-underline";
+import Table from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableHeader from "@tiptap/extension-table-header";
+import TableCell from "@tiptap/extension-table-cell";
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
 import { EditorContent, type Extension, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { TipTapFloatingMenu } from "@/components/tiptap/extensions/floating-menu";
@@ -73,6 +79,12 @@ const extensions = [
   ImagePlaceholder,
   SearchAndReplace,
   Typography,
+  Table.configure({ resizable: true, HTMLAttributes: { class: "tiptap-table" } }),
+  TableRow,
+  TableHeader,
+  TableCell,
+  TaskList.configure({ HTMLAttributes: { class: "tiptap-task-list" } }),
+  TaskItem.configure({ nested: true, HTMLAttributes: { class: "tiptap-task-item" } }),
 ];
 
 export interface RichTextEditorProps {

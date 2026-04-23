@@ -419,3 +419,70 @@
   height: 0;
   pointer-events: none;
 }
+
+/* Tables */
+.tiptap-table {
+  border-collapse: collapse;
+  margin: 1rem 0;
+  overflow: hidden;
+  table-layout: fixed;
+  width: 100%;
+}
+.tiptap-table td,
+.tiptap-table th {
+  border: 1px solid var(--editor-border-default);
+  box-sizing: border-box;
+  min-width: 1em;
+  padding: 0.4rem 0.6rem;
+  position: relative;
+  vertical-align: top;
+}
+.tiptap-table th {
+  background-color: var(--editor-bg-muted);
+  font-weight: 600;
+  text-align: left;
+}
+.tiptap-table .selectedCell::after {
+  background: rgba(59, 130, 246, 0.1);
+  content: "";
+  left: 0; right: 0; top: 0; bottom: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+.tiptap-table .column-resize-handle {
+  background-color: var(--editor-border-strong);
+  bottom: -2px;
+  pointer-events: none;
+  position: absolute;
+  right: -2px;
+  top: 0;
+  width: 4px;
+}
+
+/* Task list */
+ul.tiptap-task-list {
+  list-style: none;
+  padding: 0;
+}
+ul.tiptap-task-list li.tiptap-task-item {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.5rem;
+}
+ul.tiptap-task-list li.tiptap-task-item > label {
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+  user-select: none;
+}
+ul.tiptap-task-list li.tiptap-task-item > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+ul.tiptap-task-list li.tiptap-task-item > div > p {
+  margin: 0;
+}
+ul.tiptap-task-list li.tiptap-task-item[data-checked="true"] > div {
+  color: var(--editor-text-gray);
+  text-decoration: line-through;
+}

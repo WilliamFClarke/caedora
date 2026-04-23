@@ -22,6 +22,10 @@ import { ImagePlaceholderToolbar } from "./image-placeholder-toolbar";
 import { ColorHighlightToolbar } from "./color-and-highlight";
 import { SearchAndReplaceToolbar } from "./search-and-replace-toolbar";
 import { CodeBlockToolbar } from "./code-block";
+import { TableToolbar } from "./table";
+import { TaskListToolbar } from "./task-list";
+import { SubscriptToolbar } from "./subscript";
+import { SuperscriptToolbar } from "./superscript";
 
 export const EditorToolbar = ({ editor }: { editor: Editor }) => {
   return (
@@ -52,12 +56,16 @@ export const EditorToolbar = ({ editor }: { editor: Editor }) => {
                 <ItalicToolbar />
                 <UnderlineToolbar />
                 <StrikeThroughToolbar />
+                <SubscriptToolbar />
+                <SuperscriptToolbar />
                 <LinkToolbar />
                 <Separator orientation="vertical" className="mx-1 h-7" />
 
                 {/* Lists & Structure Group */}
                 <BulletListToolbar />
                 <OrderedListToolbar />
+                <TaskListToolbar />
+                <TableToolbar />
                 <HorizontalRuleToolbar />
                 <Separator orientation="vertical" className="mx-1 h-7" />
 
