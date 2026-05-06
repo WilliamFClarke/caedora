@@ -6,6 +6,7 @@ import {
   Heading3,
   ListOrdered,
   List,
+  ListChecks,
   Code2,
   ChevronRight,
   Quote, ImageIcon,
@@ -13,7 +14,10 @@ import {
   AlignCenter,
   AlignRight,
   CodeSquare,
-  TextQuote
+  TextQuote,
+  Table as TableIcon,
+  Subscript as SubscriptIcon,
+  Superscript as SuperscriptIcon,
 } from "lucide-react";
 import { FloatingMenu } from "@tiptap/react";
 import {
@@ -93,10 +97,29 @@ const groups: CommandGroupType[] = [
         command: (editor) => editor.chain().focus().toggleOrderedList().run(),
       },
       {
+        title: "Task List",
+        description: "Checkable to-do list",
+        icon: ListChecks,
+        keywords: "todo task checkbox checklist",
+        command: (editor) => editor.chain().focus().toggleTaskList().run(),
+      },
+      {
+        title: "Table",
+        description: "Insert a 3x3 table",
+        icon: TableIcon,
+        keywords: "table grid",
+        command: (editor) =>
+          editor
+            .chain()
+            .focus()
+            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+            .run(),
+      },
+      {
         title: "Code Block",
         description: "Capture code snippets",
         icon: Code2,
-        keywords: "code snippet pre",
+        keywords: "code snippet pre fenced",
         command: (editor) => editor.chain().focus().toggleCodeBlock().run(),
       },
       {
@@ -138,6 +161,20 @@ const groups: CommandGroupType[] = [
         icon: TextQuote,
         keywords: "blockquote quote",
         command: (editor) => editor.chain().focus().toggleBlockquote().run(),
+      },
+      {
+        title: "Subscript",
+        description: "x~2~ rendered small and low",
+        icon: SubscriptIcon,
+        keywords: "subscript sub lower",
+        command: (editor) => editor.chain().focus().toggleSubscript().run(),
+      },
+      {
+        title: "Superscript",
+        description: "x^2^ rendered small and high",
+        icon: SuperscriptIcon,
+        keywords: "superscript sup upper exponent",
+        command: (editor) => editor.chain().focus().toggleSuperscript().run(),
       },
     ],
   },

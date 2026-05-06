@@ -6,23 +6,14 @@ import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
-import { seedEmptyVault, WELCOME_PATH, SKILL_PATH } from '@/lib/vault-create'
+import { seedEmptyVault, WELCOME_PATH, SKILL_PATH, INDEX_PATH } from '@/lib/vault-create'
+import { rebuildVaultIndex, LOCKED_PATHS } from '@/lib/vault-index'
 import { slugifyFilename } from '@/lib/frontmatter'
 import { usePinned } from '@/hooks/use-pinned'
 import type { FileEntry, VaultProvider } from '@/lib/types'
 import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb'
-import { Separator } from '@/components/ui/separator'
-import {
   SidebarInset,
   SidebarProvider,
-  SidebarTrigger,
 } from '@/components/ui/sidebar'
 
 interface VaultShellProps {
@@ -44,6 +35,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const didAutoSeed = useRef(false)
   const initialPathRef = useRef(initialPath)
   initialPathRef.current = initialPath
+  // Holds the editor's saveNow fn so Sync can flush unsaved changes first.
+  const editorSaveRef = useRef<(() => Promise<void>) | null>(null)
 
   // Update the URL without triggering a Next.js route transition. router.push
   // would refetch the RSC for /vault/[...path], painting an empty frame between
@@ -88,8 +81,12 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       // as a pre-personal-md repo and seed welcome.md + SKILL.md so the user
       // gets the same out-of-the-box state Create gives them. Runs once per
       // session so a manual delete of the README afterwards won't re-seed.
+      // Treat any readme or welcome file (including the legacy 'welcome.md'
+      // from vaults created before the filename was updated) as "already seeded".
       const hasReadme = all.some(
-        (e) => e.type === 'file' && /^readme(\.|$)/i.test(e.name)
+        (e) =>
+          e.type === 'file' &&
+          (/^readme(\.|$)/i.test(e.name) || /^welcome(-[a-z-]+)?\.md$/i.test(e.name))
       )
       if (!hasReadme && !didAutoSeed.current) {
         didAutoSeed.current = true
@@ -143,6 +140,47 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     void refreshEntries()
   }, [refreshEntries])
 
+  // ── Background auto-refresh ───────────────────────────────────────────────
+  // Poll to pick up external changes (other devices, direct GitHub edits).
+  // Gated on tab visibility so background tabs don't hammer the API.
+  // GitHub: 30 s (each refresh walks the tree — one API call per folder).
+  // Local: 10 s (FSAA reads are cheap and instant).
+  const isGitHub = status.state === 'ready' && status.providerType === 'github'
+  const pollMs = isGitHub ? 30_000 : 10_000
+
+  useEffect(() => {
+    const poll = setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshEntries()
+    }, pollMs)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refreshEntries()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(poll)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [refreshEntries, pollMs])
+
+  // ── Auto index ───────────────────────────────────────────────────────────
+  // Rebuild index.md whenever the file list changes. Debounced so rapid
+  // creates/deletes coalesce into one rebuild. index.md itself changing
+  // doesn't trigger a re-render (sameEntries ignores it once it's present).
+  const indexRebuildTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const indexableEntries = entries.filter(
+      (e) => e.type === 'file' && e.name.endsWith('.md') && e.path !== INDEX_PATH
+    )
+    if (!provider || indexableEntries.length === 0) return
+    if (indexRebuildTimer.current) clearTimeout(indexRebuildTimer.current)
+    indexRebuildTimer.current = setTimeout(() => {
+      void rebuildVaultIndex(provider, entries)
+    }, 3_000)
+    return () => {
+      if (indexRebuildTimer.current) clearTimeout(indexRebuildTimer.current)
+    }
+  }, [provider, entries])
+
   const combinedEntries = useMemo(() => {
     if (virtualFolders.size === 0) return entries
     const existing = new Set(entries.filter((e) => e.type === 'dir').map((e) => e.path))
@@ -173,7 +211,12 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         throw new Error('A note with that name already exists.')
       }
       await provider.writeFile(fullPath, `# ${display}\n\n`)
-      // Optimistic: show the new file in the sidebar and open it immediately
+      if (!provider.writesAreCommits) {
+        await provider.commit(`Create ${fullPath}`, [fullPath])
+      }
+      // Optimistic: show the new file immediately. Don't call refreshEntries
+      // here — for GitHub the API lags and a stale listing would overwrite this.
+      // Polling reconciles within 10–30 s.
       setEntries((prev) =>
         prev.some((e) => e.path === fullPath)
           ? prev
@@ -181,12 +224,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       )
       setSelected(fullPath)
       syncUrl(fullPath)
-      if (!provider.writesAreCommits) {
-        await provider.commit(`Create ${fullPath}`, [fullPath])
-      }
-      void refreshEntries()
     },
-    [provider, refreshEntries, syncUrl]
+    [provider, syncUrl]
   )
 
   const onCreateFolder = useCallback((parent: string, name: string) => {
@@ -198,6 +237,9 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const onRenamePath = useCallback(
     async (from: string, to: string) => {
       if (!provider) return
+      if (LOCKED_PATHS.has(from)) {
+        throw new Error(`${from} is maintained by personal-md and can't be renamed or moved.`)
+      }
       // Slugify just the final segment of the destination, keeping parent
       // folders untouched. Renames of folder paths also get a clean slug.
       const parts = to.split('/')
@@ -225,6 +267,19 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       if (!provider.writesAreCommits) {
         await provider.commit(`Rename ${from} to ${to}`, [to])
       }
+      // Optimistic: update entries immediately so the sidebar reflects the
+      // rename without waiting for a refresh (which may return stale data on
+      // GitHub). Polling will reconcile within 10–30 s.
+      setEntries((prev) =>
+        prev.map((e) => {
+          if (e.path === from) return { ...e, path: to, name: to.split('/').pop() ?? to }
+          if (e.path.startsWith(`${from}/`)) {
+            const newPath = `${to}${e.path.slice(from.length)}`
+            return { ...e, path: newPath, name: newPath.split('/').pop() ?? newPath }
+          }
+          return e
+        })
+      )
       if (selected === from) {
         setSelected(to)
         syncUrl(to, 'replace')
@@ -233,14 +288,16 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         setSelected(newSelected)
         syncUrl(newSelected, 'replace')
       }
-      await refreshEntries()
     },
-    [provider, virtualFolders, selected, refreshEntries, syncUrl, renamePinned]
+    [provider, virtualFolders, selected, syncUrl, renamePinned]
   )
 
   const onDeletePath = useCallback(
     async (path: string) => {
       if (!provider) return
+      if (LOCKED_PATHS.has(path)) {
+        throw new Error(`${path} is maintained by personal-md and can't be deleted.`)
+      }
       if (virtualFolders.has(path)) {
         // Virtual folder — just remove from state
         setVirtualFolders((prev) => {
@@ -257,26 +314,21 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       if (!provider.writesAreCommits) {
         await provider.commit(`Delete ${path}`, [])
       }
+      // Optimistic: remove from entries immediately; polling reconciles.
+      setEntries((prev) =>
+        prev.filter((e) => e.path !== path && !e.path.startsWith(`${path}/`))
+      )
       if (selected === path || selected?.startsWith(`${path}/`)) {
         setSelected(null)
         syncUrl(null, 'replace')
       }
-      await refreshEntries()
     },
-    [provider, virtualFolders, selected, refreshEntries, syncUrl, removePinned]
+    [provider, virtualFolders, selected, syncUrl, removePinned]
   )
 
-  const breadcrumbSegments = useMemo(() => {
-    if (!selected) return []
-    const parts = selected.split('/')
-    return parts.map((part, i) => ({
-      name: i === parts.length - 1 && part.endsWith('.md') ? part.slice(0, -3) : part,
-      path: parts.slice(0, i + 1).join('/'),
-      isLast: i === parts.length - 1,
-    }))
-  }, [selected])
-
   const onSync = useCallback(async () => {
+    // Flush any unsaved editor content first (important in manual-sync mode).
+    if (editorSaveRef.current) await editorSaveRef.current()
     await refreshEntries()
     // Bump the nonce so EditorPane re-reads the currently-open note from
     // the provider (refreshEntries alone doesn't force a re-read).
@@ -317,56 +369,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         onDeletePath={onDeletePath}
         onSync={onSync}
       />
-      <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
-          <SidebarTrigger className="-ml-1" />
-          <Separator
-            orientation="vertical"
-            className="mr-1 data-[orientation=vertical]:h-4"
-          />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <span className="text-muted-foreground font-mono text-[10px] uppercase tracking-wider">
-                  vault
-                </span>
-              </BreadcrumbItem>
-              {breadcrumbSegments.length === 0 ? (
-                <>
-                  <BreadcrumbSeparator />
-                  <BreadcrumbItem>
-                    <BreadcrumbPage>Home</BreadcrumbPage>
-                  </BreadcrumbItem>
-                </>
-              ) : (
-                breadcrumbSegments.map((seg) => (
-                  <div key={seg.path} className="flex items-center gap-1.5 sm:gap-2.5">
-                    <BreadcrumbSeparator />
-                    <BreadcrumbItem>
-                      {seg.isLast ? (
-                        <BreadcrumbPage>{seg.name}</BreadcrumbPage>
-                      ) : (
-                        <BreadcrumbLink
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            const firstFile = entries.find(
-                              (x) => x.type === 'file' && x.path.startsWith(`${seg.path}/`)
-                            )
-                            if (firstFile) onSelect(firstFile.path)
-                          }}
-                        >
-                          {seg.name}
-                        </BreadcrumbLink>
-                      )}
-                    </BreadcrumbItem>
-                  </div>
-                ))
-              )}
-            </BreadcrumbList>
-          </Breadcrumb>
-        </header>
-        <div className="flex-1 overflow-hidden">
+      <SidebarInset className="min-w-0">
+        <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
           {loadError ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-destructive text-sm">{loadError}</p>
@@ -383,6 +387,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
               syncNonce={syncNonce}
               isPinned={selected ? pinned.has(selected) : false}
               onTogglePin={togglePin}
+              onSaveNow={(fn) => { editorSaveRef.current = fn }}
             />
           )}
         </div>

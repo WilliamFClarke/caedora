@@ -4,12 +4,13 @@
  */
 import { LocalGitProvider } from './storage/local-provider'
 import { savePinned, loadPinned } from './storage/idb'
+import { rebuildVaultIndex, INDEX_PATH } from './vault-index'
 import type { VaultProvider } from './types'
 
-// Kebab-case filename for a clean URL; the H1 inside can be the display
-// title ("Welcome to your vault"). Filename and H1 are intentionally
-// independent — see the editor decoupling notes.
-export const WELCOME_PATH = 'welcome.md'
+export { INDEX_PATH }
+
+// Filename matches the H1 title slug so the sidebar label and the title are in sync.
+export const WELCOME_PATH = 'welcome-to-your-vault.md'
 const WELCOME_BODY = `---
 tags: [example-tag]
 ---
@@ -164,6 +165,8 @@ Everything lives in plain markdown files — no database, no server, no lock-in.
   \`Projects/\`, \`Health/\`, \`Daily/\`). Nesting is allowed.
 - \`welcome.md\` / \`Welcome to your vault.md\` at the root is the onboarding
   note; don't treat it as load-bearing content.
+- \`index.md\` at the root is a machine-maintained map of the vault — see
+  "How to find things" below.
 - \`.gitignore\`, \`.git/\`, and any \`.personal-md/\` folder are system files;
   ignore them unless asked.
 
@@ -203,11 +206,23 @@ Everything lives in plain markdown files — no database, no server, no lock-in.
 
 ## How to find things
 
-- **By tag**: grep for \`tags:\` and match the tag list, or (if you have the
+**Start with \`index.md\`.** It's an auto-maintained map of the whole vault: a
+folder tree plus a flat table of every note with its path, folder, and tags.
+Read it first to orient yourself — it tells you what exists and where, so you
+don't have to scan the whole tree. It's rewritten automatically whenever a
+note is created, renamed, moved, or deleted, so you can trust it to be fresh.
+
+After \`index.md\` narrows down candidates, open specific notes for detail:
+
+- **By tag**: scan the Tags column in \`index.md\`, or (if you have the
   \`personal-md-mcp\` tools) call \`notes_by_tag(name)\`.
 - **Full-text**: \`grep -r "query" .\` or the \`search_notes\` MCP tool.
-- **By folder**: \`ls Projects/\` — folder names are the owner's taxonomy.
+- **By folder**: use the Folder structure tree in \`index.md\`, or \`ls Projects/\`.
 - **Recent work**: \`git log --oneline -20\` shows what's been edited lately.
+
+\`index.md\` and \`AGENTS.md\` are **locked** in the UI — the owner can edit
+their contents but they can't be renamed, moved, or deleted. Treat their
+paths as stable anchors.
 
 ## How to write / maintain
 
@@ -242,11 +257,340 @@ Stay in scope. Don't invent facts you can't cite to a note.
 `
 
 
+// ─── Template system ─────────────────────────────────────────────────────────
+
+export type VaultTemplate = 'personal' | 'work' | 'default'
+
+const SHOPPING_LIST_BODY = `---
+tags: [shopping, lists]
+---
+# Shopping List
+
+Use this note to keep a running shopping list. An AI assistant with access
+to your vault can add, remove, or tick items off on your behalf.
+
+## Groceries
+
+- [ ] Milk
+- [ ] Bread
+- [ ] Eggs
+- [ ] Butter
+- [ ] Coffee
+
+## Household
+
+- [ ] Washing-up liquid
+- [ ] Bin bags
+- [ ] Toilet roll
+
+## Pharmacy
+
+- [ ] (add items here)
+
+## Other
+
+- [ ] (add items here)
+`
+
+const HEALTH_BODY_BODY = `---
+tags: [health, personal, reference]
+---
+# Health & Body
+
+A private reference for your health metrics and sizing details. An AI
+assistant reading this vault can use these to give personalised
+recommendations without you having to repeat yourself every time.
+
+## Body measurements
+
+| Measurement | Value |
+| ----------- | ----- |
+| Height      |       |
+| Weight      |       |
+| Waist       |       |
+
+## Clothing sizes
+
+| Item        | Size | Notes |
+| ----------- | ---- | ----- |
+| Top / shirt |      |       |
+| Trousers    |      |       |
+| Shoes       |      |       |
+| Jacket      |      |       |
+| Jeans waist |      |       |
+| Jeans leg   |      |       |
+
+## Medical
+
+| Detail               | Value |
+| -------------------- | ----- |
+| Blood type           |       |
+| Allergies            |       |
+| Dietary requirements |       |
+| GP / Doctor name     |       |
+| GP phone             |       |
+
+## Current medications
+
+| Medication | Dose | Frequency | Notes |
+| ---------- | ---- | --------- | ----- |
+|            |      |           |       |
+
+## Vaccinations
+
+| Vaccine | Date received | Next due |
+| ------- | ------------- | -------- |
+|         |               |          |
+
+## Past conditions / operations
+
+(Add any significant medical history here)
+`
+
+const EMERGENCY_CONTACTS_BODY = `---
+tags: [contacts, emergency, personal, reference]
+---
+# Emergency Contacts
+
+Key contacts for emergencies. An AI assistant can look these up quickly
+when you need them.
+
+## Family
+
+| Name | Relationship | Phone | Notes |
+| ---- | ------------ | ----- | ----- |
+|      |              |       |       |
+
+## Doctor / GP
+
+| Name | Phone | Address |
+| ---- | ----- | ------- |
+|      |       |         |
+
+## Other important contacts
+
+| Who                       | Phone | Notes |
+| ------------------------- | ----- | ----- |
+| Dentist                   |       |       |
+| Vet                       |       |       |
+| Landlord / property agent |       |       |
+| Solicitor / lawyer        |       |       |
+`
+
+const TRAVEL_DOCS_BODY = `---
+tags: [travel, documents, personal, reference]
+---
+# Travel Documents
+
+A private record of travel document details and loyalty programme accounts.
+
+> **Security note:** This file lives in your own storage only — never on
+> personal-md servers. Treat it like a locked drawer.
+
+## Passport
+
+| Detail          | Value |
+| --------------- | ----- |
+| Full name       |       |
+| Passport number |       |
+| Nationality     |       |
+| Issued          |       |
+| Expires         |       |
+
+## Driving licence
+
+| Detail  | Value |
+| ------- | ----- |
+| Number  |       |
+| Expires |       |
+
+## Loyalty programmes
+
+| Programme | Number / username | Status | Notes |
+| --------- | ----------------- | ------ | ----- |
+|           |                   |        |       |
+|           |                   |        |       |
+
+## Upcoming travel
+
+| Trip | Dates | Booking ref | Notes |
+| ---- | ----- | ----------- | ----- |
+|      |       |             |       |
+`
+
+const MEETING_NOTES_TEMPLATE_BODY = `---
+tags: [meetings, template, work]
+---
+# Meeting Notes Template
+
+Copy this file for each meeting. Rename it to something like
+\`2026-04-19-team-standup.md\` and move it into a \`Meetings/\` folder.
+
+---
+
+## Meeting: [Name / Topic]
+
+**Date:** YYYY-MM-DD
+**Attendees:**
+
+- Name (role)
+- Name (role)
+
+## Agenda
+
+1. Item one
+2. Item two
+
+## Notes
+
+(Write as the meeting progresses)
+
+## Decisions
+
+- Decision 1
+- Decision 2
+
+## Action items
+
+| Action | Owner | Due |
+| ------ | ----- | --- |
+|        |       |     |
+
+## Next meeting
+
+**Date:**
+**Agenda preview:**
+`
+
+const PROJECT_BRIEF_TEMPLATE_BODY = `---
+tags: [project, brief, template, work]
+---
+# Project Brief Template
+
+Copy this file for each project. Rename it to \`project-name-brief.md\`
+and move it into a \`Projects/\` folder.
+
+---
+
+## Project: [Name]
+
+**Owner:**
+**Start date:**
+**Target date:**
+**Status:** Planning / Active / Complete / On hold
+
+## Problem statement
+
+(What problem are we solving, and for whom?)
+
+## Goals
+
+- Goal 1
+- Goal 2
+
+## Out of scope
+
+- (What we are explicitly not doing)
+
+## Stakeholders
+
+| Name | Role | Input needed |
+| ---- | ---- | ------------ |
+|      |      |              |
+
+## Key decisions
+
+| Decision | Rationale | Date |
+| -------- | --------- | ---- |
+|          |           |      |
+
+## Open questions
+
+- [ ] Question 1
+- [ ] Question 2
+
+## Milestones
+
+| Milestone | Due | Status |
+| --------- | --- | ------ |
+|           |     |        |
+
+## Links
+
+- Design / Figma:
+- Repo / code:
+- Tickets:
+`
+
+const WEEKLY_REVIEW_BODY = `---
+tags: [review, weekly, work]
+---
+# Weekly Review
+
+A running log of weekly reviews. Add a new entry each Friday (or whenever
+suits you). An AI assistant can summarise patterns across entries or help
+draft the next one.
+
+---
+
+## Week of YYYY-MM-DD
+
+### What shipped
+
+-
+
+### What didn't ship (and why)
+
+-
+
+### Highlights
+
+-
+
+### Challenges
+
+-
+
+### Next week's priorities
+
+- [ ]
+- [ ]
+- [ ]
+
+---
+
+(Copy the section above for each new week)
+`
+
+const PERSONAL_TEMPLATE_FILES: Array<[string, string]> = [
+  ['shopping-list.md', SHOPPING_LIST_BODY],
+  ['health-and-body.md', HEALTH_BODY_BODY],
+  ['emergency-contacts.md', EMERGENCY_CONTACTS_BODY],
+  ['travel-documents.md', TRAVEL_DOCS_BODY],
+]
+
+const WORK_TEMPLATE_FILES: Array<[string, string]> = [
+  ['meeting-notes-template.md', MEETING_NOTES_TEMPLATE_BODY],
+  ['project-brief-template.md', PROJECT_BRIEF_TEMPLATE_BODY],
+  ['weekly-review.md', WEEKLY_REVIEW_BODY],
+]
+
+export function templateFilesFor(template: VaultTemplate): Array<[string, string]> {
+  if (template === 'personal') return PERSONAL_TEMPLATE_FILES
+  if (template === 'work') return WORK_TEMPLATE_FILES
+  return []
+}
+
+// ─── Seeding ─────────────────────────────────────────────────────────────────
+
 /**
  * Run once for a freshly-created local vault. Idempotent — safe to call even
  * if the folder already has a welcome.md (it won't overwrite existing files).
  */
-export async function seedLocalVault(provider: LocalGitProvider): Promise<void> {
+export async function seedLocalVault(
+  provider: LocalGitProvider,
+  template: VaultTemplate = 'default'
+): Promise<void> {
   const seeded: string[] = []
 
   if (!(await fileExists(provider, WELCOME_PATH))) {
@@ -261,12 +605,22 @@ export async function seedLocalVault(provider: LocalGitProvider): Promise<void> 
     await provider.writeFile(GITIGNORE_PATH, GITIGNORE_BODY)
     seeded.push(GITIGNORE_PATH)
   }
+  for (const [path, body] of templateFilesFor(template)) {
+    if (!(await fileExists(provider, path))) {
+      await provider.writeFile(path, body)
+      seeded.push(path)
+    }
+  }
   if (seeded.length > 0) {
     await provider.commit('Initial vault setup', seeded)
   }
   if (seeded.includes(WELCOME_PATH)) {
     await pinInitial(WELCOME_PATH)
   }
+  // Build initial index so the LLM can discover files from the first open.
+  await rebuildVaultIndex(provider, seeded.filter(p => p.endsWith('.md') && p !== INDEX_PATH).map(p => ({
+    path: p, name: p.split('/').pop() ?? p, type: 'file' as const,
+  })))
 }
 
 /**
@@ -290,6 +644,11 @@ export async function seedEmptyVault(provider: VaultProvider): Promise<string[]>
   }
   if (seeded.includes(WELCOME_PATH)) {
     await pinInitial(WELCOME_PATH)
+  }
+  if (seeded.length > 0) {
+    await rebuildVaultIndex(provider, seeded.filter(p => p.endsWith('.md') && p !== INDEX_PATH).map(p => ({
+      path: p, name: p.split('/').pop() ?? p, type: 'file' as const,
+    })))
   }
   return seeded
 }

@@ -15,6 +15,12 @@ import TextAlign from "@tiptap/extension-text-align";
 import TextStyle from "@tiptap/extension-text-style";
 import Typography from "@tiptap/extension-typography";
 import Underline from "@tiptap/extension-underline";
+import Table from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableHeader from "@tiptap/extension-table-header";
+import TableCell from "@tiptap/extension-table-cell";
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
 import { EditorContent, type Extension, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { TipTapFloatingMenu } from "@/components/tiptap/extensions/floating-menu";
@@ -42,7 +48,25 @@ const extensions = [
   }),
   Placeholder.configure({
     emptyNodeClass: "is-editor-empty",
-    placeholder: ({ node }) => {
+    placeholder: ({ editor, node, pos }) => {
+      // Suppress inside structural containers — tables and task items already
+      // carry their own visual structure, so "Write, type '/' ..." inside a
+      // cell or next to a checkbox just overlaps borders and confuses users.
+      try {
+        const $pos = editor.state.doc.resolve(pos);
+        for (let d = $pos.depth; d > 0; d--) {
+          const ancestor = $pos.node(d).type.name;
+          if (
+            ancestor === "tableCell" ||
+            ancestor === "tableHeader" ||
+            ancestor === "taskItem"
+          ) {
+            return "";
+          }
+        }
+      } catch {
+        // resolve() can throw mid-transaction; fall through to default.
+      }
       switch (node.type.name) {
         case "heading":
           return `Heading ${node.attrs.level}`;
@@ -73,6 +97,12 @@ const extensions = [
   ImagePlaceholder,
   SearchAndReplace,
   Typography,
+  Table.configure({ resizable: true, HTMLAttributes: { class: "tiptap-table" } }),
+  TableRow,
+  TableHeader,
+  TableCell,
+  TaskList.configure({ HTMLAttributes: { class: "tiptap-task-list" } }),
+  TaskItem.configure({ nested: true, HTMLAttributes: { class: "tiptap-task-item" } }),
 ];
 
 export interface RichTextEditorProps {
@@ -112,6 +142,11 @@ export function RichTextEditorDemo({
     editorProps: {
       attributes: {
         class: "max-w-full focus:outline-none",
+        autocomplete: "off",
+        autocorrect: "off",
+        autocapitalize: "sentences",
+        "data-form-type": "other",
+        spellcheck: "true",
       },
     },
     onUpdate: onUpdate ? ({ editor }) => onUpdate(editor) : undefined,
@@ -124,8 +159,39 @@ export function RichTextEditorDemo({
   React.useLayoutEffect(() => {
     if (!editor || contentKey === undefined) return;
     if (loadedKey.current === contentKey) return;
+    const isFirstLoad = loadedKey.current === null;
     loadedKey.current = contentKey;
-    editor.commands.setContent((contentProp ?? content) as Parameters<typeof editor.commands.setContent>[0], false);
+    editor.commands.setContent(
+      (contentProp ?? content) as Parameters<typeof editor.commands.setContent>[0],
+      false
+    );
+
+    // If the doc ends in a heading (typical for a brand-new "# Title\n\n" note),
+    // append an empty paragraph so clicks below the heading have somewhere to
+    // land the cursor and the user can just start typing.
+    const doc = editor.state.doc;
+    const lastChild = doc.lastChild;
+    if (lastChild && lastChild.type.name === "heading") {
+      editor
+        .chain()
+        .insertContentAt(doc.content.size, { type: "paragraph" })
+        .run();
+    }
+
+    // On a freshly-opened note whose body is empty (only the H1), put the
+    // cursor in the body paragraph instead of the title so the user can type
+    // immediately without having to click past the heading. We only do this
+    // when switching into a file (contentKey change), not on every re-render,
+    // and we skip the initial mount so the default-content demo isn't affected.
+    if (!isFirstLoad) {
+      const bodyIsEmpty =
+        editor.state.doc.childCount <= 2 &&
+        editor.state.doc.lastChild?.type.name === "paragraph" &&
+        editor.state.doc.lastChild?.content.size === 0;
+      if (bodyIsEmpty) {
+        editor.commands.focus("end");
+      }
+    }
   }, [editor, contentKey, contentProp]);
 
   if (!editor) return null;
@@ -140,10 +206,18 @@ export function RichTextEditorDemo({
       <EditorToolbar editor={editor} />
       <FloatingToolbar editor={editor} />
       <TipTapFloatingMenu editor={editor} />
-      <EditorContent
-        editor={editor}
+      {/* Clicks in the empty space below the document content land on this
+          wrapper, not on the ProseMirror element. Detect that and move the
+          cursor to the end so the user can start typing immediately. */}
+      <div
         className="min-h-0 w-full min-w-full flex-1 cursor-text overflow-y-auto sm:p-6"
-      />
+        onClick={(e) => {
+          if (editor.view.dom.contains(e.target as Node)) return;
+          editor.commands.focus("end");
+        }}
+      >
+        <EditorContent editor={editor} className="w-full min-w-full" />
+      </div>
     </div>
   );
 }

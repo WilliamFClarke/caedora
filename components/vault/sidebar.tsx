@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Calendar,
@@ -9,10 +9,12 @@ import {
   FilePlus,
   Folder,
   FolderPlus,
+  FolderInput,
   GitBranch,
   Hash,
   Inbox,
   RefreshCw,
+  Settings,
   Sparkles,
   LogOut,
   Pencil,
@@ -21,10 +23,13 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
 import { ModeToggle } from '@/components/mode-toggle'
 import { ConnectAiDialog } from './connect-ai-dialog'
 import { useVault } from '@/lib/vault-context'
 import type { FileEntry, VaultProvider } from '@/lib/types'
+import { LOCKED_PATHS } from '@/lib/vault-index'
 import { cn } from '@/lib/utils'
 import {
   Collapsible,
@@ -38,6 +43,14 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import {
   Sidebar,
   SidebarContent,
@@ -151,6 +164,12 @@ function nextUntitledFromTree(children: TreeNodeT[], kind: 'file' | 'folder'): s
   return `Untitled ${Date.now()}`
 }
 
+type CreatingState = {
+  parent: string
+  kind: 'file' | 'folder'
+  defaultName: string
+}
+
 export function AppSidebar({
   entries,
   selected,
@@ -168,7 +187,8 @@ export function AppSidebar({
   const { disconnect, status } = useVault()
   const [search, setSearch] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
-  const [creating, setCreating] = useState<{ parent: string; kind: 'file' | 'folder' } | null>(null)
+  const [creating, setCreating] = useState<CreatingState | null>(null)
+  const [moving, setMoving] = useState<string | null>(null)
   const [branch, setBranch] = useState<string>('')
   const [aiOpen, setAiOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -197,6 +217,10 @@ export function AppSidebar({
     return [...pinned].filter((p) => fileSet.has(p)).sort()
   }, [pinned, entries])
 
+  const folders = useMemo(() => {
+    return entries.filter((e) => e.type === 'dir').map((e) => e.path).sort()
+  }, [entries])
+
   function onDisconnect() {
     disconnect()
     router.push('/')
@@ -211,8 +235,8 @@ export function AppSidebar({
     onSelect,
     renaming,
     setRenaming,
-    creating,
     setCreating,
+    setMoving,
     onCreateFile,
     onCreateFolder,
     onRenamePath,
@@ -286,38 +310,33 @@ export function AppSidebar({
           <SidebarGroupAction
             title="New folder"
             className="right-9"
-            onClick={() => setCreating({ parent: '', kind: 'folder' })}
+            onClick={() =>
+              setCreating({
+                parent: '',
+                kind: 'folder',
+                defaultName: nextUntitledFromTree(tree.children, 'folder'),
+              })
+            }
           >
             <FolderPlus />
             <span className="sr-only">New folder</span>
           </SidebarGroupAction>
           <SidebarGroupAction
             title="New file"
-            onClick={() => setCreating({ parent: '', kind: 'file' })}
+            onClick={() =>
+              setCreating({
+                parent: '',
+                kind: 'file',
+                defaultName: nextUntitledFromTree(tree.children, 'file'),
+              })
+            }
           >
             <FilePlus />
             <span className="sr-only">New file</span>
           </SidebarGroupAction>
           <SidebarGroupContent>
             <SidebarMenu>
-              {creating?.parent === '' && (
-                <SidebarMenuItem>
-                  <InlineInput
-                    initial={nextUntitledFromTree(tree.children, creating.kind)}
-                    selectOnFocus
-                    onSubmit={async (name) => {
-                      try {
-                        if (creating.kind === 'file') await onCreateFile('', name)
-                        else onCreateFolder('', name)
-                      } finally {
-                        setCreating(null)
-                      }
-                    }}
-                    onCancel={() => setCreating(null)}
-                  />
-                </SidebarMenuItem>
-              )}
-              {tree.children.length === 0 && !creating ? (
+              {tree.children.length === 0 ? (
                 <p className="text-muted-foreground px-2 py-4 text-xs">
                   No notes yet. Create your first one.
                 </p>
@@ -376,6 +395,15 @@ export function AppSidebar({
             )}
             <button
               type="button"
+              onClick={() => router.push('/settings')}
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
+              aria-label="Settings"
+            >
+              <Settings className="size-3" />
+              Settings
+            </button>
+            <button
+              type="button"
               onClick={onDisconnect}
               className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
               aria-label="Close vault"
@@ -388,6 +416,33 @@ export function AppSidebar({
       </SidebarFooter>
       <SidebarRail />
       <ConnectAiDialog open={aiOpen} onOpenChange={setAiOpen} provider={provider} />
+
+      {/* Create file / folder dialog */}
+      <CreateItemDialog
+        creating={creating}
+        onSubmit={async (name) => {
+          if (!creating) return
+          if (creating.kind === 'file') await onCreateFile(creating.parent, name)
+          else onCreateFolder(creating.parent, name)
+          setCreating(null)
+        }}
+        onClose={() => setCreating(null)}
+      />
+
+      {/* Move file dialog */}
+      {moving && (
+        <MoveDialog
+          filePath={moving}
+          folders={folders}
+          onMove={async (toFolder) => {
+            const name = moving.split('/').pop()!
+            const dest = toFolder ? `${toFolder}/${name}` : name
+            await onRenamePath(moving, dest)
+            setMoving(null)
+          }}
+          onClose={() => setMoving(null)}
+        />
+      )}
     </Sidebar>
   )
 }
@@ -401,8 +456,8 @@ interface TreeRowProps {
   onSelect: (path: string) => void
   renaming: string | null
   setRenaming: (path: string | null) => void
-  creating: { parent: string; kind: 'file' | 'folder' } | null
-  setCreating: (v: { parent: string; kind: 'file' | 'folder' } | null) => void
+  setCreating: (v: CreatingState | null) => void
+  setMoving: (path: string | null) => void
   onCreateFile: (parent: string, name: string) => Promise<void>
   onCreateFolder: (parent: string, name: string) => void
   onRenamePath: (from: string, to: string) => Promise<void>
@@ -421,10 +476,7 @@ function FolderRow(props: TreeRowProps) {
     node,
     renaming,
     setRenaming,
-    creating,
     setCreating,
-    onCreateFile,
-    onCreateFolder,
     onRenamePath,
     onDeletePath,
   } = props
@@ -468,7 +520,11 @@ function FolderRow(props: TreeRowProps) {
             <ContextMenuItem
               onSelect={() => {
                 setOpen(true)
-                setCreating({ parent: node.path, kind: 'file' })
+                setCreating({
+                  parent: node.path,
+                  kind: 'file',
+                  defaultName: nextUntitledFromTree(node.children, 'file'),
+                })
               }}
             >
               <FilePlus />
@@ -477,7 +533,11 @@ function FolderRow(props: TreeRowProps) {
             <ContextMenuItem
               onSelect={() => {
                 setOpen(true)
-                setCreating({ parent: node.path, kind: 'folder' })
+                setCreating({
+                  parent: node.path,
+                  kind: 'folder',
+                  defaultName: nextUntitledFromTree(node.children, 'folder'),
+                })
               }}
             >
               <FolderPlus />
@@ -501,24 +561,10 @@ function FolderRow(props: TreeRowProps) {
         </ContextMenu>
 
         <CollapsibleContent>
-          <SidebarMenuSub>
-            {creating?.parent === node.path && (
-              <SidebarMenuItem>
-                <InlineInput
-                  initial={nextUntitledFromTree(node.children, creating.kind)}
-                  selectOnFocus
-                  onSubmit={async (name) => {
-                    try {
-                      if (creating.kind === 'file') await onCreateFile(node.path, name)
-                      else onCreateFolder(node.path, name)
-                    } finally {
-                      setCreating(null)
-                    }
-                  }}
-                  onCancel={() => setCreating(null)}
-                />
-              </SidebarMenuItem>
-            )}
+          {/* Override the default mx-3.5 px-2.5 so nested rows hover/select
+              flush with the sidebar edge — matches top-level row behaviour.
+              The left border+indent keeps the nesting legible. */}
+          <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
             {node.children.map((c) => {
               const { node: _n, ...rest } = props
               void _n
@@ -540,12 +586,14 @@ function FileRow(props: TreeRowProps) {
     onSelect,
     renaming,
     setRenaming,
+    setMoving,
     onRenamePath,
     onDeletePath,
   } = props
   const isRenaming = renaming === node.path
   const isSel = selected === node.path
   const isPinned = pinned.has(node.path)
+  const isLocked = LOCKED_PATHS.has(node.path)
 
   return (
     <SidebarMenuItem className="group/file">
@@ -580,20 +628,29 @@ function FileRow(props: TreeRowProps) {
             <Star className={cn(isPinned && 'fill-current')} />
             {isPinned ? 'Unpin' : 'Pin'}
           </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem onSelect={() => setRenaming(node.path)}>
-            <Pencil />
-            Rename
-          </ContextMenuItem>
-          <ContextMenuItem
-            variant="destructive"
-            onSelect={() => {
-              void onDeletePath(node.path)
-            }}
-          >
-            <Trash2 />
-            Delete
-          </ContextMenuItem>
+          {!isLocked && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={() => setRenaming(node.path)}>
+                <Pencil />
+                Rename
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => setMoving(node.path)}>
+                <FolderInput />
+                Move to folder…
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() => {
+                  void onDeletePath(node.path)
+                }}
+              >
+                <Trash2 />
+                Delete
+              </ContextMenuItem>
+            </>
+          )}
         </ContextMenuContent>
       </ContextMenu>
       {!isRenaming && (
@@ -619,13 +676,11 @@ function FileRow(props: TreeRowProps) {
 function InlineInput({
   initial = '',
   placeholder,
-  selectOnFocus,
   onSubmit,
   onCancel,
 }: {
   initial?: string
   placeholder?: string
-  selectOnFocus?: boolean
   onSubmit: (name: string) => void | Promise<void>
   onCancel: () => void
 }) {
@@ -636,9 +691,7 @@ function InlineInput({
       autoFocus
       value={value}
       placeholder={placeholder}
-      onFocus={(e) => {
-        if (selectOnFocus) e.currentTarget.select()
-      }}
+      onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => setValue(e.target.value)}
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
@@ -662,6 +715,170 @@ function InlineInput({
         'focus-visible:ring-ring focus-visible:ring-2'
       )}
     />
+  )
+}
+
+function CreateItemDialog({
+  creating,
+  onSubmit,
+  onClose,
+}: {
+  creating: CreatingState | null
+  onSubmit: (name: string) => Promise<void>
+  onClose: () => void
+}) {
+  const [value, setValue] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (creating) {
+      setValue(creating.defaultName)
+      setError(null)
+      setBusy(false)
+      // Select text after the dialog animation settles
+      const t = setTimeout(() => inputRef.current?.select(), 80)
+      return () => clearTimeout(t)
+    }
+  }, [creating])
+
+  const isFile = creating?.kind === 'file'
+  const label = isFile ? 'Note name' : 'Folder name'
+  const title = isFile ? 'New note' : 'New folder'
+  const description = isFile
+    ? creating?.parent
+      ? `Inside "${creating.parent}"`
+      : 'At the top level of your vault'
+    : creating?.parent
+      ? `Inside "${creating.parent}"`
+      : 'At the top level of your vault'
+
+  async function handleSubmit(e?: React.FormEvent) {
+    e?.preventDefault()
+    const trimmed = value.trim()
+    if (!trimmed) return
+    setBusy(true)
+    setError(null)
+    try {
+      await onSubmit(trimmed)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={!!creating} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {isFile ? <FileText className="size-4" /> : <Folder className="size-4" />}
+            {title}
+          </DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="create-item-name">{label}</Label>
+            <Input
+              ref={inputRef}
+              id="create-item-name"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={isFile ? 'My note' : 'My folder'}
+              autoComplete="off"
+              disabled={busy}
+            />
+            {error && <p className="text-destructive text-xs">{error}</p>}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy || !value.trim()}>
+              {isFile ? 'Create note' : 'Create folder'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function MoveDialog({
+  filePath,
+  folders,
+  onMove,
+  onClose,
+}: {
+  filePath: string
+  folders: string[]
+  onMove: (toFolder: string) => Promise<void>
+  onClose: () => void
+}) {
+  const [selected, setSelected] = useState<string>('')
+  const [busy, setBusy] = useState(false)
+  const currentFolder = filePath.includes('/')
+    ? filePath.split('/').slice(0, -1).join('/')
+    : ''
+  const fileName = filePath.split('/').pop() ?? filePath
+
+  // Options: root + all folders except the file's current folder
+  const options = ['', ...folders].filter((f) => f !== currentFolder)
+
+  async function handleMove() {
+    setBusy(true)
+    try {
+      await onMove(selected)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FolderInput className="size-4" />
+            Move &ldquo;{displayName(fileName)}&rdquo;
+          </DialogTitle>
+          <DialogDescription>Choose where to move this note.</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-1">
+          {options.map((folder) => (
+            <button
+              key={folder || '__root__'}
+              type="button"
+              onClick={() => setSelected(folder)}
+              className={cn(
+                'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors text-left',
+                selected === folder
+                  ? 'bg-primary text-primary-foreground'
+                  : 'hover:bg-accent text-foreground'
+              )}
+            >
+              <Folder className="size-3.5 shrink-0" />
+              <span className="truncate">{folder || '/ (root)'}</span>
+            </button>
+          ))}
+          {options.length === 0 && (
+            <p className="text-muted-foreground py-3 text-center text-sm">
+              No other folders to move to.
+            </p>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={handleMove} disabled={busy || options.length === 0}>
+            Move here
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

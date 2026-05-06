@@ -28,13 +28,15 @@
  */
 import { openDB, type IDBPDatabase } from 'idb'
 import type { PersistedVaultState } from '../types'
+import { DEFAULT_SETTINGS, type AppSettings } from '../settings'
 
 const DB_NAME = 'personal-md'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const LEGACY_STATE_STORE = 'vault-state'
 const VAULTS_STORE = 'vaults'
 const META_STORE = 'vault-meta'
 const PINNED_STORE = 'pinned'
+const SETTINGS_STORE = 'app-settings'
 
 /** Stable key for a stored vault. Used as the IDB key in the vaults store. */
 export function vaultId(state: PersistedVaultState): string {
@@ -56,6 +58,9 @@ async function getDB(): Promise<IDBPDatabase> {
       }
       if (!db.objectStoreNames.contains(META_STORE)) {
         db.createObjectStore(META_STORE)
+      }
+      if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
+        db.createObjectStore(SETTINGS_STORE)
       }
 
       // Migrate the single `vault-state/current` entry from v2 into the new
@@ -168,6 +173,27 @@ export async function loadPinned(): Promise<string[]> {
     return ((await db.get(PINNED_STORE, 'current')) as string[] | undefined) ?? []
   } catch {
     return []
+  }
+}
+
+// ─── App settings ────────────────────────────────────────────────────────────
+
+export async function loadSettings(): Promise<AppSettings> {
+  try {
+    const db = await getDB()
+    const stored = await db.get(SETTINGS_STORE, 'current')
+    return stored ? { ...DEFAULT_SETTINGS, ...(stored as Partial<AppSettings>) } : DEFAULT_SETTINGS
+  } catch {
+    return DEFAULT_SETTINGS
+  }
+}
+
+export async function saveSettings(settings: AppSettings): Promise<void> {
+  try {
+    const db = await getDB()
+    await db.put(SETTINGS_STORE, settings, 'current')
+  } catch {
+    // ignore
   }
 }
 

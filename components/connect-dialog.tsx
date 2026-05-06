@@ -23,8 +23,12 @@ import {
   SKILL_PATH,
   SKILL_MARKDOWN,
   pinInitial,
+  templateFilesFor,
+  type VaultTemplate,
 } from '@/lib/vault-create'
-import { Folder, Github, Loader2 } from 'lucide-react'
+import { slugifyFilename } from '@/lib/frontmatter'
+import { cn } from '@/lib/utils'
+import { BriefcaseBusiness, Folder, Github, Loader2, User } from 'lucide-react'
 
 type Mode = 'create' | 'open'
 
@@ -40,11 +44,31 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
       ? 'local'
       : 'github'
 
+  const [vaultTemplate, setVaultTemplate] = useState<VaultTemplate>('default')
+  const [preparing, setPreparing] = useState(false)
+
+  // Reset template choice whenever the dialog opens
+  useEffect(() => {
+    if (open) {
+      setVaultTemplate('default')
+      setPreparing(false)
+    }
+  }, [open])
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (preparing && !next) return
+        onOpenChange(next)
+      }}
+    >
       <DialogContent
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => {
+          if (preparing) e.preventDefault()
+        }}
       >
         <DialogHeader>
           <DialogTitle>
@@ -57,22 +81,65 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
           </DialogDescription>
         </DialogHeader>
 
+        {mode === 'create' && (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium">What will you use this vault for?</p>
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  { value: 'personal', label: 'Personal', Icon: User, desc: 'Shopping, health, travel, contacts' },
+                  { value: 'work', label: 'Work', Icon: BriefcaseBusiness, desc: 'Meetings, projects, reviews' },
+                  { value: 'default', label: 'Blank', Icon: Folder, desc: 'Start with just a welcome note' },
+                ] as const
+              ).map(({ value, label, Icon, desc }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setVaultTemplate(value)}
+                  disabled={preparing}
+                  className={cn(
+                    'flex flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-center text-xs transition-colors',
+                    vaultTemplate === value
+                      ? 'border-primary bg-primary/5 text-foreground'
+                      : 'border-border text-muted-foreground hover:border-border/80 hover:bg-accent/50',
+                    preparing && 'cursor-not-allowed opacity-50 hover:bg-transparent'
+                  )}
+                >
+                  <Icon className={cn('size-5', vaultTemplate === value && 'text-primary')} />
+                  <span className="font-medium">{label}</span>
+                  <span className="leading-tight opacity-80">{desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <Tabs defaultValue={defaultTab} className="mt-2">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="local">
+            <TabsTrigger value="local" disabled={preparing}>
               <Folder className="mr-1 size-4" />
               On this computer
             </TabsTrigger>
-            <TabsTrigger value="github">
+            <TabsTrigger value="github" disabled={preparing}>
               <Github className="mr-1 size-4" />
               GitHub
             </TabsTrigger>
           </TabsList>
           <TabsContent value="local">
-            <LocalPanel mode={mode} onDone={() => onOpenChange(false)} />
+            <LocalPanel
+              mode={mode}
+              vaultTemplate={vaultTemplate}
+              onPreparingChange={setPreparing}
+              onDone={() => onOpenChange(false)}
+            />
           </TabsContent>
           <TabsContent value="github">
-            <GitHubPanel mode={mode} onDone={() => onOpenChange(false)} />
+            <GitHubPanel
+              mode={mode}
+              vaultTemplate={vaultTemplate}
+              onPreparingChange={setPreparing}
+              onDone={() => onOpenChange(false)}
+            />
           </TabsContent>
         </Tabs>
       </DialogContent>
@@ -84,9 +151,20 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
 
 type Phase = 'idle' | 'picking' | 'preparing'
 
-function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
+function LocalPanel({
+  mode,
+  vaultTemplate,
+  onPreparingChange,
+  onDone,
+}: {
+  mode: Mode
+  vaultTemplate: VaultTemplate
+  onPreparingChange: (preparing: boolean) => void
+  onDone: () => void
+}) {
   const router = useRouter()
   const { connectLocal } = useVault()
+  const [vaultName, setVaultName] = useState('My Vault')
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
   const [showChromiumWarning, setShowChromiumWarning] = useState(false)
@@ -95,51 +173,108 @@ function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
     setShowChromiumWarning(!('showDirectoryPicker' in window))
   }, [])
 
+  useEffect(() => {
+    onPreparingChange(phase === 'preparing')
+  }, [phase, onPreparingChange])
+
+  const folderSlug = slugifyFilename(vaultName)
+
   async function onPick() {
     setError(null)
     setPhase('picking')
     try {
-      const handle = await connectLocal()
-      if (!handle) {
-        setPhase('idle')
-        return
-      }
-      const provider = new LocalGitProvider(handle)
-      await provider.init()
       if (mode === 'create') {
+        // Create flow: pick a PARENT folder, then create/reuse a subfolder
+        // named after the user's vault name. This means the user doesn't need
+        // to manually create an empty folder first.
+        const trimmed = vaultName.trim()
+        if (!trimmed) {
+          setError('Give your vault a name.')
+          setPhase('idle')
+          return
+        }
+        const slug = slugifyFilename(trimmed)
+        if (!slug || slug === 'untitled') {
+          setError('That vault name needs at least one letter or digit.')
+          setPhase('idle')
+          return
+        }
+        const parent = await window.showDirectoryPicker({ mode: 'readwrite' })
+        const handle = await parent.getDirectoryHandle(slug, { create: true })
+        const provider = new LocalGitProvider(handle)
+        await provider.init()
         if (!(await isFolderEmpty(provider))) {
           setError(
-            'That folder already has files. Pick an empty folder, or choose "Open" instead.'
+            `A folder called "${slug}" already exists here and isn't empty. Pick a different vault name, or open it from the "Open vault" flow.`
           )
           setPhase('idle')
           return
         }
         setPhase('preparing')
-        await seedLocalVault(provider)
+        await seedLocalVault(provider, vaultTemplate)
+        await connectLocal(handle)
         router.push(`/vault/${WELCOME_PATH}`)
         // Don't close the dialog — the route change unmounts it and prevents a
         // race with the home page's auto-redirect.
       } else {
+        // Open flow: pick the vault folder directly (existing behaviour).
+        const handle = await connectLocal()
+        if (!handle) {
+          setPhase('idle')
+          return
+        }
+        const provider = new LocalGitProvider(handle)
+        await provider.init()
         router.push('/vault')
         onDone()
       }
     } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        setPhase('idle')
+        return
+      }
       setError(e instanceof Error ? e.message : 'Could not open folder')
       setPhase('idle')
     }
   }
 
   const busy = phase !== 'idle'
+  const canSubmit = mode === 'open' || (vaultName.trim().length > 0 && folderSlug !== '' && folderSlug !== 'untitled')
+
   return (
     <div className="flex flex-col gap-3 py-4">
-      <p className="text-muted-foreground text-sm">
-        {phase === 'preparing'
-          ? 'Preparing your vault — writing your welcome note and setting up git…'
-          : mode === 'create'
-            ? 'Pick an empty folder on your computer. We will use it as your vault.'
-            : 'Pick the folder that already contains your vault.'}
-      </p>
-      <Button onClick={onPick} disabled={busy} size="lg" className="w-full">
+      {mode === 'create' ? (
+        <>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="vault-name">Vault name</Label>
+            <Input
+              id="vault-name"
+              value={vaultName}
+              onChange={(e) => setVaultName(e.target.value)}
+              placeholder="My Vault"
+              autoComplete="off"
+              disabled={busy}
+            />
+            <p className="text-muted-foreground text-xs">
+              A folder named{' '}
+              <span className="bg-muted text-foreground rounded px-1 py-0.5 font-mono text-[11px]">
+                {folderSlug || 'your-vault'}
+              </span>{' '}
+              will be created inside the location you pick next.
+            </p>
+          </div>
+          <p className="text-muted-foreground text-sm">
+            {phase === 'preparing'
+              ? 'Preparing your vault — writing your welcome note and setting up git…'
+              : 'Pick the parent folder (e.g. Documents). We\'ll create your vault folder inside it.'}
+          </p>
+        </>
+      ) : (
+        <p className="text-muted-foreground text-sm">
+          Pick the folder that already contains your vault.
+        </p>
+      )}
+      <Button onClick={onPick} disabled={busy || !canSubmit} size="lg" className="w-full">
         {busy ? (
           <Loader2 className="size-4 animate-spin" />
         ) : (
@@ -148,7 +283,7 @@ function LocalPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
         {phase === 'preparing'
           ? 'Preparing your vault…'
           : mode === 'create'
-            ? 'Choose folder'
+            ? 'Choose parent folder'
             : 'Open folder'}
       </Button>
       {error && <p className="text-destructive text-sm">{error}</p>}
@@ -193,7 +328,17 @@ async function waitForGithubListing(
   // Give up silently — the in-app seed-fallback will pick up the slack.
 }
 
-function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
+function GitHubPanel({
+  mode,
+  vaultTemplate,
+  onPreparingChange,
+  onDone,
+}: {
+  mode: Mode
+  vaultTemplate: VaultTemplate
+  onPreparingChange: (preparing: boolean) => void
+  onDone: () => void
+}) {
   const router = useRouter()
   const { connectGitHub } = useVault()
   const [pat, setPat] = useState('')
@@ -201,6 +346,10 @@ function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
   const [repo, setRepo] = useState('')
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    onPreparingChange(phase === 'preparing')
+  }, [phase, onPreparingChange])
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -233,10 +382,12 @@ function GitHubPanel({ mode, onDone }: { mode: Mode; onDone: () => void }) {
         const created = (await resp.json()) as { owner: { login: string } }
         const actualOwner = created.owner.login
 
-        // Seed welcome.md + SKILL.md using the shared bodies.
+        // Seed welcome.md + AGENTS.md + template files
+        const templateFiles = templateFilesFor(vaultTemplate)
         const seeds: Array<{ path: string; body: string }> = [
           { path: WELCOME_PATH, body: WELCOME_MARKDOWN },
           { path: SKILL_PATH, body: SKILL_MARKDOWN },
+          ...templateFiles.map(([path, body]) => ({ path, body })),
         ]
         for (const { path, body } of seeds) {
           await fetch(
