@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable */
 // @ts-nocheck
 import { ArrowLeftIcon, ArrowRightIcon, X, Repeat } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -69,14 +68,14 @@ export function SearchAndReplaceToolbar() {
 					<PopoverTrigger disabled={!editor} asChild>
 						<Button
 							variant="ghost"
-							size="sm"
+							size="icon"
 							onClick={() => {
 								setOpen(!open);
 							}}
-							className={cn("h-8 w-max px-3 font-normal")}
+							className={cn("h-8 w-8 shrink-0 p-0")}
+							aria-label="Search and replace"
 						>
-							<Repeat className="mr-2 h-4 w-4" />
-							<p>Search & Replace</p>
+							<Repeat className="h-4 w-4" />
 						</Button>
 					</PopoverTrigger>
 				</TooltipTrigger>
@@ -93,19 +92,19 @@ export function SearchAndReplaceToolbar() {
 				onEscapeKeyDown={() => {
 					setOpen(false);
 				}}
-				className="relative flex w-[400px] px-3 py-2.5"
+				className="relative flex w-[min(400px,calc(100vw-1rem))] px-3 py-2.5"
 			>
 				{!replacing ? (
-					<div className={cn("relative flex gap-1.5 items-center")}>
+					<div className={cn("relative flex w-full flex-wrap items-center gap-1.5")}>
 						<Input
 							value={searchText}
-							className=" w-48"
+							className="min-w-0 flex-1 sm:w-48 sm:flex-none"
 							onChange={(e) => {
 								setSearchText(e.target.value);
 							}}
 							placeholder="Search..."
 						/>
-						<span>
+						<span className="min-w-10 text-center text-xs tabular-nums text-muted-foreground">
 							{results?.length === 0 ? selectedResult : selectedResult + 1}/
 							{results?.length}
 						</span>
@@ -125,7 +124,7 @@ export function SearchAndReplaceToolbar() {
 						>
 							<ArrowRightIcon className="h-4 w-4" />
 						</Button>
-						<Separator orientation="vertical" className="h-7 mx-0.5" />
+						<Separator orientation="vertical" className="mx-0.5 h-7" />
 						<Button
 							onClick={() => {
 								setReplacing(true);
@@ -149,12 +148,6 @@ export function SearchAndReplaceToolbar() {
 					</div>
 				) : (
 					<div className={cn("relative w-full")}>
-						<X
-							onClick={() => {
-								setOpen(false);
-							}}
-							className="absolute right-3 top-3 h-4 w-4 cursor-pointer"
-						/>
 						<div className="flex w-full items-center gap-3">
 							<Button
 								size="icon"
@@ -167,6 +160,17 @@ export function SearchAndReplaceToolbar() {
 								<ArrowLeftIcon className="h-4 w-4" />
 							</Button>
 							<h2 className="text-sm font-medium">Search and replace</h2>
+							<Button
+								onClick={() => {
+									setOpen(false);
+								}}
+								size="icon"
+								className="ml-auto size-7"
+								variant="ghost"
+								aria-label="Close search and replace"
+							>
+								<X className="h-4 w-4" />
+							</Button>
 						</div>
 
 						<div className="my-2 w-full">
@@ -232,10 +236,10 @@ export function SearchAndReplaceToolbar() {
 								</Button>
 							</div>
 
-							<div className="main-actions flex items-center gap-2">
+							<div className="main-actions flex flex-wrap items-center justify-end gap-2">
 								<Button
 									size="sm"
-									className="h-7 px-3 text-xs"
+									className="h-7 px-2 text-xs sm:px-3"
 									variant="secondary"
 									onClick={replaceAll}
 								>
@@ -244,7 +248,7 @@ export function SearchAndReplaceToolbar() {
 								<Button
 									onClick={replace}
 									size="sm"
-									className="h-7 px-3 text-xs"
+									className="h-7 px-2 text-xs sm:px-3"
 								>
 									Replace
 								</Button>

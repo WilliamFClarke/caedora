@@ -1,6 +1,6 @@
-'use client'
+﻿'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, CircleDot, CloudOff, GitBranch, Loader2 } from 'lucide-react'
 import { Editor } from './editor'
@@ -182,7 +182,7 @@ export function EditorPane({
   if (!loaded) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading…</p>
+        <p className="text-muted-foreground text-sm">Loadingâ€¦</p>
       </div>
     )
   }
@@ -190,7 +190,7 @@ export function EditorPane({
   const displayPath = path
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-0 flex-col">
       <div className="min-h-0 flex-1 overflow-hidden">
         <Editor
           fileKey={loaded.path}
@@ -236,27 +236,72 @@ function StatusBar({
   words: number
   savedAt: number | null
 }) {
+  const barRef = useRef<HTMLDivElement>(null)
+  const compactLevel = useCompactStatusBar(barRef)
+  const hideTime = compactLevel >= 2
+  const hideWords = compactLevel >= 1
+  const hideFormat = compactLevel >= 1
+  const hidePath = compactLevel >= 3
+
   return (
-    <div className="border-border bg-sidebar text-muted-foreground flex items-center justify-between border-t px-4 py-1.5 text-[11px]">
-      <div className="flex min-w-0 items-center gap-3">
+    <div
+      ref={barRef}
+      className="border-border bg-sidebar text-muted-foreground flex min-w-0 items-center overflow-hidden border-t px-3 py-1.5 text-[11px] sm:px-4"
+    >
+      <div className="flex min-w-0 shrink-0 items-center gap-2 overflow-hidden sm:gap-3">
         <SavedPill status={status} />
-        <span className="font-mono text-[10px]">{formatRelative(savedAt)}</span>
+        {!hideTime && (
+          <span className="font-mono text-[10px]">{formatRelative(savedAt)}</span>
+        )}
       </div>
-      <div className="flex min-w-0 flex-1 justify-center px-4">
-        <span className="truncate font-mono text-[10px]">{path}</span>
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="flex items-center gap-1 font-mono text-[10px]">
+      {!hidePath && (
+        <div className="flex min-w-0 flex-1 justify-center px-2 sm:px-4">
+          <span className="truncate font-mono text-[10px]">{path}</span>
+        </div>
+      )}
+      <div className="flex min-w-0 shrink items-center justify-end gap-2 overflow-hidden sm:gap-3">
+        <span className="flex min-w-0 items-center gap-1 font-mono text-[10px]">
           <GitBranch className="size-3" />
-          {branch || '…'}
+          <span className="truncate">{branch || '…'}</span>
         </span>
-        <span className="text-border">·</span>
-        <span className="font-mono text-[10px]">{words} words</span>
-        <span className="text-border">·</span>
-        <span className="font-mono text-[10px] uppercase">markdown</span>
+        {!hideWords && (
+          <>
+            <span className="text-border">·</span>
+            <span className="shrink-0 font-mono text-[10px]">{words} words</span>
+          </>
+        )}
+        {!hideFormat && (
+          <>
+            <span className="text-border">·</span>
+            <span className="shrink-0 font-mono text-[10px] uppercase">markdown</span>
+          </>
+        )}
       </div>
     </div>
   )
+}
+function useCompactStatusBar(ref: React.RefObject<HTMLDivElement | null>) {
+  const [level, setLevel] = useState(0)
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+
+    const update = () => {
+      const width = element.getBoundingClientRect().width
+      if (width < 360) setLevel(3)
+      else if (width < 460) setLevel(2)
+      else if (width < 620) setLevel(1)
+      else setLevel(0)
+    }
+
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref])
+
+  return level
 }
 
 function SavedPill({ status }: { status: SyncStatus }) {

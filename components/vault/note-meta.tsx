@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Plus, Star, X } from 'lucide-react'
 import { normalizeTag } from '@/lib/frontmatter'
 import { cn } from '@/lib/utils'
@@ -38,8 +38,34 @@ export function NoteMeta({
   isPinned,
   onTogglePin,
 }: NoteMetaProps) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [pinTop, setPinTop] = useState('-2.75rem')
+
+  useLayoutEffect(() => {
+    const root = rootRef.current
+    const anchor = root?.closest('[data-note-meta-anchor]')
+    const heading = anchor?.previousElementSibling
+    if (!root || !(heading instanceof HTMLElement)) return
+
+    const update = () => {
+      const rootRect = root.getBoundingClientRect()
+      const headingRect = heading.getBoundingClientRect()
+      setPinTop(`${headingRect.top - rootRect.top + 4}px`)
+    }
+
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(root)
+    observer.observe(heading)
+    window.addEventListener('resize', update)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
   return (
-    <div className="note-meta relative mt-1 mb-6 select-none">
+    <div ref={rootRef} className="note-meta relative mt-1 mb-6 select-none">
       <button
         type="button"
         onClick={onTogglePin}
@@ -48,7 +74,7 @@ export function NoteMeta({
           'text-muted-foreground hover:text-foreground hover:bg-accent absolute right-0 flex size-8 items-center justify-center rounded-md transition',
           isPinned && 'text-primary hover:text-primary'
         )}
-        style={{ top: '-2.75rem' }}
+        style={{ top: pinTop }}
       >
         <Star className={cn('size-4', isPinned && 'fill-current')} />
       </button>
