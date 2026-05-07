@@ -165,7 +165,7 @@ export class GitHubProvider implements VaultProvider {
   }
 
   /** GitHub: each writeFile is already a commit — no-op here. */
-  async commit(_message: string, _paths: string[]): Promise<string> {
+  async commit(): Promise<string> {
     return ''
   }
 

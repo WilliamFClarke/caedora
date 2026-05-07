@@ -2,7 +2,6 @@ import {
   loadActiveVault,
   upsertVault,
   getVault,
-  listVaults as listVaultsIdb,
 } from './idb'
 import { LocalGitProvider } from './local-provider'
 import { GitHubProvider } from './github-provider'
