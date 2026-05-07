@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { ModeToggle } from '@/components/mode-toggle'
 import { ConnectAiDialog } from './connect-ai-dialog'
+import { TemplateMarketplaceButton } from './template-marketplace-button'
 import { useVault } from '@/lib/vault-context'
 import type { FileEntry, VaultProvider } from '@/lib/types'
 import { LOCKED_PATHS } from '@/lib/vault-index'
@@ -184,7 +185,7 @@ export function AppSidebar({
   onSync,
 }: AppSidebarProps) {
   const router = useRouter()
-  const { disconnect, status } = useVault()
+  const { disconnect } = useVault()
   const [search, setSearch] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
   const [creating, setCreating] = useState<CreatingState | null>(null)
@@ -226,7 +227,6 @@ export function AppSidebar({
     router.push('/')
   }
 
-  const vaultType = status.state === 'ready' ? status.providerType : 'local'
   const sharedRow: Omit<TreeRowProps, 'node'> = {
     selected,
     matches,
@@ -259,15 +259,8 @@ export function AppSidebar({
             <ModeToggle />
           </div>
         </div>
-        <div className="group-data-[collapsible=icon]:hidden">
-          <div className="border-border bg-background flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs">
-            <span className="text-muted-foreground truncate">
-              {vaultType === 'github' ? 'GitHub vault' : 'Local vault'}
-            </span>
-            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-              {vaultType}
-            </span>
-          </div>
+        <div className="px-0 group-data-[collapsible=icon]:hidden">
+          <TemplateMarketplaceButton />
         </div>
         <div className="relative group-data-[collapsible=icon]:hidden">
           <Search className="text-muted-foreground absolute top-1/2 left-2 size-3.5 -translate-y-1/2" />
@@ -369,7 +362,7 @@ export function AppSidebar({
             </span>
             <GitBranch className="text-muted-foreground size-3" />
             <span className="text-muted-foreground truncate font-mono text-[10px]">
-              {branch || '…'}
+              {branch || '...'}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -417,7 +410,6 @@ export function AppSidebar({
       <SidebarRail />
       <ConnectAiDialog open={aiOpen} onOpenChange={setAiOpen} provider={provider} />
 
-      {/* Create file / folder dialog */}
       <CreateItemDialog
         creating={creating}
         onSubmit={async (name) => {
@@ -429,7 +421,6 @@ export function AppSidebar({
         onClose={() => setCreating(null)}
       />
 
-      {/* Move file dialog */}
       {moving && (
         <MoveDialog
           filePath={moving}
@@ -561,9 +552,6 @@ function FolderRow(props: TreeRowProps) {
         </ContextMenu>
 
         <CollapsibleContent>
-          {/* Override the default mx-3.5 px-2.5 so nested rows hover/select
-              flush with the sidebar edge — matches top-level row behaviour.
-              The left border+indent keeps the nesting legible. */}
           <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
             {node.children.map((c) => {
               const { node: _n, ...rest } = props
@@ -637,7 +625,7 @@ function FileRow(props: TreeRowProps) {
               </ContextMenuItem>
               <ContextMenuItem onSelect={() => setMoving(node.path)}>
                 <FolderInput />
-                Move to folder…
+                Move to folder...
               </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem
@@ -737,7 +725,6 @@ function CreateItemDialog({
       setValue(creating.defaultName)
       setError(null)
       setBusy(false)
-      // Select text after the dialog animation settles
       const t = setTimeout(() => inputRef.current?.select(), 80)
       return () => clearTimeout(t)
     }
@@ -823,8 +810,6 @@ function MoveDialog({
     ? filePath.split('/').slice(0, -1).join('/')
     : ''
   const fileName = filePath.split('/').pop() ?? filePath
-
-  // Options: root + all folders except the file's current folder
   const options = ['', ...folders].filter((f) => f !== currentFolder)
 
   async function handleMove() {
@@ -842,7 +827,7 @@ function MoveDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderInput className="size-4" />
-            Move &ldquo;{displayName(fileName)}&rdquo;
+            Move "{displayName(fileName)}"
           </DialogTitle>
           <DialogDescription>Choose where to move this note.</DialogDescription>
         </DialogHeader>
