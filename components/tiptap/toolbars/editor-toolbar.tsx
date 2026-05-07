@@ -40,8 +40,7 @@ import { UndoToolbar } from "./undo";
 
 export const EditorToolbar = ({ editor }: { editor: Editor }) => {
   const toolbarRef = React.useRef<HTMLDivElement>(null);
-  const visibleToolsRef = React.useRef<HTMLDivElement>(null);
-  const collapseLevel = useToolbarCollapseLevel(toolbarRef, visibleToolsRef);
+  const collapseLevel = useToolbarCollapseLevel(toolbarRef);
 
   return (
     <div className="sticky top-0 z-20 w-full min-w-0 border-b bg-card">
@@ -49,7 +48,6 @@ export const EditorToolbar = ({ editor }: { editor: Editor }) => {
         <TooltipProvider>
           <div ref={toolbarRef} className="flex w-full min-w-0 max-w-full items-center overflow-hidden px-2 py-1">
             <div
-              ref={visibleToolsRef}
               className="flex min-w-0 flex-1 basis-0 items-center gap-0.5 overflow-hidden"
             >
               <SidebarTrigger className="size-8 shrink-0" />
@@ -234,10 +232,7 @@ function showAt(collapseLevel: number, threshold: number) {
   return collapseLevel >= threshold ? "inline-flex" : "hidden";
 }
 
-function useToolbarCollapseLevel(
-  toolbarRef: React.RefObject<HTMLDivElement | null>,
-  _visibleToolsRef: React.RefObject<HTMLDivElement | null>
-) {
+function useToolbarCollapseLevel(toolbarRef: React.RefObject<HTMLDivElement | null>) {
   const [level, setLevel] = React.useState(0);
   const frameRef = React.useRef<number | null>(null);
 

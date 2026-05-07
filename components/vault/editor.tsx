@@ -15,8 +15,7 @@ interface EditorProps {
 export function Editor({ initialMarkdown, onChange, fileKey, onMetaAnchorChange }: EditorProps) {
   const initialContent = useMemo(
     () => mdToTiptap(initialMarkdown) as unknown,
-    [fileKey],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [initialMarkdown],
   )
 
   return (

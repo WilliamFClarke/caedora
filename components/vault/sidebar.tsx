@@ -566,10 +566,6 @@ function vaultLabel(state: PersistedVaultState): string {
   return state.directoryHandle?.name ?? 'Local vault'
 }
 
-function vaultKind(state: PersistedVaultState): string {
-  return state.type === 'github' ? 'GitHub vault' : 'Local folder'
-}
-
 function TreeRow(props: TreeRowProps) {
   const { node, matches } = props
   if (matches && !containsMatch(node, matches)) return null
@@ -942,7 +938,7 @@ function MoveDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderInput className="size-4" />
-            Move "{displayName(fileName)}"
+            Move &ldquo;{displayName(fileName)}&rdquo;
           </DialogTitle>
           <DialogDescription>Choose where to move this note.</DialogDescription>
         </DialogHeader>
