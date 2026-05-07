@@ -2,6 +2,7 @@
 
 import { VaultContextProvider } from '@/lib/vault-context'
 import { SettingsProvider } from '@/lib/settings-context'
+import { TemplateMarketplaceButton } from '@/components/vault/template-marketplace-button'
 import type { ReactNode } from 'react'
 
 /**
@@ -11,7 +12,10 @@ import type { ReactNode } from 'react'
 export function VaultProviderWrapper({ children }: { children: ReactNode }) {
   return (
     <SettingsProvider>
-      <VaultContextProvider>{children}</VaultContextProvider>
+      <VaultContextProvider>
+        {children}
+        <TemplateMarketplaceButton />
+      </VaultContextProvider>
     </SettingsProvider>
   )
 }
