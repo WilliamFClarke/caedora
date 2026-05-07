@@ -445,7 +445,6 @@ export function AppSidebar({
         initialSection={settingsSection}
       />
 
-      {/* Create file / folder dialog */}
       <CreateItemDialog
         creating={creating}
         onSubmit={async (name) => {
@@ -457,7 +456,6 @@ export function AppSidebar({
         onClose={() => setCreating(null)}
       />
 
-      {/* Move file dialog */}
       {moving && (
         <MoveDialog
           filePath={moving}
@@ -669,9 +667,6 @@ function FolderRow(props: TreeRowProps) {
         </ContextMenu>
 
         <CollapsibleContent>
-          {/* Override the default mx-3.5 px-2.5 so nested rows hover/select
-              flush with the sidebar edge — matches top-level row behaviour.
-              The left border+indent keeps the nesting legible. */}
           <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
             {node.children.map((c) => {
               const { node: _n, ...rest } = props
@@ -745,7 +740,7 @@ function FileRow(props: TreeRowProps) {
               </ContextMenuItem>
               <ContextMenuItem onSelect={() => setMoving(node.path)}>
                 <FolderInput />
-                Move to folder…
+                Move to folder...
               </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem
@@ -845,7 +840,6 @@ function CreateItemDialog({
       setValue(creating.defaultName)
       setError(null)
       setBusy(false)
-      // Select text after the dialog animation settles
       const t = setTimeout(() => inputRef.current?.select(), 80)
       return () => clearTimeout(t)
     }
@@ -931,8 +925,6 @@ function MoveDialog({
     ? filePath.split('/').slice(0, -1).join('/')
     : ''
   const fileName = filePath.split('/').pop() ?? filePath
-
-  // Options: root + all folders except the file's current folder
   const options = ['', ...folders].filter((f) => f !== currentFolder)
 
   async function handleMove() {
@@ -950,7 +942,7 @@ function MoveDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderInput className="size-4" />
-            Move &ldquo;{displayName(fileName)}&rdquo;
+            Move "{displayName(fileName)}"
           </DialogTitle>
           <DialogDescription>Choose where to move this note.</DialogDescription>
         </DialogHeader>
