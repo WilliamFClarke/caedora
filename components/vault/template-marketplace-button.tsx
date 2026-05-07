@@ -12,8 +12,9 @@ import {
   type VaultTemplate,
 } from '@/lib/vault-templates'
 import { TemplateBrowserDialog } from './template-browser-dialog'
+import { cn } from '@/lib/utils'
 
-export function TemplateMarketplaceButton() {
+export function TemplateMarketplaceButton({ className }: { className?: string }) {
   const { provider, status } = useVault()
   const [open, setOpen] = useState(false)
 
@@ -39,7 +40,7 @@ export function TemplateMarketplaceButton() {
         size="sm"
         variant="secondary"
         onClick={() => setOpen(true)}
-        className="fixed right-4 bottom-4 z-40 shadow-md"
+        className={cn('w-full justify-start', className)}
       >
         <Library className="size-4" />
         Templates

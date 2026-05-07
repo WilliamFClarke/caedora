@@ -5,30 +5,36 @@ import { useRouter } from 'next/navigation'
 import {
   Calendar,
   ChevronRight,
+  ChevronsUpDown,
   FileText,
   FilePlus,
   Folder,
   FolderPlus,
   FolderInput,
-  GitBranch,
+  FolderOpen,
+  Github,
   Hash,
   Inbox,
+  Loader2,
   RefreshCw,
   Settings,
   Sparkles,
-  LogOut,
   Pencil,
   Search,
   Star,
   Trash2,
+  Wrench,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { ModeToggle } from '@/components/mode-toggle'
 import { ConnectAiDialog } from './connect-ai-dialog'
+import { TemplateMarketplaceButton } from './template-marketplace-button'
+import { SettingsDialog, type SettingsSection } from '@/components/settings-dialog'
 import { useVault } from '@/lib/vault-context'
-import type { FileEntry, VaultProvider } from '@/lib/types'
+import { getActiveVaultId, listVaults } from '@/lib/storage'
+import type { FileEntry, PersistedVaultState, VaultProvider } from '@/lib/types'
 import { LOCKED_PATHS } from '@/lib/vault-index'
 import { cn } from '@/lib/utils'
 import {
@@ -43,6 +49,13 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Dialog,
   DialogContent,
@@ -170,6 +183,8 @@ type CreatingState = {
   defaultName: string
 }
 
+type StoredVault = { id: string; state: PersistedVaultState }
+
 export function AppSidebar({
   entries,
   selected,
@@ -184,23 +199,27 @@ export function AppSidebar({
   onSync,
 }: AppSidebarProps) {
   const router = useRouter()
-  const { disconnect, status } = useVault()
+  const { connectToVault } = useVault()
   const [search, setSearch] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
   const [creating, setCreating] = useState<CreatingState | null>(null)
   const [moving, setMoving] = useState<string | null>(null)
-  const [branch, setBranch] = useState<string>('')
   const [aiOpen, setAiOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [vaults, setVaults] = useState<StoredVault[]>([])
+  const [activeVaultId, setActiveVaultIdState] = useState<string | null>(null)
+  const [switchingVaultId, setSwitchingVaultId] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
+
+  async function refreshVaults() {
+    const [stored, active] = await Promise.all([listVaults(), getActiveVaultId()])
+    setVaults(stored)
+    setActiveVaultIdState(active)
+  }
 
   useEffect(() => {
-    let alive = true
-    provider.currentBranch().then((b) => {
-      if (alive) setBranch(b)
-    }).catch(() => {})
-    return () => {
-      alive = false
-    }
+    void refreshVaults()
   }, [provider])
 
   const tree = useMemo(() => buildTree(entries), [entries])
@@ -221,12 +240,6 @@ export function AppSidebar({
     return entries.filter((e) => e.type === 'dir').map((e) => e.path).sort()
   }, [entries])
 
-  function onDisconnect() {
-    disconnect()
-    router.push('/')
-  }
-
-  const vaultType = status.state === 'ready' ? status.providerType : 'local'
   const sharedRow: Omit<TreeRowProps, 'node'> = {
     selected,
     matches,
@@ -247,7 +260,7 @@ export function AppSidebar({
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="flex items-center justify-between gap-2 px-2 pt-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <div className="bg-primary text-primary-foreground flex size-5 items-center justify-center rounded-sm font-mono text-[10px] font-semibold">
               pm
             </div>
@@ -259,15 +272,8 @@ export function AppSidebar({
             <ModeToggle />
           </div>
         </div>
-        <div className="group-data-[collapsible=icon]:hidden">
-          <div className="border-border bg-background flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs">
-            <span className="text-muted-foreground truncate">
-              {vaultType === 'github' ? 'GitHub vault' : 'Local vault'}
-            </span>
-            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-              {vaultType}
-            </span>
-          </div>
+        <div className="px-0 group-data-[collapsible=icon]:hidden">
+          <TemplateMarketplaceButton />
         </div>
         <div className="relative group-data-[collapsible=icon]:hidden">
           <Search className="text-muted-foreground absolute top-1/2 left-2 size-3.5 -translate-y-1/2" />
@@ -359,17 +365,37 @@ export function AppSidebar({
           <Sparkles className="size-3.5" />
           Connect your AI
         </button>
-        <div className="flex items-center justify-between gap-2 px-2 pb-1 group-data-[collapsible=icon]:hidden">
-          <div className="flex min-w-0 items-center gap-1.5 text-xs">
+        <div className="flex items-center gap-1.5 px-2 pb-1 group-data-[collapsible=icon]:hidden">
+          <VaultSwitcher
+            vaults={vaults}
+            activeVaultId={activeVaultId}
+            switchingVaultId={switchingVaultId}
+            onSwitch={async (id) => {
+              if (id === activeVaultId || switchingVaultId) return
+              setSwitchingVaultId(id)
+              try {
+                await connectToVault(id)
+                router.push('/vault')
+                await refreshVaults()
+              } finally {
+                setSwitchingVaultId(null)
+              }
+            }}
+            onManage={() => {
+              setSettingsSection('vaults')
+              setSettingsOpen(true)
+            }}
+          />
+          <div className="hidden">
             <span
               className="bg-good relative inline-flex size-1.5 rounded-full"
               aria-hidden
             >
               <span className="bg-good absolute inline-flex size-full animate-ping rounded-full opacity-60" />
             </span>
-            <GitBranch className="text-muted-foreground size-3" />
+            <FolderOpen className="text-muted-foreground size-3" />
             <span className="text-muted-foreground truncate font-mono text-[10px]">
-              {branch || '…'}
+              ...
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -385,37 +411,39 @@ export function AppSidebar({
                     setSyncing(false)
                   }
                 }}
-                className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs disabled:opacity-50"
+                className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent flex size-8 items-center justify-center rounded-md disabled:opacity-50"
                 aria-label="Sync vault"
+                title="Sync vault"
                 disabled={syncing}
               >
-                <RefreshCw className={cn('size-3', syncing && 'animate-spin')} />
-                Sync
+                <RefreshCw className={cn('size-4', syncing && 'animate-spin')} />
               </button>
             )}
             <button
               type="button"
-              onClick={() => router.push('/settings')}
-              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
+              onClick={() => {
+                setSettingsSection('general')
+                setSettingsOpen(true)
+              }}
+              className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent flex size-8 items-center justify-center rounded-md"
               aria-label="Settings"
+              title="Settings"
             >
-              <Settings className="size-3" />
-              Settings
-            </button>
-            <button
-              type="button"
-              onClick={onDisconnect}
-              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
-              aria-label="Close vault"
-            >
-              <LogOut className="size-3" />
-              Close
+              <Settings className="size-4" />
             </button>
           </div>
         </div>
       </SidebarFooter>
       <SidebarRail />
       <ConnectAiDialog open={aiOpen} onOpenChange={setAiOpen} provider={provider} />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={(open) => {
+          setSettingsOpen(open)
+          if (!open) void refreshVaults()
+        }}
+        initialSection={settingsSection}
+      />
 
       {/* Create file / folder dialog */}
       <CreateItemDialog
@@ -462,6 +490,86 @@ interface TreeRowProps {
   onCreateFolder: (parent: string, name: string) => void
   onRenamePath: (from: string, to: string) => Promise<void>
   onDeletePath: (path: string) => Promise<void>
+}
+
+function VaultSwitcher({
+  vaults,
+  activeVaultId,
+  switchingVaultId,
+  onSwitch,
+  onManage,
+}: {
+  vaults: StoredVault[]
+  activeVaultId: string | null
+  switchingVaultId: string | null
+  onSwitch: (id: string) => Promise<void>
+  onManage: () => void
+}) {
+  const activeVault = vaults.find((vault) => vault.id === activeVaultId) ?? vaults[0]
+  const label = activeVault ? vaultLabel(activeVault.state) : 'Vault'
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="hover:bg-sidebar-accent flex h-8 min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 text-left text-sm"
+          aria-label="Switch vault"
+        >
+          <span className="truncate font-medium">{label}</span>
+          <ChevronsUpDown className="text-muted-foreground size-3.5 shrink-0" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="w-64">
+        {vaults.length > 0 ? (
+          vaults.map((vault) => {
+            const isActive = vault.id === activeVaultId
+            const isSwitching = vault.id === switchingVaultId
+            return (
+              <DropdownMenuItem
+                key={vault.id}
+                onSelect={(event) => {
+                  event.preventDefault()
+                  void onSwitch(vault.id)
+                }}
+                disabled={isActive || !!switchingVaultId}
+                className="flex items-center gap-2"
+              >
+                {vault.state.type === 'github' ? (
+                  <Github className="text-muted-foreground size-4" />
+                ) : (
+                  <FolderOpen className="text-muted-foreground size-4" />
+                )}
+                <span className="min-w-0 flex-1 truncate">{vaultLabel(vault.state)}</span>
+                {isSwitching && <Loader2 className="size-3.5 animate-spin" />}
+              </DropdownMenuItem>
+            )
+          })
+        ) : (
+          <DropdownMenuItem disabled>No saved vaults</DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            onManage()
+          }}
+        >
+          <Wrench className="text-muted-foreground size-4" />
+          Manage vaults
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function vaultLabel(state: PersistedVaultState): string {
+  if (state.type === 'github') return `${state.githubOwner}/${state.githubRepo}`
+  return state.directoryHandle?.name ?? 'Local vault'
+}
+
+function vaultKind(state: PersistedVaultState): string {
+  return state.type === 'github' ? 'GitHub vault' : 'Local folder'
 }
 
 function TreeRow(props: TreeRowProps) {

@@ -236,62 +236,18 @@ function showAt(collapseLevel: number, threshold: number) {
 
 function useToolbarCollapseLevel(
   toolbarRef: React.RefObject<HTMLDivElement | null>,
-  visibleToolsRef: React.RefObject<HTMLDivElement | null>
+  _visibleToolsRef: React.RefObject<HTMLDivElement | null>
 ) {
   const [level, setLevel] = React.useState(0);
-  const expandTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const frameRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     const toolbar = toolbarRef.current;
-    const visibleTools = visibleToolsRef.current;
-    if (!toolbar || !visibleTools) return;
-
-    const clearExpandTimer = () => {
-      if (expandTimerRef.current) {
-        clearTimeout(expandTimerRef.current);
-        expandTimerRef.current = null;
-      }
-    };
+    if (!toolbar) return;
 
     const update = () => {
       const width = toolbar.getBoundingClientRect().width;
-      const baseLevel =
-        width < 390
-          ? 5
-          : width < 520
-            ? 4
-            : width < 680
-              ? 3
-              : width < 820
-                ? 2
-                : width < 1040
-                  ? 1
-                  : 0;
-
-      setLevel((currentLevel) => {
-        const isOverflowing =
-          visibleTools.scrollWidth > visibleTools.clientWidth + 1;
-
-        if (isOverflowing && currentLevel < 5) {
-          clearExpandTimer();
-          return currentLevel + 1;
-        }
-
-        if (baseLevel > currentLevel) {
-          clearExpandTimer();
-          return baseLevel;
-        }
-
-        if (baseLevel < currentLevel && !expandTimerRef.current) {
-          expandTimerRef.current = setTimeout(() => {
-            expandTimerRef.current = null;
-            setLevel((latestLevel) => Math.max(baseLevel, latestLevel - 1));
-          }, 320);
-        }
-
-        return currentLevel;
-      });
+      setLevel((currentLevel) => collapseLevelForWidth(width, currentLevel));
     };
 
     update();
@@ -301,32 +257,34 @@ function useToolbarCollapseLevel(
     };
     const observer = new ResizeObserver(rafUpdate);
     observer.observe(toolbar);
-    observer.observe(visibleTools);
     return () => {
       observer.disconnect();
-      clearExpandTimer();
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
     };
-  }, [toolbarRef, visibleToolsRef]);
-
-  React.useLayoutEffect(() => {
-    const visibleTools = visibleToolsRef.current;
-    if (!visibleTools || level >= 5) return;
-
-    const id = requestAnimationFrame(() => {
-      if (visibleTools.scrollWidth > visibleTools.clientWidth + 1) {
-        if (expandTimerRef.current) {
-          clearTimeout(expandTimerRef.current);
-          expandTimerRef.current = null;
-        }
-        setLevel((currentLevel) => Math.min(5, currentLevel + 1));
-      }
-    });
-
-    return () => cancelAnimationFrame(id);
-  }, [level, visibleToolsRef]);
+  }, [toolbarRef]);
 
   return level;
+}
+
+function collapseLevelForWidth(width: number, currentLevel: number): number {
+  const collapseTarget =
+    width < 460
+      ? 5
+      : width < 600
+        ? 4
+        : width < 760
+          ? 3
+          : width < 920
+            ? 2
+            : width < 1120
+              ? 1
+              : 0;
+
+  if (collapseTarget > currentLevel) return collapseTarget;
+  if (collapseTarget === currentLevel) return currentLevel;
+
+  const expandAt = [1160, 960, 800, 640, 500, 0];
+  return width >= expandAt[currentLevel] ? collapseTarget : currentLevel;
 }
 
 function ToolbarDivider({ className }: { className?: string }) {

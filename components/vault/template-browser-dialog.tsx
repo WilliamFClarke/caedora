@@ -7,9 +7,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -93,24 +91,15 @@ export function TemplateBrowserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[86vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
-        <DialogHeader className="border-b px-5 py-4">
-          <DialogTitle className="flex items-center gap-2">
-            <Download className="size-4" />
-            Browse templates
-          </DialogTitle>
-          <DialogDescription>
-            Preview a template and import its markdown files without overwriting your vault.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[280px_1fr]">
-          <div className="border-b p-4 md:border-r md:border-b-0">
+      <DialogContent className="flex h-[86vh] max-h-none w-[96vw] max-w-[1120px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1120px]">
+        <DialogTitle className="sr-only">Browse templates</DialogTitle>
+        <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[180px_1fr]">
+          <div className="border-b p-2 md:border-r md:border-b-0">
             <div className="relative">
               <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
               <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search templates" className="h-8 pl-8" />
             </div>
-            <div className="mt-3 flex max-h-[34vh] flex-col gap-1 overflow-y-auto pr-1 md:max-h-[48vh]">
+            <div className="mt-2 flex max-h-[34vh] flex-col gap-1 overflow-y-auto pr-1 md:max-h-[58vh]">
               {templates.map((template) => (
                 <button
                   key={template.id}
@@ -121,22 +110,23 @@ export function TemplateBrowserDialog({
                     setError(null)
                   }}
                   className={cn(
-                    'rounded-md border px-3 py-2 text-left text-sm transition',
-                    selected.id === template.id ? 'border-primary bg-primary/8' : 'border-transparent hover:border-border hover:bg-accent'
+                    'flex h-8 flex-col justify-center rounded-md px-2 text-left transition-colors',
+                    selected.id === template.id
+                      ? 'bg-accent text-foreground'
+                      : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
                   )}
                 >
-                  <span className="block truncate font-medium">{template.name}</span>
-                  <span className="text-muted-foreground block truncate text-xs">{template.category}</span>
+                  <span className="block truncate text-xs font-medium">{template.name}</span>
                 </button>
               ))}
             </div>
 
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center gap-2 text-xs font-medium">
+            <div className="mt-3 space-y-2">
+              <div className="text-muted-foreground flex items-center gap-1.5 px-2 text-[10px] font-medium uppercase tracking-wide">
                 <Github className="size-3.5" />
                 Public repo
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-1.5">
                 <Input value={repo} onChange={(e) => setRepo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void loadRepo()} placeholder="owner/repo" className="h-8" />
                 <Button type="button" size="sm" variant="outline" onClick={loadRepo} disabled={busy === 'repo'}>
                   {busy === 'repo' ? <Loader2 className="size-3.5 animate-spin" /> : 'Load'}
