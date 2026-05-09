@@ -2,7 +2,6 @@
  * Seed a new local vault: ensure .git exists, write a welcome note and
  * .gitignore, commit them.
  */
-import { LocalGitProvider } from './storage/local-provider'
 import { savePinned, loadPinned } from './storage/idb'
 import { rebuildVaultIndex, INDEX_PATH } from './vault-index'
 import type { VaultProvider } from './types'
@@ -588,7 +587,7 @@ export function templateFilesFor(template: VaultTemplate): Array<[string, string
  * if the folder already has a welcome.md (it won't overwrite existing files).
  */
 export async function seedLocalVault(
-  provider: LocalGitProvider,
+  provider: VaultProvider,
   template: VaultTemplate = 'default'
 ): Promise<void> {
   const seeded: string[] = []
@@ -679,13 +678,13 @@ export async function pinInitial(path: string): Promise<void> {
 /**
  * True if the folder is empty (no user files besides .git).
  */
-export async function isFolderEmpty(provider: LocalGitProvider): Promise<boolean> {
+export async function isFolderEmpty(provider: VaultProvider): Promise<boolean> {
   const files = await provider.listFiles('')
   // listFiles already skips .git
   return files.length === 0
 }
 
-async function fileExists(provider: LocalGitProvider, path: string): Promise<boolean> {
+async function fileExists(provider: VaultProvider, path: string): Promise<boolean> {
   try {
     await provider.readFile(path)
     return true

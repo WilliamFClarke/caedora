@@ -144,8 +144,12 @@ function VaultRow({
   const isGithub = vault.state.type === 'github'
   const label = isGithub
     ? `${vault.state.githubOwner}/${vault.state.githubRepo}`
-    : vault.state.directoryHandle?.name ?? 'Local vault'
-  const subtitle = isGithub ? 'GitHub' : 'Local folder'
+    : vault.state.directoryName ?? vault.state.directoryHandle?.name ?? 'Local vault'
+  const subtitle = isGithub
+    ? 'GitHub'
+    : vault.state.directoryPath
+      ? 'Desktop folder'
+      : 'Local folder'
   const lastOpened = vault.state.lastOpenedAt
     ? timeAgo(vault.state.lastOpenedAt)
     : 'never'

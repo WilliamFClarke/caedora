@@ -4,7 +4,9 @@ import {
   getVault,
 } from './idb'
 import { LocalGitProvider } from './local-provider'
+import { ElectronLocalProvider } from './electron-provider'
 import { GitHubProvider } from './github-provider'
+import { getDesktopApi } from '../desktop'
 import type { VaultProvider, FileEntry, PersistedVaultState } from '../types'
 
 export {
@@ -22,6 +24,7 @@ export {
   clearVaultState,
 } from './idb'
 export { LocalGitProvider } from './local-provider'
+export { ElectronLocalProvider } from './electron-provider'
 export { GitHubProvider } from './github-provider'
 
 /**
@@ -51,6 +54,23 @@ export async function createProviderFromPersistedState(): Promise<{
     return { provider: null, needsPermission: true, folderName: handle.name }
   }
 
+  if (state.type === 'local' && state.directoryPath) {
+    const desktop = getDesktopApi()
+    if (!desktop) {
+      return {
+        provider: null,
+        needsPermission: true,
+        folderName: state.directoryName ?? state.directoryPath,
+      }
+    }
+    const provider = new ElectronLocalProvider(
+      state.directoryPath,
+      state.directoryName ?? 'Local vault'
+    )
+    await provider.init()
+    return { provider, needsPermission: false, folderName: provider.folderName }
+  }
+
   if (
     state.type === 'github' &&
     state.githubPat &&
@@ -75,6 +95,16 @@ export async function createProviderFromPersistedState(): Promise<{
  */
 export async function requestPermissionAndCreate(): Promise<VaultProvider | null> {
   const state = await loadActiveVault()
+  if (state?.directoryPath) {
+    const desktop = getDesktopApi()
+    if (!desktop) return null
+    const provider = new ElectronLocalProvider(
+      state.directoryPath,
+      state.directoryName ?? 'Local vault'
+    )
+    await provider.init()
+    return provider
+  }
   if (!state?.directoryHandle) return null
   const permission = await state.directoryHandle.requestPermission({ mode: 'readwrite' })
   if (permission !== 'granted') return null
@@ -111,6 +141,25 @@ export async function createProviderFromStoredVault(id: string): Promise<{
     await provider.init()
     await upsertVault(state)
     return { provider, needsPermission: false, folderName: handle.name, state }
+  }
+
+  if (state.type === 'local' && state.directoryPath) {
+    const desktop = getDesktopApi()
+    if (!desktop) {
+      return {
+        provider: null,
+        needsPermission: true,
+        folderName: state.directoryName ?? state.directoryPath,
+        state,
+      }
+    }
+    const provider = new ElectronLocalProvider(
+      state.directoryPath,
+      state.directoryName ?? 'Local vault'
+    )
+    await provider.init()
+    await upsertVault(state)
+    return { provider, needsPermission: false, folderName: provider.folderName, state }
   }
 
   if (state.type === 'github' && state.githubPat && state.githubOwner && state.githubRepo) {

@@ -75,7 +75,9 @@ export type VaultStatus =
 
 export interface PersistedVaultState {
   type: 'local' | 'github'
-  directoryHandle?: FileSystemDirectoryHandle  // for local
+  directoryHandle?: FileSystemDirectoryHandle  // browser local vault
+  directoryPath?: string  // desktop local vault
+  directoryName?: string
   /** GitHub PAT — stored in IndexedDB only, never on our servers. */
   githubPat?: string
   githubOwner?: string
@@ -89,6 +91,7 @@ export interface VaultContextValue {
   provider: VaultProvider | null
   status: VaultStatus
   connectLocal: (preselected?: FileSystemDirectoryHandle) => Promise<FileSystemDirectoryHandle | null>
+  connectDesktopLocal: (root: { path: string; name: string }) => Promise<void>
   connectGitHub: (pat: string, owner: string, repo: string) => Promise<void>
   connectToVault: (id: string) => Promise<void>
   grantPermission: () => Promise<void>

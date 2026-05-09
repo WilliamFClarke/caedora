@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
+  Bot,
+  CircleCheck,
+  CircleX,
   FolderOpen,
   FolderPlus,
-  Clock,
   Keyboard,
   Loader2,
-  Monitor,
   Palette,
   SlidersHorizontal,
   ToggleLeft,
@@ -32,14 +33,16 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { ModeToggle } from '@/components/mode-toggle'
 import { ConnectDialog } from '@/components/connect-dialog'
-import { SYNC_INTERVAL_OPTIONS } from '@/lib/settings'
+import { Input } from '@/components/ui/input'
+import { LOCAL_LLM_PRESETS, SYNC_INTERVAL_OPTIONS, type LocalLlmSettings } from '@/lib/settings'
 import { useSettings } from '@/lib/settings-context'
 import { useVault } from '@/lib/vault-context'
+import { testLocalLlmConnection, type LocalLlmTestResult } from '@/lib/local-llm'
 import { getActiveVaultId, listVaults, removeVault } from '@/lib/storage'
 import type { PersistedVaultState } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-export type SettingsSection = 'general' | 'editor' | 'appearance' | 'hotkeys' | 'vaults'
+export type SettingsSection = 'general' | 'ai' | 'editor' | 'appearance' | 'hotkeys' | 'vaults'
 
 type StoredVault = { id: string; state: PersistedVaultState }
 
@@ -51,6 +54,7 @@ const sections: Array<{
     group: 'Options',
     items: [
       { id: 'general', label: 'General', Icon: SlidersHorizontal },
+      { id: 'ai', label: 'AI', Icon: Bot },
       { id: 'editor', label: 'Editor', Icon: Type },
       { id: 'appearance', label: 'Appearance', Icon: Palette },
       { id: 'hotkeys', label: 'Hotkeys', Icon: Keyboard },
@@ -114,6 +118,7 @@ export function SettingsDialog({
               <h2 className="text-lg font-semibold">{title}</h2>
             </div>
             {section === 'general' && <GeneralSettings />}
+            {section === 'ai' && <AiSettings />}
             {section === 'editor' && <EditorSettings />}
             {section === 'appearance' && <AppearanceSettings />}
             {section === 'hotkeys' && <HotkeySettings />}
@@ -311,6 +316,171 @@ function GeneralSettings() {
   )
 }
 
+function AiSettings() {
+  const { settings, updateSettings } = useSettings()
+  const [testing, setTesting] = useState(false)
+  const [result, setResult] = useState<LocalLlmTestResult | null>(null)
+  const localLlm = settings.localLlm
+
+  function updateLocalLlm(updates: Partial<LocalLlmSettings>) {
+    setResult(null)
+    void updateSettings({
+      localLlm: {
+        ...localLlm,
+        ...updates,
+      },
+    })
+  }
+
+  async function runTest() {
+    setTesting(true)
+    try {
+      setResult(await testLocalLlmConnection(localLlm))
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <ItemGroup>
+      <Item>
+        <ItemContent>
+          <ItemTitle>Local LLM</ItemTitle>
+          <ItemDescription>
+            Use a local OpenAI-compatible server for desktop AI features.
+          </ItemDescription>
+        </ItemContent>
+        <ItemActions>
+          <button
+            type="button"
+            onClick={() => updateLocalLlm({ enabled: !localLlm.enabled })}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Toggle local LLM"
+          >
+            {localLlm.enabled ? (
+              <ToggleRight className="text-primary size-7" />
+            ) : (
+              <ToggleLeft className="size-7" />
+            )}
+          </button>
+        </ItemActions>
+      </Item>
+      <Separator />
+      <Item>
+        <ItemContent>
+          <ItemTitle>Runtime</ItemTitle>
+          <ItemDescription>
+            Pick a default endpoint or use a custom OpenAI-compatible URL.
+          </ItemDescription>
+        </ItemContent>
+        <ItemActions className="flex-wrap justify-end">
+          {LOCAL_LLM_PRESETS.map((preset) => (
+            <Button
+              key={preset.id}
+              type="button"
+              size="sm"
+              variant={localLlm.preset === preset.id ? 'default' : 'outline'}
+              onClick={() =>
+                updateLocalLlm({
+                  preset: preset.id,
+                  baseUrl: preset.baseUrl,
+                  model: preset.model,
+                })
+              }
+            >
+              {preset.label}
+            </Button>
+          ))}
+        </ItemActions>
+      </Item>
+      <Separator />
+      <div className="grid gap-4 p-4 md:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium" htmlFor="local-llm-base-url">
+            Base URL
+          </label>
+          <Input
+            id="local-llm-base-url"
+            value={localLlm.baseUrl}
+            onChange={(e) =>
+              updateLocalLlm({
+                baseUrl: e.target.value,
+                preset: 'custom',
+              })
+            }
+            placeholder="http://localhost:11434/v1"
+            spellCheck={false}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium" htmlFor="local-llm-model">
+            Model
+          </label>
+          <Input
+            id="local-llm-model"
+            value={localLlm.model}
+            onChange={(e) => updateLocalLlm({ model: e.target.value })}
+            placeholder="llama3.2"
+            spellCheck={false}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5 md:col-span-2">
+          <label className="text-sm font-medium" htmlFor="local-llm-api-key">
+            API key
+          </label>
+          <Input
+            id="local-llm-api-key"
+            type="password"
+            value={localLlm.apiKey}
+            onChange={(e) => updateLocalLlm({ apiKey: e.target.value })}
+            placeholder="Optional"
+            autoComplete="off"
+          />
+        </div>
+      </div>
+      <Separator />
+      <Item>
+        <ItemContent>
+          <ItemTitle>Connection</ItemTitle>
+          <ItemDescription>
+            {result
+              ? result.message
+              : 'Check that the selected local server is reachable.'}
+          </ItemDescription>
+          {result?.models.length ? (
+            <p className="text-muted-foreground mt-1 font-mono text-[10px]">
+              {result.models.slice(0, 5).join(', ')}
+            </p>
+          ) : null}
+        </ItemContent>
+        <ItemActions>
+          {result ? (
+            result.ok ? (
+              <CircleCheck className="text-good size-4" />
+            ) : (
+              <CircleX className="text-destructive size-4" />
+            )
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void runTest()}
+            disabled={testing || !localLlm.baseUrl}
+          >
+            {testing ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Bot className="size-4" />
+            )}
+            Test
+          </Button>
+        </ItemActions>
+      </Item>
+    </ItemGroup>
+  )
+}
+
 function EditorSettings() {
   return (
     <ItemGroup>
@@ -370,9 +540,10 @@ function HotkeySettings() {
 
 function vaultLabel(state: PersistedVaultState): string {
   if (state.type === 'github') return `${state.githubOwner}/${state.githubRepo}`
-  return state.directoryHandle?.name ?? 'Local vault'
+  return state.directoryName ?? state.directoryHandle?.name ?? 'Local vault'
 }
 
 function vaultKind(state: PersistedVaultState): string {
-  return state.type === 'github' ? 'GitHub vault' : 'Local folder'
+  if (state.type === 'github') return 'GitHub vault'
+  return state.directoryPath ? 'Desktop folder' : 'Local folder'
 }

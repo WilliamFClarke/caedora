@@ -41,6 +41,7 @@ const SETTINGS_STORE = 'app-settings'
 /** Stable key for a stored vault. Used as the IDB key in the vaults store. */
 export function vaultId(state: PersistedVaultState): string {
   if (state.type === 'github') return `github:${state.githubOwner}/${state.githubRepo}`
+  if (state.directoryPath) return `local-desktop:${state.directoryPath}`
   return `local:${state.directoryHandle?.name ?? 'unknown'}`
 }
 
@@ -182,7 +183,7 @@ export async function loadSettings(): Promise<AppSettings> {
   try {
     const db = await getDB()
     const stored = await db.get(SETTINGS_STORE, 'current')
-    return stored ? { ...DEFAULT_SETTINGS, ...(stored as Partial<AppSettings>) } : DEFAULT_SETTINGS
+    return mergeSettings(stored as Partial<AppSettings> | undefined)
   } catch {
     return DEFAULT_SETTINGS
   }
@@ -202,6 +203,18 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
 /** @deprecated use {@link upsertVault}. */
 export async function saveVaultState(state: PersistedVaultState): Promise<void> {
   await upsertVault(state)
+}
+
+function mergeSettings(stored?: Partial<AppSettings>): AppSettings {
+  if (!stored) return DEFAULT_SETTINGS
+  return {
+    ...DEFAULT_SETTINGS,
+    ...stored,
+    localLlm: {
+      ...DEFAULT_SETTINGS.localLlm,
+      ...stored.localLlm,
+    },
+  }
 }
 
 /** @deprecated use {@link loadActiveVault}. */
