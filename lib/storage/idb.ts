@@ -29,6 +29,7 @@
 import { openDB, type IDBPDatabase } from 'idb'
 import type { PersistedVaultState } from '../types'
 import { DEFAULT_SETTINGS, type AppSettings } from '../settings'
+import type { FolderAppearance } from '../folder-appearance'
 
 const DB_NAME = 'personal-md'
 const DB_VERSION = 4
@@ -37,6 +38,7 @@ const VAULTS_STORE = 'vaults'
 const META_STORE = 'vault-meta'
 const PINNED_STORE = 'pinned'
 const SETTINGS_STORE = 'app-settings'
+const FOLDER_APPEARANCE_PREFIX = 'folderAppearance:'
 
 /** Stable key for a stored vault. Used as the IDB key in the vaults store. */
 export function vaultId(state: PersistedVaultState): string {
@@ -173,6 +175,36 @@ export async function loadPinned(): Promise<string[]> {
     return ((await db.get(PINNED_STORE, 'current')) as string[] | undefined) ?? []
   } catch {
     return []
+  }
+}
+
+// Folder appearance metadata. This is local UI preference data, scoped to the
+// active vault and stored in IndexedDB so user markdown stays untouched.
+
+export async function loadFolderAppearances(
+  vaultKey: string
+): Promise<Record<string, FolderAppearance>> {
+  try {
+    const db = await getDB()
+    return (
+      ((await db.get(META_STORE, `${FOLDER_APPEARANCE_PREFIX}${vaultKey}`)) as
+        | Record<string, FolderAppearance>
+        | undefined) ?? {}
+    )
+  } catch {
+    return {}
+  }
+}
+
+export async function saveFolderAppearances(
+  vaultKey: string,
+  appearances: Record<string, FolderAppearance>
+): Promise<void> {
+  try {
+    const db = await getDB()
+    await db.put(META_STORE, appearances, `${FOLDER_APPEARANCE_PREFIX}${vaultKey}`)
+  } catch {
+    // ignore
   }
 }
 
