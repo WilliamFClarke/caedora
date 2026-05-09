@@ -6,6 +6,7 @@ export interface FileEntry {
   type: 'file' | 'dir'
   size?: number
   lastModified?: number  // Unix ms timestamp
+  pending?: boolean
 }
 
 // ─── Git ─────────────────────────────────────────────────────────────────────
