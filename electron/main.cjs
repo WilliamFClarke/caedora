@@ -1,10 +1,11 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron')
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const git = require('isomorphic-git')
 
 const GIT_AUTHOR = { name: 'personal-md', email: 'local@personal-md' }
+const ENABLE_NATIVE_WINDOW_SHADOW = process.platform === 'win32'
 
 let mainWindow = null
 
@@ -23,6 +24,20 @@ function createWindow() {
     minHeight: 640,
     show: false,
     title: 'personal-md',
+    autoHideMenuBar: true,
+    transparent: !ENABLE_NATIVE_WINDOW_SHADOW,
+    backgroundColor: ENABLE_NATIVE_WINDOW_SHADOW ? '#111827' : '#00000000',
+    hasShadow: true,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: 12, y: 12 } }
+      : {
+          titleBarOverlay: {
+            color: '#00000000',
+            symbolColor: '#64748b',
+            height: 44,
+          },
+        }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -30,6 +45,9 @@ function createWindow() {
       sandbox: true,
     },
   })
+  mainWindow.setHasShadow(true)
+  mainWindow.setMenuBarVisibility(false)
+  applyTransparency(mainWindow, true)
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
@@ -58,6 +76,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null)
   registerIpc()
   createWindow()
 
@@ -71,6 +90,19 @@ app.on('window-all-closed', () => {
 })
 
 function registerIpc() {
+  ipcMain.handle('window:setTransparency', (event, enabled) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    applyTransparency(win, Boolean(enabled))
+  })
+
+  ipcMain.handle('window:toggleMaximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
+  })
+
   ipcMain.handle('vault:selectDirectory', async (_event, options = {}) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: options.title || 'Select vault folder',
@@ -280,6 +312,25 @@ function registerIpc() {
     }
     return response.json()
   })
+}
+
+function applyTransparency(win, enabled) {
+  win.setHasShadow(true)
+
+  if (process.platform === 'win32') {
+    win.setBackgroundColor('#111827')
+    if (typeof win.setBackgroundMaterial === 'function') {
+      win.setBackgroundMaterial(enabled ? 'acrylic' : 'none')
+    }
+    return
+  }
+
+  win.setBackgroundColor(enabled ? '#00000000' : '#111827')
+
+  if (process.platform === 'darwin') {
+    win.setVibrancy(enabled ? 'sidebar' : null, { animationDuration: 140 })
+    return
+  }
 }
 
 function describeRoot(rootPath) {

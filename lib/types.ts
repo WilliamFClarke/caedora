@@ -6,6 +6,7 @@ export interface FileEntry {
   type: 'file' | 'dir'
   size?: number
   lastModified?: number  // Unix ms timestamp
+  pending?: boolean
 }
 
 // ─── Git ─────────────────────────────────────────────────────────────────────
@@ -66,6 +67,7 @@ export interface VaultProvider {
 
 export type VaultStatus =
   | { state: 'idle' }
+  | { state: 'checking' }
   | { state: 'connecting' }
   | { state: 'permission-required'; folderName: string }  // handle in IDB, permission revoked
   | { state: 'ready'; providerType: 'local' | 'github' }

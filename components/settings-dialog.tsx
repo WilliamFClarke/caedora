@@ -34,10 +34,16 @@ import { Separator } from '@/components/ui/separator'
 import { ModeToggle } from '@/components/mode-toggle'
 import { ConnectDialog } from '@/components/connect-dialog'
 import { Input } from '@/components/ui/input'
-import { LOCAL_LLM_PRESETS, SYNC_INTERVAL_OPTIONS, type LocalLlmSettings } from '@/lib/settings'
+import {
+  APPEARANCE_PALETTES,
+  LOCAL_LLM_PRESETS,
+  SYNC_INTERVAL_OPTIONS,
+  type LocalLlmSettings,
+} from '@/lib/settings'
 import { useSettings } from '@/lib/settings-context'
 import { useVault } from '@/lib/vault-context'
 import { testLocalLlmConnection, type LocalLlmTestResult } from '@/lib/local-llm'
+import { getDesktopApi } from '@/lib/desktop'
 import { getActiveVaultId, listVaults, removeVault } from '@/lib/storage'
 import type { PersistedVaultState } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -506,6 +512,9 @@ function EditorSettings() {
 }
 
 function AppearanceSettings() {
+  const { settings, updateSettings } = useSettings()
+  const isDesktop = Boolean(getDesktopApi())
+
   return (
     <ItemGroup>
       <Item>
@@ -519,6 +528,126 @@ function AppearanceSettings() {
           <ModeToggle />
         </ItemActions>
       </Item>
+      <Separator />
+      <Item className="items-start">
+        <ItemContent>
+          <ItemTitle>Color palette</ItemTitle>
+          <ItemDescription>
+            Choose app colors separately from light and dark appearance.
+          </ItemDescription>
+          <div className="grid w-full grid-cols-1 gap-2 pt-3 sm:grid-cols-2">
+            {APPEARANCE_PALETTES.map((palette) => {
+              const selected = settings.appearancePalette === palette.id
+              const swatches =
+                palette.id === 'custom'
+                  ? customPaletteSwatches(settings.customPaletteHex)
+                  : palette.swatches
+              return (
+                <button
+                  key={palette.id}
+                  type="button"
+                  onClick={() => updateSettings({ appearancePalette: palette.id })}
+                  aria-pressed={selected}
+                  className={cn(
+                    'border-border bg-card hover:bg-accent flex min-h-24 flex-col justify-between rounded-md border p-3 text-left transition',
+                    selected && 'border-primary ring-primary/30 ring-2'
+                  )}
+                >
+                  <span className="flex items-center justify-between gap-3">
+                    <span>
+                      <span className="block text-sm font-medium">{palette.label}</span>
+                      <span className="text-muted-foreground block text-xs">
+                        {palette.description}
+                      </span>
+                    </span>
+                    {selected && <CircleCheck className="text-primary size-4 shrink-0" />}
+                  </span>
+                  <span className="mt-3 grid grid-cols-4 overflow-hidden rounded-sm border">
+                    {swatches.map((color) => (
+                      <span
+                        key={color}
+                        className="h-7"
+                        style={{ backgroundColor: color }}
+                        aria-hidden="true"
+                      />
+                    ))}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          {settings.appearancePalette === 'custom' && (
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input
+                value={settings.customPaletteHex}
+                onChange={(event) => {
+                  const value = event.target.value
+                  updateSettings({
+                    customPaletteHex: value,
+                    appearancePalette: isValidHex(value) ? 'custom' : settings.appearancePalette,
+                  })
+                }}
+                placeholder="#5b8cff"
+                aria-label="Custom palette hex color"
+                className={cn(
+                  'font-mono sm:max-w-40',
+                  !isValidHex(settings.customPaletteHex) && 'border-destructive'
+                )}
+              />
+              <input
+                type="color"
+                value={
+                  isValidHex(settings.customPaletteHex)
+                    ? normalizeHex(settings.customPaletteHex)
+                    : '#5b8cff'
+                }
+                onChange={(event) =>
+                  updateSettings({
+                    customPaletteHex: event.target.value,
+                    appearancePalette: 'custom',
+                  })
+                }
+                aria-label="Pick custom palette color"
+                className="border-border bg-background h-9 w-12 rounded-md border p-1"
+              />
+              {!isValidHex(settings.customPaletteHex) && (
+                <span className="text-destructive text-xs">Use a 6-digit hex color.</span>
+              )}
+            </div>
+          )}
+        </ItemContent>
+      </Item>
+      {isDesktop && (
+        <>
+          <Separator />
+          <Item>
+            <ItemContent>
+              <ItemTitle>Desktop transparency</ItemTitle>
+              <ItemDescription>
+                Use a translucent blurred sidebar in the desktop app.
+              </ItemDescription>
+            </ItemContent>
+            <ItemActions>
+              <button
+                type="button"
+                onClick={() =>
+                  updateSettings({
+                    desktopTransparencyEnabled: !settings.desktopTransparencyEnabled,
+                  })
+                }
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="Toggle desktop transparency"
+              >
+                {settings.desktopTransparencyEnabled ? (
+                  <ToggleRight className="text-primary size-7" />
+                ) : (
+                  <ToggleLeft className="size-7" />
+                )}
+              </button>
+            </ItemActions>
+          </Item>
+        </>
+      )}
     </ItemGroup>
   )
 }
@@ -541,6 +670,20 @@ function HotkeySettings() {
 function vaultLabel(state: PersistedVaultState): string {
   if (state.type === 'github') return `${state.githubOwner}/${state.githubRepo}`
   return state.directoryName ?? state.directoryHandle?.name ?? 'Local vault'
+}
+
+function isValidHex(value: string): boolean {
+  return /^#?[0-9a-fA-F]{6}$/.test(value.trim())
+}
+
+function normalizeHex(value: string): string {
+  const trimmed = value.trim()
+  return trimmed.startsWith('#') ? trimmed : `#${trimmed}`
+}
+
+function customPaletteSwatches(value: string): string[] {
+  const color = isValidHex(value) ? normalizeHex(value) : '#5b8cff'
+  return ['#f7f7f7', color, '#181818', '#0f0f0f']
 }
 
 function vaultKind(state: PersistedVaultState): string {

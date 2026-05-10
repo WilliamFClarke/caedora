@@ -1,5 +1,66 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+function markDesktopShell() {
+  document.documentElement.classList.add('personal-md-desktop')
+  document.documentElement.classList.add(`personal-md-platform-${process.platform}`)
+  updateTitlebarMetrics()
+  installTitlebarDoubleClickHandler()
+}
+
+function updateTitlebarMetrics() {
+  const overlay = navigator.windowControlsOverlay
+  const rect = overlay?.getTitlebarAreaRect?.()
+  if (!rect) return
+  const reservedRight = Math.max(0, window.innerWidth - rect.x - rect.width)
+  if (reservedRight > 0) {
+    document.documentElement.style.setProperty(
+      '--desktop-window-controls-width',
+      `${Math.ceil(reservedRight)}px`
+    )
+  }
+}
+
+if (document.documentElement) {
+  markDesktopShell()
+} else {
+  window.addEventListener('DOMContentLoaded', markDesktopShell, { once: true })
+}
+
+window.addEventListener('resize', updateTitlebarMetrics)
+navigator.windowControlsOverlay?.addEventListener?.('geometrychange', updateTitlebarMetrics)
+
+function installTitlebarDoubleClickHandler() {
+  if (installTitlebarDoubleClickHandler.installed) return
+  installTitlebarDoubleClickHandler.installed = true
+
+  window.addEventListener('dblclick', (event) => {
+    if (!isCustomTitlebarDoubleClick(event)) return
+    event.preventDefault()
+    void ipcRenderer.invoke('window:toggleMaximize')
+  })
+}
+
+function isCustomTitlebarDoubleClick(event) {
+  if (event.button !== 0) return false
+  const target = event.target
+  if (!(target instanceof Element)) return false
+  if (!target.closest('.personal-md-editor-toolbar, .personal-md-home-titlebar')) return false
+  return !target.closest(
+    [
+      'button',
+      'a',
+      'input',
+      'textarea',
+      'select',
+      '[role="button"]',
+      '[role="menuitem"]',
+      '[role="checkbox"]',
+      '[contenteditable="true"]',
+      '[data-radix-collection-item]',
+    ].join(',')
+  )
+}
+
 contextBridge.exposeInMainWorld('personalMdDesktop', {
   isDesktop: true,
   platform: process.platform,
@@ -30,5 +91,8 @@ contextBridge.exposeInMainWorld('personalMdDesktop', {
     testConnection: (config) => ipcRenderer.invoke('localLlm:testConnection', config),
     chatCompletion: (config, messages) =>
       ipcRenderer.invoke('localLlm:chatCompletion', config, messages),
+  },
+  window: {
+    setTransparency: (enabled) => ipcRenderer.invoke('window:setTransparency', enabled),
   },
 })

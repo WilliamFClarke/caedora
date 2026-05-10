@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Calendar,
+  Check,
   ChevronRight,
   ChevronsUpDown,
   FileText,
@@ -13,13 +13,12 @@ import {
   FolderInput,
   FolderOpen,
   Github,
-  Hash,
-  Inbox,
   Loader2,
   RefreshCw,
   Settings,
   Sparkles,
   Pencil,
+  Palette,
   Search,
   Star,
   Trash2,
@@ -37,6 +36,15 @@ import { getActiveVaultId, listVaults } from '@/lib/storage'
 import type { FileEntry, PersistedVaultState, VaultProvider } from '@/lib/types'
 import { LOCKED_PATHS } from '@/lib/vault-index'
 import { cn } from '@/lib/utils'
+import {
+  FOLDER_COLORS,
+  FOLDER_ICONS,
+  folderColorValue,
+  folderIconComponent,
+  randomFolderAppearance,
+  suggestedFolderAppearance,
+  type FolderAppearance,
+} from '@/lib/folder-appearance'
 import {
   Collapsible,
   CollapsibleContent,
@@ -69,15 +77,14 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarRail,
+  useSidebar,
 } from '@/components/ui/sidebar'
 
 interface AppSidebarProps {
@@ -88,7 +95,13 @@ interface AppSidebarProps {
   onTogglePin: (path: string) => void
   onSelect: (path: string) => void
   onCreateFile: (parent: string, name: string) => Promise<void>
-  onCreateFolder: (parent: string, name: string) => void
+  onCreateFolder: (parent: string, name: string, appearance: FolderAppearance) => void
+  folderAppearances: Record<string, FolderAppearance>
+  onSetFolderAppearance: (path: string, appearance: FolderAppearance) => void
+  onSetManyFolderAppearances: (appearances: Record<string, FolderAppearance>) => void
+  onTemplateImported: (paths: string[]) => void
+  onTemplateImportFailed: (paths: string[]) => void
+  onTemplateImportSettled: (paths: string[]) => void
   onRenamePath: (from: string, to: string) => Promise<void>
   onDeletePath: (path: string) => Promise<void>
   onSync?: () => Promise<void>
@@ -99,6 +112,7 @@ interface TreeNodeT {
   path: string
   type: 'file' | 'dir'
   children: TreeNodeT[]
+  pending?: boolean
 }
 
 function buildTree(entries: FileEntry[]): TreeNodeT {
@@ -129,10 +143,14 @@ function buildTree(entries: FileEntry[]): TreeNodeT {
           path: e.path,
           type: 'dir',
           children: [],
+          pending: e.pending,
         }
         const parent = dirMap.get(parts.slice(0, -1).join('/')) ?? root
         parent.children.push(node)
         dirMap.set(e.path, node)
+      } else if (e.pending) {
+        const node = dirMap.get(e.path)
+        if (node) node.pending = true
       }
     } else {
       const parent = dirMap.get(parts.slice(0, -1).join('/')) ?? root
@@ -141,6 +159,7 @@ function buildTree(entries: FileEntry[]): TreeNodeT {
         path: e.path,
         type: 'file',
         children: [],
+        pending: e.pending,
       })
     }
   }
@@ -153,14 +172,6 @@ function buildTree(entries: FileEntry[]): TreeNodeT {
   }
   sortNode(root)
   return root
-}
-
-function folderIconFor(name: string) {
-  const n = name.toLowerCase()
-  if (n === 'daily' || n === 'journal') return Calendar
-  if (n === 'meetings' || n === 'inbox') return Inbox
-  if (n === 'reading' || n === 'tags') return Hash
-  return Folder
 }
 
 function displayName(name: string): string {
@@ -181,6 +192,7 @@ type CreatingState = {
   parent: string
   kind: 'file' | 'folder'
   defaultName: string
+  appearance?: FolderAppearance
 }
 
 type StoredVault = { id: string; state: PersistedVaultState }
@@ -194,13 +206,21 @@ export function AppSidebar({
   onSelect,
   onCreateFile,
   onCreateFolder,
+  folderAppearances,
+  onSetFolderAppearance,
+  onSetManyFolderAppearances,
+  onTemplateImported,
+  onTemplateImportFailed,
+  onTemplateImportSettled,
   onRenamePath,
   onDeletePath,
   onSync,
 }: AppSidebarProps) {
   const router = useRouter()
   const { connectToVault } = useVault()
+  const { state: sidebarState, setOpen: setSidebarOpen } = useSidebar()
   const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [creating, setCreating] = useState<CreatingState | null>(null)
   const [moving, setMoving] = useState<string | null>(null)
@@ -211,6 +231,9 @@ export function AppSidebar({
   const [switchingVaultId, setSwitchingVaultId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
+  const [customizingFolder, setCustomizingFolder] = useState<TreeNodeT | null>(null)
+  const [pinnedOpen, setPinnedOpen] = useState(true)
+  const [filesOpen, setFilesOpen] = useState(true)
 
   async function refreshVaults() {
     const [stored, active] = await Promise.all([listVaults(), getActiveVaultId()])
@@ -250,8 +273,10 @@ export function AppSidebar({
     setRenaming,
     setCreating,
     setMoving,
+    setCustomizingFolder,
     onCreateFile,
     onCreateFolder,
+    folderAppearances,
     onRenamePath,
     onDeletePath,
   }
@@ -259,7 +284,7 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center justify-between gap-2 px-2 pt-1">
+        <div className="flex items-center justify-between gap-2 px-2 pt-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:px-0">
           <div className="flex items-center gap-1.5">
             <div className="bg-primary text-primary-foreground flex size-5 items-center justify-center rounded-sm font-mono text-[10px] font-semibold">
               pm
@@ -268,67 +293,18 @@ export function AppSidebar({
               personal-md
             </span>
           </div>
-          <div className="group-data-[collapsible=icon]:hidden">
+          <div>
             <ModeToggle />
           </div>
         </div>
-        <div className="px-0 group-data-[collapsible=icon]:hidden">
-          <TemplateMarketplaceButton />
-        </div>
-        <div className="relative group-data-[collapsible=icon]:hidden">
-          <Search className="text-muted-foreground absolute top-1/2 left-2 size-3.5 -translate-y-1/2" />
-          <Input
-            placeholder="Search notes"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-8 pl-7 text-sm"
-          />
-        </div>
-      </SidebarHeader>
-
-      <SidebarContent>
-        {pinnedFiles.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Pinned</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {pinnedFiles.map((path) => {
-                  const name = path.split('/').pop() ?? path
-                  return (
-                    <SidebarMenuItem key={`pin-${path}`}>
-                      <SidebarMenuButton
-                        isActive={selected === path}
-                        onClick={() => onSelect(path)}
-                      >
-                        <Star className="fill-primary text-primary" />
-                        <span className="truncate">{displayName(name)}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Files</SidebarGroupLabel>
-          <SidebarGroupAction
-            title="New folder"
-            className="right-9"
-            onClick={() =>
-              setCreating({
-                parent: '',
-                kind: 'folder',
-                defaultName: nextUntitledFromTree(tree.children, 'folder'),
-              })
-            }
-          >
-            <FolderPlus />
-            <span className="sr-only">New folder</span>
-          </SidebarGroupAction>
-          <SidebarGroupAction
+        <div className="flex items-center gap-1 px-0 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:pt-1">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8"
             title="New file"
+            aria-label="New file"
             onClick={() =>
               setCreating({
                 parent: '',
@@ -337,23 +313,142 @@ export function AppSidebar({
               })
             }
           >
-            <FilePlus />
-            <span className="sr-only">New file</span>
-          </SidebarGroupAction>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {tree.children.length === 0 ? (
-                <p className="text-muted-foreground px-2 py-4 text-xs">
-                  No notes yet. Create your first one.
-                </p>
-              ) : (
-                tree.children.map((child) => (
-                  <TreeRow key={child.path} node={child} {...sharedRow} />
-                ))
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+            <FilePlus className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8"
+            title="New folder"
+            aria-label="New folder"
+            onClick={() =>
+              setCreating({
+                parent: '',
+                kind: 'folder',
+                defaultName: nextUntitledFromTree(tree.children, 'folder'),
+                appearance: randomFolderAppearance(),
+              })
+            }
+          >
+            <FolderPlus className="size-4" />
+          </Button>
+          <TemplateMarketplaceButton
+            iconOnly
+            variant="ghost"
+            onApplyFolderAppearances={onSetManyFolderAppearances}
+            onImportedFiles={onTemplateImported}
+            onImportFailed={onTemplateImportFailed}
+            onImportSettled={onTemplateImportSettled}
+          />
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8"
+            title="Search notes"
+            aria-label="Search notes"
+            aria-expanded={searchOpen}
+            onClick={() => {
+              if (sidebarState === 'collapsed') setSidebarOpen(true)
+              setSearchOpen((open) => !open)
+            }}
+          >
+            <Search className="size-4" />
+          </Button>
+        </div>
+        <div
+          className={cn(
+            'grid transition-[grid-template-rows,opacity,transform] duration-200 ease-out group-data-[collapsible=icon]:hidden',
+            searchOpen ? 'grid-rows-[1fr] opacity-100 translate-y-0' : 'grid-rows-[0fr] opacity-0 -translate-y-1'
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="relative">
+              <Search className="text-muted-foreground absolute top-1/2 left-2 size-3.5 -translate-y-1/2" />
+              <Input
+                placeholder="Search notes"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-8 pl-7 text-sm"
+                autoFocus={searchOpen}
+                tabIndex={searchOpen ? 0 : -1}
+              />
+            </div>
+          </div>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent className="group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:flex-1 group-data-[collapsible=icon]:overflow-hidden">
+        <div className="hidden flex-1 group-data-[collapsible=icon]:block" />
+        <div className="group-data-[collapsible=icon]:hidden">
+        {pinnedFiles.length > 0 && (
+          <Collapsible open={pinnedOpen} onOpenChange={setPinnedOpen}>
+            <SidebarGroup>
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground flex w-full items-center gap-1 px-2 py-1 text-xs font-medium transition-colors"
+                >
+                  <ChevronRight className={cn('size-3 transition-transform', pinnedOpen && 'rotate-90')} />
+                  <span>Pinned</span>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-out data-[state=closed]:slide-out-to-top-1 data-[state=closed]:fade-out data-[state=open]:animate-in data-[state=open]:slide-in-from-top-1 data-[state=open]:fade-in">
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {pinnedFiles.map((path) => {
+                      const name = path.split('/').pop() ?? path
+                      return (
+                        <SidebarMenuItem key={`pin-${path}`}>
+                          <SidebarMenuButton
+                            isActive={selected === path}
+                            onClick={() => onSelect(path)}
+                          >
+                            <Star className="fill-primary text-primary" />
+                            <span className="truncate">{displayName(name)}</span>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      )
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </SidebarGroup>
+          </Collapsible>
+        )}
+
+        {pinnedFiles.length > 0 && <div className="bg-sidebar-border mx-2 h-px" />}
+
+        <Collapsible open={filesOpen} onOpenChange={setFilesOpen}>
+          <SidebarGroup>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground flex w-full items-center gap-1 px-2 py-1 text-xs font-medium transition-colors"
+              >
+                <ChevronRight className={cn('size-3 transition-transform', filesOpen && 'rotate-90')} />
+                <span>Files</span>
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-out data-[state=closed]:slide-out-to-top-1 data-[state=closed]:fade-out data-[state=open]:animate-in data-[state=open]:slide-in-from-top-1 data-[state=open]:fade-in">
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {tree.children.length === 0 ? (
+                    <p className="text-muted-foreground px-2 py-4 text-xs">
+                      No notes yet. Create your first one.
+                    </p>
+                  ) : (
+                    tree.children.map((child) => (
+                      <TreeRow key={child.path} node={child} {...sharedRow} />
+                    ))
+                  )}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </SidebarGroup>
+        </Collapsible>
+        </div>
       </SidebarContent>
 
       <SidebarFooter>
@@ -365,7 +460,7 @@ export function AppSidebar({
           <Sparkles className="size-3.5" />
           Connect your AI
         </button>
-        <div className="flex items-center gap-1.5 px-2 pb-1 group-data-[collapsible=icon]:hidden">
+        <div className="flex items-center gap-1.5 px-2 pb-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <VaultSwitcher
             vaults={vaults}
             activeVaultId={activeVaultId}
@@ -385,6 +480,7 @@ export function AppSidebar({
               setSettingsSection('vaults')
               setSettingsOpen(true)
             }}
+            className="group-data-[collapsible=icon]:hidden"
           />
           <div className="hidden">
             <span
@@ -398,7 +494,7 @@ export function AppSidebar({
               ...
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 group-data-[collapsible=icon]:flex-col">
             {onSync && (
               <button
                 type="button"
@@ -447,13 +543,29 @@ export function AppSidebar({
 
       <CreateItemDialog
         creating={creating}
-        onSubmit={async (name) => {
+        folders={folders}
+        onSubmit={async (parent, name, appearance) => {
           if (!creating) return
-          if (creating.kind === 'file') await onCreateFile(creating.parent, name)
-          else onCreateFolder(creating.parent, name)
+          if (creating.kind === 'file') await onCreateFile(parent, name)
+          else onCreateFolder(parent, name, appearance ?? randomFolderAppearance(name))
           setCreating(null)
         }}
         onClose={() => setCreating(null)}
+      />
+
+      <FolderAppearanceDialog
+        folder={customizingFolder}
+        appearance={
+          customizingFolder
+            ? folderAppearances[customizingFolder.path] ?? suggestedFolderAppearance(customizingFolder.path)
+            : null
+        }
+        onSubmit={(appearance) => {
+          if (!customizingFolder) return
+          onSetFolderAppearance(customizingFolder.path, appearance)
+          setCustomizingFolder(null)
+        }}
+        onClose={() => setCustomizingFolder(null)}
       />
 
       {moving && (
@@ -484,8 +596,10 @@ interface TreeRowProps {
   setRenaming: (path: string | null) => void
   setCreating: (v: CreatingState | null) => void
   setMoving: (path: string | null) => void
+  setCustomizingFolder: (node: TreeNodeT | null) => void
   onCreateFile: (parent: string, name: string) => Promise<void>
-  onCreateFolder: (parent: string, name: string) => void
+  onCreateFolder: (parent: string, name: string, appearance: FolderAppearance) => void
+  folderAppearances: Record<string, FolderAppearance>
   onRenamePath: (from: string, to: string) => Promise<void>
   onDeletePath: (path: string) => Promise<void>
 }
@@ -496,12 +610,14 @@ function VaultSwitcher({
   switchingVaultId,
   onSwitch,
   onManage,
+  className,
 }: {
   vaults: StoredVault[]
   activeVaultId: string | null
   switchingVaultId: string | null
   onSwitch: (id: string) => Promise<void>
   onManage: () => void
+  className?: string
 }) {
   const activeVault = vaults.find((vault) => vault.id === activeVaultId) ?? vaults[0]
   const label = activeVault ? vaultLabel(activeVault.state) : 'Vault'
@@ -511,7 +627,10 @@ function VaultSwitcher({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="hover:bg-sidebar-accent flex h-8 min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 text-left text-sm"
+          className={cn(
+            'hover:bg-sidebar-accent flex h-8 min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 text-left text-sm',
+            className
+          )}
           aria-label="Switch vault"
         >
           <span className="truncate font-medium">{label}</span>
@@ -579,12 +698,15 @@ function FolderRow(props: TreeRowProps) {
     renaming,
     setRenaming,
     setCreating,
+    setCustomizingFolder,
+    folderAppearances,
     onRenamePath,
     onDeletePath,
   } = props
   const [open, setOpen] = useState(true)
   const isRenaming = renaming === node.path
-  const Icon = folderIconFor(node.name)
+  const appearance = folderAppearances[node.path] ?? suggestedFolderAppearance(node.path)
+  const Icon = folderIconComponent(appearance.icon)
 
   return (
     <SidebarMenuItem>
@@ -597,9 +719,9 @@ function FolderRow(props: TreeRowProps) {
           <ContextMenuTrigger asChild>
             <div className="relative">
               <CollapsibleTrigger asChild>
-                <SidebarMenuButton>
+                <SidebarMenuButton className={cn(node.pending && 'opacity-55')}>
                   <ChevronRight className="transition-transform" />
-                  <Icon className="text-muted-foreground" />
+                  <Icon style={{ color: folderColorValue(appearance.color) }} />
                   {isRenaming ? (
                     <InlineInput
                       initial={node.name}
@@ -614,6 +736,7 @@ function FolderRow(props: TreeRowProps) {
                   ) : (
                     <span className="truncate">{node.name}</span>
                   )}
+                  {node.pending && <Loader2 className="ml-auto size-3 animate-spin" />}
                 </SidebarMenuButton>
               </CollapsibleTrigger>
             </div>
@@ -639,6 +762,7 @@ function FolderRow(props: TreeRowProps) {
                   parent: node.path,
                   kind: 'folder',
                   defaultName: nextUntitledFromTree(node.children, 'folder'),
+                  appearance: randomFolderAppearance(node.path),
                 })
               }}
             >
@@ -649,6 +773,10 @@ function FolderRow(props: TreeRowProps) {
             <ContextMenuItem onSelect={() => setRenaming(node.path)}>
               <Pencil />
               Rename
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => setCustomizingFolder(node)}>
+              <Palette />
+              Set icon and colour
             </ContextMenuItem>
             <ContextMenuItem
               variant="destructive"
@@ -700,6 +828,7 @@ function FileRow(props: TreeRowProps) {
         <ContextMenuTrigger asChild>
           <SidebarMenuButton
             isActive={isSel}
+            className={cn(node.pending && 'opacity-55')}
             onClick={() => {
               if (!isRenaming) onSelect(node.path)
             }}
@@ -720,13 +849,16 @@ function FileRow(props: TreeRowProps) {
             ) : (
               <span className="truncate">{displayName(node.name)}</span>
             )}
+            {node.pending && <Loader2 className="ml-auto size-3 animate-spin" />}
           </SidebarMenuButton>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onSelect={() => onTogglePin(node.path)}>
-            <Star className={cn(isPinned && 'fill-current')} />
-            {isPinned ? 'Unpin' : 'Pin'}
-          </ContextMenuItem>
+          {!node.pending && (
+            <ContextMenuItem onSelect={() => onTogglePin(node.path)}>
+              <Star className={cn(isPinned && 'fill-current')} />
+              {isPinned ? 'Unpin' : 'Pin'}
+            </ContextMenuItem>
+          )}
           {!isLocked && (
             <>
               <ContextMenuSeparator />
@@ -752,7 +884,7 @@ function FileRow(props: TreeRowProps) {
           )}
         </ContextMenuContent>
       </ContextMenu>
-      {!isRenaming && (
+      {!isRenaming && !node.pending && (
         <button
           type="button"
           aria-label={isPinned ? 'Unpin' : 'Pin'}
@@ -817,16 +949,144 @@ function InlineInput({
   )
 }
 
+function FolderAppearanceDialog({
+  folder,
+  appearance,
+  onSubmit,
+  onClose,
+}: {
+  folder: TreeNodeT | null
+  appearance: FolderAppearance | null
+  onSubmit: (appearance: FolderAppearance) => void
+  onClose: () => void
+}) {
+  const [draft, setDraft] = useState<FolderAppearance>(appearance ?? randomFolderAppearance())
+
+  useEffect(() => {
+    if (folder && appearance) setDraft(appearance)
+  }, [appearance, folder])
+
+  return (
+    <Dialog open={!!folder} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Palette className="size-4" />
+            Folder appearance
+          </DialogTitle>
+          <DialogDescription>
+            {folder ? `Set the colour and icon for "${folder.name}".` : 'Set the folder colour and icon.'}
+          </DialogDescription>
+        </DialogHeader>
+        <FolderAppearanceFields appearance={draft} onChange={setDraft} />
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={() => onSubmit(draft)}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function FolderAppearanceFields({
+  appearance,
+  onChange,
+}: {
+  appearance: FolderAppearance
+  onChange: (appearance: FolderAppearance) => void
+}) {
+  const Icon = folderIconComponent(appearance.icon)
+
+  return (
+    <div className="grid gap-4">
+      <div className="flex items-center gap-3 rounded-md border px-3 py-2">
+        <Icon className="size-5" style={{ color: folderColorValue(appearance.color) }} />
+        <span className="text-sm">{appearanceLabel(appearance)}</span>
+      </div>
+
+      <div className="grid gap-2">
+        <Label>Colour</Label>
+        <div className="flex flex-wrap gap-2">
+          {FOLDER_COLORS.map((color) => {
+            const selected = appearance.color === color.id
+            return (
+              <button
+                key={color.id}
+                type="button"
+                onClick={() => onChange({ ...appearance, color: color.id })}
+                className={cn(
+                  'flex size-8 items-center justify-center rounded-md border transition',
+                  selected ? 'border-foreground' : 'border-border hover:border-foreground/50'
+                )}
+                aria-label={`Use ${color.name}`}
+                title={color.name}
+              >
+                <span
+                  className="size-4 rounded-full"
+                  style={{ backgroundColor: color.value }}
+                />
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        <Label>Icon</Label>
+        <div className="grid grid-cols-8 gap-1.5">
+          {FOLDER_ICONS.map((item) => {
+            const selected = appearance.icon === item.id
+            const OptionIcon = item.icon
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onChange({ ...appearance, icon: item.id })}
+                className={cn(
+                  'flex size-8 items-center justify-center rounded-md border transition',
+                  selected ? 'border-foreground bg-accent' : 'border-border hover:border-foreground/50'
+                )}
+                aria-label={`Use ${item.name} icon`}
+                title={item.name}
+              >
+                {selected ? (
+                  <Check className="size-3.5" />
+                ) : (
+                  <OptionIcon className="size-3.5" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function appearanceLabel(appearance: FolderAppearance): string {
+  const color = FOLDER_COLORS.find((item) => item.id === appearance.color)?.name ?? 'Custom'
+  const icon = FOLDER_ICONS.find((item) => item.id === appearance.icon)?.name ?? 'Folder'
+  return `${color} ${icon}`
+}
+
 function CreateItemDialog({
   creating,
+  folders,
   onSubmit,
   onClose,
 }: {
   creating: CreatingState | null
-  onSubmit: (name: string) => Promise<void>
+  folders: string[]
+  onSubmit: (parent: string, name: string, appearance?: FolderAppearance) => Promise<void>
   onClose: () => void
 }) {
   const [value, setValue] = useState('')
+  const [parent, setParent] = useState('')
+  const [appearance, setAppearance] = useState<FolderAppearance>(randomFolderAppearance())
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -834,6 +1094,8 @@ function CreateItemDialog({
   useEffect(() => {
     if (creating) {
       setValue(creating.defaultName)
+      setParent('')
+      setAppearance(creating.appearance ?? randomFolderAppearance(creating.defaultName))
       setError(null)
       setBusy(false)
       const t = setTimeout(() => inputRef.current?.select(), 80)
@@ -844,13 +1106,7 @@ function CreateItemDialog({
   const isFile = creating?.kind === 'file'
   const label = isFile ? 'Note name' : 'Folder name'
   const title = isFile ? 'New note' : 'New folder'
-  const description = isFile
-    ? creating?.parent
-      ? `Inside "${creating.parent}"`
-      : 'At the top level of your vault'
-    : creating?.parent
-      ? `Inside "${creating.parent}"`
-      : 'At the top level of your vault'
+  const description = 'Choose where to create it. New items default to the vault root.'
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault()
@@ -859,7 +1115,7 @@ function CreateItemDialog({
     setBusy(true)
     setError(null)
     try {
-      await onSubmit(trimmed)
+      await onSubmit(parent, trimmed, isFile ? undefined : appearance)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setBusy(false)
@@ -890,6 +1146,32 @@ function CreateItemDialog({
             />
             {error && <p className="text-destructive text-xs">{error}</p>}
           </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="create-item-parent">Location</Label>
+            <select
+              id="create-item-parent"
+              value={parent}
+              onChange={(e) => setParent(e.target.value)}
+              disabled={busy}
+              className={cn(
+                'border-input bg-background ring-offset-background h-9 rounded-md border px-3 text-sm shadow-xs outline-hidden',
+                'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]'
+              )}
+            >
+              <option value=""></option>
+              {folders.map((folder) => (
+                <option key={folder} value={folder}>
+                  {folder}
+                </option>
+              ))}
+            </select>
+          </div>
+          {!isFile && (
+            <FolderAppearanceFields
+              appearance={appearance}
+              onChange={setAppearance}
+            />
+          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
               Cancel

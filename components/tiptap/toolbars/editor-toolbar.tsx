@@ -43,10 +43,13 @@ export const EditorToolbar = ({ editor }: { editor: Editor }) => {
   const collapseLevel = useToolbarCollapseLevel(toolbarRef);
 
   return (
-    <div className="sticky top-0 z-20 w-full min-w-0 border-b bg-card">
+    <div className="personal-md-editor-toolbar sticky top-0 z-20 h-11 w-full min-w-0 border-b bg-card">
       <ToolbarProvider editor={editor}>
         <TooltipProvider>
-          <div ref={toolbarRef} className="flex w-full min-w-0 max-w-full items-center overflow-hidden px-2 py-1">
+          <div
+            ref={toolbarRef}
+            className="flex h-11 w-full min-w-0 max-w-full items-center overflow-hidden px-2 py-0"
+          >
             <div
               className="flex min-w-0 flex-1 basis-0 items-center gap-0.5 overflow-hidden"
             >
@@ -242,7 +245,9 @@ function useToolbarCollapseLevel(toolbarRef: React.RefObject<HTMLDivElement | nu
 
     const update = () => {
       const width = toolbar.getBoundingClientRect().width;
-      setLevel((currentLevel) => collapseLevelForWidth(width, currentLevel));
+      setLevel((currentLevel) =>
+        collapseLevelForWidth(width - desktopWindowControlsWidth(), currentLevel)
+      );
     };
 
     update();
@@ -259,6 +264,27 @@ function useToolbarCollapseLevel(toolbarRef: React.RefObject<HTMLDivElement | nu
   }, [toolbarRef]);
 
   return level;
+}
+
+function desktopWindowControlsWidth(): number {
+  if (typeof window === "undefined") return 0;
+  if (!document.documentElement.classList.contains("personal-md-desktop")) return 0;
+  if (document.documentElement.classList.contains("personal-md-platform-darwin")) return 0;
+
+  const overlay = (
+    navigator as Navigator & {
+      windowControlsOverlay?: {
+        getTitlebarAreaRect?: () => { x: number; width: number };
+      };
+    }
+  ).windowControlsOverlay;
+  const rect = overlay?.getTitlebarAreaRect?.();
+  if (rect) {
+    const reservedRight = Math.max(0, window.innerWidth - rect.x - rect.width);
+    if (reservedRight > 0) return reservedRight;
+  }
+
+  return 144;
 }
 
 function collapseLevelForWidth(width: number, currentLevel: number): number {

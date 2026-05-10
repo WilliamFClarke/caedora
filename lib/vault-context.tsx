@@ -22,7 +22,7 @@ import type { VaultContextValue, VaultProvider, VaultStatus } from './types'
 
 const defaultContext: VaultContextValue = {
   provider: null,
-  status: { state: 'idle' },
+  status: { state: 'checking' },
   connectLocal: async () => null,
   connectDesktopLocal: async () => {},
   connectGitHub: async () => {},
@@ -35,7 +35,7 @@ const VaultContext = createContext<VaultContextValue>(defaultContext)
 
 export function VaultContextProvider({ children }: { children: ReactNode }) {
   const [provider, setProvider] = useState<VaultProvider | null>(null)
-  const [status, setStatus] = useState<VaultStatus>({ state: 'idle' })
+  const [status, setStatus] = useState<VaultStatus>({ state: 'checking' })
 
   // On mount: restore vault from IndexedDB
   useEffect(() => {

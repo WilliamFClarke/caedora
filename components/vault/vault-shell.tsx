@@ -6,10 +6,13 @@ import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
+import { getActiveVaultId } from '@/lib/storage/idb'
 import { seedEmptyVault, WELCOME_PATH, SKILL_PATH, INDEX_PATH } from '@/lib/vault-create'
 import { rebuildVaultIndex, LOCKED_PATHS } from '@/lib/vault-index'
 import { slugifyFilename } from '@/lib/frontmatter'
 import { usePinned } from '@/hooks/use-pinned'
+import { useFolderAppearance } from '@/hooks/use-folder-appearance'
+import type { FolderAppearance } from '@/lib/folder-appearance'
 import type { FileEntry, VaultProvider } from '@/lib/types'
 import {
   SidebarInset,
@@ -25,18 +28,31 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const router = useRouter()
   const { provider, status } = useVault()
   const [entries, setEntries] = useState<FileEntry[]>([])
+  const [pendingEntries, setPendingEntries] = useState<Record<string, FileEntry>>({})
   const [selected, setSelected] = useState<string | null>(initialPath)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [virtualFolders, setVirtualFolders] = useState<Set<string>>(new Set())
   const [seeding, setSeeding] = useState(false)
   const [syncNonce, setSyncNonce] = useState(0)
+  const [activeVaultId, setActiveVaultIdState] = useState<string | null>(null)
   const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
+  const {
+    folderAppearances,
+    setFolderAppearance,
+    setManyFolderAppearances,
+    renameFolderAppearance,
+    removeFolderAppearance,
+  } = useFolderAppearance(activeVaultId)
   const didAutoSelect = useRef(false)
   const didAutoSeed = useRef(false)
   const initialPathRef = useRef(initialPath)
   initialPathRef.current = initialPath
   // Holds the editor's saveNow fn so Sync can flush unsaved changes first.
   const editorSaveRef = useRef<(() => Promise<void>) | null>(null)
+
+  useEffect(() => {
+    void getActiveVaultId().then(setActiveVaultIdState)
+  }, [provider])
 
   // Update the URL without triggering a Next.js route transition. router.push
   // would refetch the RSC for /vault/[...path], painting an empty frame between
@@ -107,6 +123,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
 
       const mdEntries = all.filter((e) => e.type === 'dir' || e.name.endsWith('.md'))
       setEntries((prev) => (sameEntries(prev, mdEntries) ? prev : mdEntries))
+      setPendingEntries((prev) => pruneVisiblePending(prev, mdEntries))
       setLoadError(null)
 
       // Prune virtual folders that now exist as real paths
@@ -182,15 +199,17 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   }, [provider, entries])
 
   const combinedEntries = useMemo(() => {
-    if (virtualFolders.size === 0) return entries
+    const byPath = new Map(entries.map((entry) => [entry.path, entry]))
     const existing = new Set(entries.filter((e) => e.type === 'dir').map((e) => e.path))
-    const extras: FileEntry[] = []
     for (const path of virtualFolders) {
       if (existing.has(path)) continue
-      extras.push({ path, name: path.split('/').pop() ?? path, type: 'dir' })
+      byPath.set(path, { path, name: path.split('/').pop() ?? path, type: 'dir' })
     }
-    return [...entries, ...extras]
-  }, [entries, virtualFolders])
+    for (const [path, entry] of Object.entries(pendingEntries)) {
+      if (!byPath.has(path)) byPath.set(path, entry)
+    }
+    return [...byPath.values()]
+  }, [entries, pendingEntries, virtualFolders])
 
   const onSelect = useCallback(
     (path: string) => {
@@ -217,21 +236,37 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       // Optimistic: show the new file immediately. Don't call refreshEntries
       // here — for GitHub the API lags and a stale listing would overwrite this.
       // Polling reconciles within 10–30 s.
-      setEntries((prev) =>
-        prev.some((e) => e.path === fullPath)
-          ? prev
-          : [...prev, { path: fullPath, name: fileName, type: 'file' }]
-      )
+      setPendingEntries((prev) => removeExactPendingEntries(prev, [fullPath]))
+      setEntries((prev) => mergeEntries(prev, entriesForPaths([fullPath])))
       setSelected(fullPath)
       syncUrl(fullPath)
     },
     [provider, syncUrl]
   )
 
-  const onCreateFolder = useCallback((parent: string, name: string) => {
-    const slug = slugifyFilename(name)
-    const fullPath = parent ? `${parent}/${slug}` : slug
-    setVirtualFolders((prev) => new Set(prev).add(fullPath))
+  const onCreateFolder = useCallback(
+    (parent: string, name: string, appearance: FolderAppearance) => {
+      const slug = slugifyFilename(name)
+      const fullPath = parent ? `${parent}/${slug}` : slug
+      setVirtualFolders((prev) => new Set(prev).add(fullPath))
+      setFolderAppearance(fullPath, appearance)
+    },
+    [setFolderAppearance]
+  )
+
+  const onTemplateImported = useCallback((paths: string[]) => {
+    if (paths.length === 0) return
+    setPendingEntries((prev) => ({ ...pendingEntriesForPaths(paths), ...prev }))
+  }, [])
+
+  const onTemplateImportFailed = useCallback((paths: string[]) => {
+    setPendingEntries((prev) => removeExactPendingEntries(prev, paths))
+  }, [])
+
+  const onTemplateImportSettled = useCallback((paths: string[]) => {
+    if (paths.length === 0) return
+    setPendingEntries((prev) => removeExactPendingEntries(prev, paths))
+    setEntries((prev) => mergeEntries(prev, entriesForPaths(paths)))
   }, [])
 
   const onRenamePath = useCallback(
@@ -260,10 +295,13 @@ export function VaultShell({ initialPath }: VaultShellProps) {
           }
           return next
         })
+        renameFolderAppearance(from, to)
         return
       }
       await provider.renamePath(from, to)
       renamePinned(from, to)
+      renameFolderAppearance(from, to)
+      setPendingEntries((prev) => renamePendingEntries(prev, from, to))
       if (!provider.writesAreCommits) {
         await provider.commit(`Rename ${from} to ${to}`, [to])
       }
@@ -289,7 +327,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         syncUrl(newSelected, 'replace')
       }
     },
-    [provider, virtualFolders, selected, syncUrl, renamePinned]
+    [provider, virtualFolders, selected, syncUrl, renamePinned, renameFolderAppearance]
   )
 
   const onDeletePath = useCallback(
@@ -307,10 +345,13 @@ export function VaultShell({ initialPath }: VaultShellProps) {
           }
           return next
         })
+        removeFolderAppearance(path)
         return
       }
       await provider.deletePath(path)
       removePinned(path)
+      removeFolderAppearance(path)
+      setPendingEntries((prev) => removePendingEntries(prev, path))
       if (!provider.writesAreCommits) {
         await provider.commit(`Delete ${path}`, [])
       }
@@ -323,7 +364,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         syncUrl(null, 'replace')
       }
     },
-    [provider, virtualFolders, selected, syncUrl, removePinned]
+    [provider, virtualFolders, selected, syncUrl, removePinned, removeFolderAppearance]
   )
 
   const onSync = useCallback(async () => {
@@ -365,6 +406,12 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         onSelect={onSelect}
         onCreateFile={onCreateFile}
         onCreateFolder={onCreateFolder}
+        folderAppearances={folderAppearances}
+        onSetFolderAppearance={setFolderAppearance}
+        onSetManyFolderAppearances={setManyFolderAppearances}
+        onTemplateImported={onTemplateImported}
+        onTemplateImportFailed={onTemplateImportFailed}
+        onTemplateImportSettled={onTemplateImportSettled}
         onRenamePath={onRenamePath}
         onDeletePath={onDeletePath}
         onSync={onSync}
@@ -419,6 +466,108 @@ function sameEntries(a: FileEntry[], b: FileEntry[]): boolean {
     if (a[i].path !== b[i].path || a[i].type !== b[i].type) return false
   }
   return true
+}
+
+function pendingEntriesForPaths(paths: string[]): Record<string, FileEntry> {
+  const out = entriesForPaths(paths)
+  for (const entry of Object.values(out)) {
+    entry.pending = true
+  }
+  return out
+}
+
+function entriesForPaths(paths: string[]): Record<string, FileEntry> {
+  const out: Record<string, FileEntry> = {}
+  for (const path of paths) {
+    const parts = path.split('/')
+    for (let i = 1; i < parts.length; i++) {
+      const folderPath = parts.slice(0, i).join('/')
+      out[folderPath] = {
+        path: folderPath,
+        name: parts[i - 1],
+        type: 'dir',
+      }
+    }
+    out[path] = {
+      path,
+      name: parts[parts.length - 1] ?? path,
+      type: 'file',
+    }
+  }
+  return out
+}
+
+function mergeEntries(current: FileEntry[], incoming: Record<string, FileEntry>): FileEntry[] {
+  const byPath = new Map(current.map((entry) => [entry.path, entry]))
+  for (const [path, entry] of Object.entries(incoming)) {
+    byPath.set(path, entry)
+  }
+  return [...byPath.values()]
+}
+
+function pruneVisiblePending(
+  pending: Record<string, FileEntry>,
+  visibleEntries: FileEntry[]
+): Record<string, FileEntry> {
+  const visible = new Set(visibleEntries.map((entry) => entry.path))
+  const next: Record<string, FileEntry> = {}
+  for (const [path, entry] of Object.entries(pending)) {
+    if (!visible.has(path)) next[path] = entry
+  }
+  return next
+}
+
+function renamePendingEntries(
+  pending: Record<string, FileEntry>,
+  from: string,
+  to: string
+): Record<string, FileEntry> {
+  const next: Record<string, FileEntry> = {}
+  for (const [path, entry] of Object.entries(pending)) {
+    if (path === from || path.startsWith(`${from}/`)) {
+      const newPath = path === from ? to : `${to}${path.slice(from.length)}`
+      next[newPath] = {
+        ...entry,
+        path: newPath,
+        name: newPath.split('/').pop() ?? newPath,
+      }
+    } else {
+      next[path] = entry
+    }
+  }
+  return next
+}
+
+function removePendingEntries(
+  pending: Record<string, FileEntry>,
+  path: string
+): Record<string, FileEntry> {
+  const next: Record<string, FileEntry> = {}
+  for (const [entryPath, entry] of Object.entries(pending)) {
+    if (entryPath !== path && !entryPath.startsWith(`${path}/`)) {
+      next[entryPath] = entry
+    }
+  }
+  return next
+}
+
+function removeExactPendingEntries(
+  pending: Record<string, FileEntry>,
+  paths: string[]
+): Record<string, FileEntry> {
+  const remove = new Set<string>()
+  for (const path of paths) {
+    remove.add(path)
+    const parts = path.split('/')
+    for (let i = 1; i < parts.length; i++) {
+      remove.add(parts.slice(0, i).join('/'))
+    }
+  }
+  const next: Record<string, FileEntry> = {}
+  for (const [path, entry] of Object.entries(pending)) {
+    if (!remove.has(path)) next[path] = entry
+  }
+  return next
 }
 
 function ancestors(path: string): string[] {

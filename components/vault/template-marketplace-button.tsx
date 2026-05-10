@@ -11,10 +11,28 @@ import {
   type TemplateImportResult,
   type VaultTemplate,
 } from '@/lib/vault-templates'
+import { suggestedFolderAppearance, type FolderAppearance } from '@/lib/folder-appearance'
 import { TemplateBrowserDialog } from './template-browser-dialog'
 import { cn } from '@/lib/utils'
+import type { ButtonProps } from '@/components/ui/button'
 
-export function TemplateMarketplaceButton({ className }: { className?: string }) {
+export function TemplateMarketplaceButton({
+  className,
+  iconOnly = false,
+  variant = 'secondary',
+  onApplyFolderAppearances,
+  onImportedFiles,
+  onImportFailed,
+  onImportSettled,
+}: {
+  className?: string
+  iconOnly?: boolean
+  variant?: ButtonProps['variant']
+  onApplyFolderAppearances?: (appearances: Record<string, FolderAppearance>) => void
+  onImportedFiles?: (paths: string[]) => void
+  onImportFailed?: (paths: string[]) => void
+  onImportSettled?: (paths: string[]) => void
+}) {
   const { provider, status } = useVault()
   const [open, setOpen] = useState(false)
 
@@ -22,13 +40,23 @@ export function TemplateMarketplaceButton({ className }: { className?: string })
     async (_template: VaultTemplate, files: TemplateFile[]): Promise<TemplateImportResult> => {
       if (!provider) return { imported: [], skipped: [] }
       const entries = await listFilesRecursive(provider)
-      return importTemplateFiles(
-        provider,
-        files,
-        entries.map((entry) => entry.path)
-      )
+      const existing = new Set(entries.map((entry) => entry.path))
+      const pendingPaths = files
+        .map((file) => file.path)
+        .filter((path) => !existing.has(path))
+      onImportedFiles?.(pendingPaths)
+      let result: TemplateImportResult
+      try {
+        result = await importTemplateFiles(provider, files, existing)
+      } catch (err) {
+        onImportFailed?.(pendingPaths)
+        throw err
+      }
+      onImportSettled?.(result.imported)
+      onApplyFolderAppearances?.(folderAppearancesForFiles(result.imported))
+      return result
     },
-    [provider]
+    [onApplyFolderAppearances, onImportFailed, onImportSettled, onImportedFiles, provider]
   )
 
   if (status.state !== 'ready' || !provider) return null
@@ -37,15 +65,31 @@ export function TemplateMarketplaceButton({ className }: { className?: string })
     <>
       <Button
         type="button"
-        size="sm"
-        variant="secondary"
+        size={iconOnly ? 'icon' : 'sm'}
+        variant={variant}
         onClick={() => setOpen(true)}
-        className={cn('w-full justify-start', className)}
+        className={cn(!iconOnly && 'w-full justify-start', iconOnly && 'size-8', className)}
+        aria-label="Templates"
+        title="Templates"
       >
         <Library className="size-4" />
-        Templates
+        {!iconOnly && 'Templates'}
       </Button>
       <TemplateBrowserDialog open={open} onOpenChange={setOpen} onImport={importTemplate} />
     </>
   )
+}
+
+function folderAppearancesForFiles(paths: string[]): Record<string, FolderAppearance> {
+  const appearances: Record<string, FolderAppearance> = {}
+  for (const path of paths) {
+    const parts = path.split('/').slice(0, -1)
+    for (let i = 1; i <= parts.length; i++) {
+      const folderPath = parts.slice(0, i).join('/')
+      if (folderPath && !appearances[folderPath]) {
+        appearances[folderPath] = suggestedFolderAppearance(folderPath)
+      }
+    }
+  }
+  return appearances
 }

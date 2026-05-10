@@ -75,14 +75,39 @@ export class GitHubProvider implements VaultProvider {
   }
 
   async deleteFile(path: string): Promise<void> {
-    const sha = this.shaCache.get(path) ?? (await this._fetchSha(path))
-    const res = await fetch(`${this.base}/contents/${path}`, {
-      method: 'DELETE',
-      headers: apiHeaders(this.token),
-      body: JSON.stringify({ message: `Delete ${path}`, sha }),
-    })
-    if (!res.ok) throw new Error(`GitHub: failed to delete ${path} (${res.status})`)
-    this.shaCache.delete(path)
+    for (let attempt = 0; attempt < 4; attempt++) {
+      let sha: string
+      try {
+        sha = attempt === 0
+          ? this.shaCache.get(path) ?? (await this._fetchSha(path))
+          : await this._fetchSha(path)
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('(404)')) {
+          this.shaCache.delete(path)
+          return
+        }
+        throw err
+      }
+      const res = await fetch(`${this.base}/contents/${path}`, {
+        method: 'DELETE',
+        headers: apiHeaders(this.token),
+        body: JSON.stringify({ message: `Delete ${path}`, sha }),
+      })
+      if (res.ok) {
+        this.shaCache.delete(path)
+        return
+      }
+      if (res.status === 404) {
+        this.shaCache.delete(path)
+        return
+      }
+      this.shaCache.delete(path)
+      if (res.status !== 409 && res.status !== 422) {
+        throw new Error(`GitHub: failed to delete ${path} (${res.status})`)
+      }
+      await delay(350 * (attempt + 1))
+    }
+    throw new Error(`GitHub: failed to delete ${path} after retrying`)
   }
 
   async renamePath(from: string, to: string): Promise<void> {
@@ -107,7 +132,7 @@ export class GitHubProvider implements VaultProvider {
       await this.deleteFile(path)
       return
     }
-    for (const filePath of files) {
+    for (const filePath of files.sort((a, b) => b.localeCompare(a))) {
       await this.deleteFile(filePath)
     }
   }
@@ -135,7 +160,7 @@ export class GitHubProvider implements VaultProvider {
     const res = await fetch(`${this.base}/contents/${path}`, {
       headers: apiHeaders(this.token),
     })
-    if (!res.ok) throw new Error(`GitHub: failed to get SHA for ${path}`)
+    if (!res.ok) throw new Error(`GitHub: failed to get SHA for ${path} (${res.status})`)
     const data = (await res.json()) as GHContent
     this.shaCache.set(path, data.sha)
     return data.sha
@@ -226,4 +251,8 @@ export class GitHubProvider implements VaultProvider {
     const data = await res.json() as { default_branch?: string }
     return data.default_branch ?? 'main'
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }

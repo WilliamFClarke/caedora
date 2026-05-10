@@ -47,6 +47,9 @@ export interface PersonalMdDesktopApi {
       messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
     ): Promise<unknown>
   }
+  window: {
+    setTransparency(enabled: boolean): Promise<void>
+  }
 }
 
 declare global {

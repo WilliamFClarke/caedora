@@ -65,12 +65,21 @@ export default function Home() {
     [refreshVaults]
   )
 
-  return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center px-6">
-      <div className="absolute top-4 right-4">
-        <ModeToggle />
-      </div>
+  if (status.state === 'checking' || status.state === 'connecting' || status.state === 'ready') {
+    return (
+      <HomeShell>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <Loader2 className="text-primary size-6 animate-spin" />
+          <p className="text-muted-foreground text-sm">
+            {status.state === 'checking' ? 'Checking for vault...' : 'Opening vault...'}
+          </p>
+        </div>
+      </HomeShell>
+    )
+  }
 
+  return (
+    <HomeShell>
       <div className="flex w-full max-w-md flex-col items-center gap-8 text-center">
         <div className="flex items-center gap-3">
           <FileText className="size-10" />
@@ -126,6 +135,18 @@ export default function Home() {
         onOpenChange={(open) => !open && setDialogMode(null)}
         mode={dialogMode ?? 'create'}
       />
+    </HomeShell>
+  )
+}
+
+function HomeShell({ children }: { children: React.ReactNode }) {
+  return (
+    <main className="personal-md-home-screen bg-background relative flex min-h-screen flex-col items-center justify-center px-6">
+      <div className="personal-md-home-titlebar absolute inset-x-0 top-0 z-20 h-11" />
+      <div className="personal-md-home-theme-toggle absolute top-3 left-4 z-30">
+        <ModeToggle />
+      </div>
+      {children}
     </main>
   )
 }
