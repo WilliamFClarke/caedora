@@ -28,9 +28,13 @@ import {
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "16rem"
+const SIDEBAR_WIDTH_DEFAULT = 256
+const SIDEBAR_WIDTH_MIN = 216
+const SIDEBAR_WIDTH_MAX = 520
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
+const SIDEBAR_WIDTH_STORAGE_KEY = "personal-md-sidebar-width"
 
 type SidebarContextProps = {
   state: "expanded" | "collapsed"
@@ -39,6 +43,9 @@ type SidebarContextProps = {
   openMobile: boolean
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
+  isDesktopShell: boolean
+  sidebarWidth: number
+  setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
 }
 
@@ -67,6 +74,8 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
+  const [isDesktopShell, setIsDesktopShell] = React.useState(false)
+  const [sidebarWidth, setSidebarWidthState] = React.useState(SIDEBAR_WIDTH_DEFAULT)
 
   const [_open, _setOpen] = React.useState(defaultOpen)
   const open = openProp ?? _open
@@ -86,6 +95,28 @@ function SidebarProvider({
   const toggleSidebar = React.useCallback(() => {
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
   }, [isMobile, setOpen, setOpenMobile])
+
+  React.useEffect(() => {
+    const desktop =
+      Boolean(window.personalMdDesktop) ||
+      document.documentElement.classList.contains("personal-md-desktop")
+    setIsDesktopShell(desktop)
+    if (!desktop) return
+
+    const stored = Number.parseInt(
+      window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY) ?? "",
+      10
+    )
+    if (Number.isFinite(stored)) {
+      setSidebarWidthState(clampSidebarWidth(stored))
+    }
+  }, [])
+
+  const setSidebarWidth = React.useCallback((width: number) => {
+    const next = clampSidebarWidth(width)
+    setSidebarWidthState(next)
+    window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(next))
+  }, [])
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -109,11 +140,25 @@ function SidebarProvider({
       open,
       setOpen,
       isMobile,
+      isDesktopShell,
+      sidebarWidth,
+      setSidebarWidth,
       openMobile,
       setOpenMobile,
       toggleSidebar,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+    [
+      state,
+      open,
+      setOpen,
+      isMobile,
+      isDesktopShell,
+      sidebarWidth,
+      setSidebarWidth,
+      openMobile,
+      setOpenMobile,
+      toggleSidebar,
+    ]
   )
 
   return (
@@ -123,7 +168,8 @@ function SidebarProvider({
           data-slot="sidebar-wrapper"
           style={
             {
-              "--sidebar-width": SIDEBAR_WIDTH,
+              "--sidebar-width": isDesktopShell ? `${sidebarWidth}px` : SIDEBAR_WIDTH,
+              "--desktop-sidebar-width": `${sidebarWidth}px`,
               "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
               ...style,
             } as React.CSSProperties
@@ -153,7 +199,47 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const { isMobile, state, openMobile, setOpenMobile, isDesktopShell, setSidebarWidth } =
+    useSidebar()
+
+  const onResizePointerDown = React.useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const desktop =
+        isDesktopShell ||
+        Boolean(window.personalMdDesktop) ||
+        document.documentElement.classList.contains("personal-md-desktop")
+      if (!desktop || state !== "expanded") return
+      event.preventDefault()
+      event.stopPropagation()
+
+      const startX = event.clientX
+      const wrapper = event.currentTarget.closest<HTMLElement>('[data-slot="sidebar-wrapper"]')
+      const currentWidth = wrapper
+        ? Number.parseFloat(getComputedStyle(wrapper).getPropertyValue("--desktop-sidebar-width"))
+        : SIDEBAR_WIDTH_DEFAULT
+      const startWidth = Number.isFinite(currentWidth) ? currentWidth : SIDEBAR_WIDTH_DEFAULT
+
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        const delta = side === "left" ? moveEvent.clientX - startX : startX - moveEvent.clientX
+        setSidebarWidth(startWidth + delta)
+      }
+
+      const onPointerUp = () => {
+        document.documentElement.classList.remove("personal-md-resizing-sidebar")
+        document.body.style.cursor = ""
+        document.body.style.userSelect = ""
+        window.removeEventListener("pointermove", onPointerMove)
+        window.removeEventListener("pointerup", onPointerUp)
+      }
+
+      document.documentElement.classList.add("personal-md-resizing-sidebar")
+      document.body.style.cursor = side === "left" ? "col-resize" : "col-resize"
+      document.body.style.userSelect = "none"
+      window.addEventListener("pointermove", onPointerMove)
+      window.addEventListener("pointerup", onPointerUp, { once: true })
+    },
+    [isDesktopShell, setSidebarWidth, side, state]
+  )
 
   if (collapsible === "none") {
     return (
@@ -236,9 +322,18 @@ function Sidebar({
         >
           {children}
         </div>
+        <div
+          data-slot="sidebar-resizer"
+          aria-hidden="true"
+          onPointerDown={onResizePointerDown}
+        />
       </div>
     </div>
   )
+}
+
+function clampSidebarWidth(width: number) {
+  return Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, Math.round(width)))
 }
 
 function SidebarTrigger({

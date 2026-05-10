@@ -15,6 +15,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useVault } from '@/lib/vault-context'
 import { LocalGitProvider } from '@/lib/storage/local-provider'
+import { ElectronLocalProvider } from '@/lib/storage/electron-provider'
+import { getDesktopApi } from '@/lib/desktop'
 import {
   seedLocalVault,
   isFolderEmpty,
@@ -40,7 +42,8 @@ interface ConnectDialogProps {
 
 export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) {
   const defaultTab =
-    typeof window !== 'undefined' && 'showDirectoryPicker' in window
+    typeof window !== 'undefined' &&
+    (window.personalMdDesktop || 'showDirectoryPicker' in window)
       ? 'local'
       : 'github'
 
@@ -163,14 +166,14 @@ function LocalPanel({
   onDone: () => void
 }) {
   const router = useRouter()
-  const { connectLocal } = useVault()
+  const { connectLocal, connectDesktopLocal } = useVault()
   const [vaultName, setVaultName] = useState('My Vault')
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
   const [showChromiumWarning, setShowChromiumWarning] = useState(false)
 
   useEffect(() => {
-    setShowChromiumWarning(!('showDirectoryPicker' in window))
+    setShowChromiumWarning(!getDesktopApi() && !('showDirectoryPicker' in window))
   }, [])
 
   useEffect(() => {
@@ -183,6 +186,57 @@ function LocalPanel({
     setError(null)
     setPhase('picking')
     try {
+      const desktop = getDesktopApi()
+      if (desktop) {
+        if (mode === 'create') {
+          const trimmed = vaultName.trim()
+          if (!trimmed) {
+            setError('Give your vault a name.')
+            setPhase('idle')
+            return
+          }
+          const slug = slugifyFilename(trimmed)
+          if (!slug || slug === 'untitled') {
+            setError('That vault name needs at least one letter or digit.')
+            setPhase('idle')
+            return
+          }
+          const parent = await desktop.vault.selectDirectory({
+            title: 'Choose parent folder',
+          })
+          if (!parent) {
+            setPhase('idle')
+            return
+          }
+          const root = await desktop.vault.createChildDirectory(parent.path, slug)
+          const provider = new ElectronLocalProvider(root.path, root.name)
+          await provider.init()
+          if (!(await isFolderEmpty(provider))) {
+            setError(
+              `A folder called "${slug}" already exists here and isn't empty. Pick a different vault name, or open it from the "Open vault" flow.`
+            )
+            setPhase('idle')
+            return
+          }
+          setPhase('preparing')
+          await seedLocalVault(provider, vaultTemplate)
+          await connectDesktopLocal(root)
+          router.push(`/vault/${WELCOME_PATH}`)
+        } else {
+          const root = await desktop.vault.selectDirectory({
+            title: 'Open vault folder',
+          })
+          if (!root) {
+            setPhase('idle')
+            return
+          }
+          await connectDesktopLocal(root)
+          router.push('/vault')
+          onDone()
+        }
+        return
+      }
+
       if (mode === 'create') {
         // Create flow: pick a PARENT folder, then create/reuse a subfolder
         // named after the user's vault name. This means the user doesn't need

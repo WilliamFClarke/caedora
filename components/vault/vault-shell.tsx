@@ -244,12 +244,15 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     [provider, syncUrl]
   )
 
-  const onCreateFolder = useCallback((parent: string, name: string, appearance: FolderAppearance) => {
-    const slug = slugifyFilename(name)
-    const fullPath = parent ? `${parent}/${slug}` : slug
-    setVirtualFolders((prev) => new Set(prev).add(fullPath))
-    setFolderAppearance(fullPath, appearance)
-  }, [setFolderAppearance])
+  const onCreateFolder = useCallback(
+    (parent: string, name: string, appearance: FolderAppearance) => {
+      const slug = slugifyFilename(name)
+      const fullPath = parent ? `${parent}/${slug}` : slug
+      setVirtualFolders((prev) => new Set(prev).add(fullPath))
+      setFolderAppearance(fullPath, appearance)
+    },
+    [setFolderAppearance]
+  )
 
   const onTemplateImported = useCallback((paths: string[]) => {
     if (paths.length === 0) return

@@ -17,12 +17,14 @@ import {
   LocalGitProvider,
   GitHubProvider,
 } from './storage'
+import { ElectronLocalProvider } from './storage/electron-provider'
 import type { VaultContextValue, VaultProvider, VaultStatus } from './types'
 
 const defaultContext: VaultContextValue = {
   provider: null,
-  status: { state: 'idle' },
+  status: { state: 'checking' },
   connectLocal: async () => null,
+  connectDesktopLocal: async () => {},
   connectGitHub: async () => {},
   connectToVault: async () => {},
   grantPermission: async () => {},
@@ -33,7 +35,7 @@ const VaultContext = createContext<VaultContextValue>(defaultContext)
 
 export function VaultContextProvider({ children }: { children: ReactNode }) {
   const [provider, setProvider] = useState<VaultProvider | null>(null)
-  const [status, setStatus] = useState<VaultStatus>({ state: 'idle' })
+  const [status, setStatus] = useState<VaultStatus>({ state: 'checking' })
 
   // On mount: restore vault from IndexedDB
   useEffect(() => {
@@ -90,6 +92,27 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
         error: e instanceof Error ? e.message : 'Failed to open folder',
       })
       return null
+    }
+  }, [])
+
+  const connectDesktopLocal = useCallback(async (root: { path: string; name: string }) => {
+    setStatus({ state: 'connecting' })
+    try {
+      await saveVaultState({
+        type: 'local',
+        directoryPath: root.path,
+        directoryName: root.name,
+        lastOpenedAt: Date.now(),
+      })
+      const p = new ElectronLocalProvider(root.path, root.name)
+      await p.init()
+      setProvider(p)
+      setStatus({ state: 'ready', providerType: 'local' })
+    } catch (e) {
+      setStatus({
+        state: 'error',
+        error: e instanceof Error ? e.message : 'Failed to open desktop folder',
+      })
     }
   }, [])
 
@@ -179,6 +202,7 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
         provider,
         status,
         connectLocal,
+        connectDesktopLocal,
         connectGitHub,
         connectToVault,
         grantPermission,

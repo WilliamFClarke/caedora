@@ -84,6 +84,7 @@ import {
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarRail,
+  useSidebar,
 } from '@/components/ui/sidebar'
 
 interface AppSidebarProps {
@@ -217,6 +218,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const router = useRouter()
   const { connectToVault } = useVault()
+  const { state: sidebarState, setOpen: setSidebarOpen } = useSidebar()
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [renaming, setRenaming] = useState<string | null>(null)
@@ -282,7 +284,7 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center justify-between gap-2 px-2 pt-1">
+        <div className="flex items-center justify-between gap-2 px-2 pt-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:px-0">
           <div className="flex items-center gap-1.5">
             <div className="bg-primary text-primary-foreground flex size-5 items-center justify-center rounded-sm font-mono text-[10px] font-semibold">
               pm
@@ -291,11 +293,11 @@ export function AppSidebar({
               personal-md
             </span>
           </div>
-          <div className="group-data-[collapsible=icon]:hidden">
+          <div>
             <ModeToggle />
           </div>
         </div>
-        <div className="flex items-center gap-1 px-0 group-data-[collapsible=icon]:hidden">
+        <div className="flex items-center gap-1 px-0 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:pt-1">
           <Button
             type="button"
             size="icon"
@@ -347,7 +349,10 @@ export function AppSidebar({
             title="Search notes"
             aria-label="Search notes"
             aria-expanded={searchOpen}
-            onClick={() => setSearchOpen((open) => !open)}
+            onClick={() => {
+              if (sidebarState === 'collapsed') setSidebarOpen(true)
+              setSearchOpen((open) => !open)
+            }}
           >
             <Search className="size-4" />
           </Button>
@@ -374,7 +379,9 @@ export function AppSidebar({
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:flex-1 group-data-[collapsible=icon]:overflow-hidden">
+        <div className="hidden flex-1 group-data-[collapsible=icon]:block" />
+        <div className="group-data-[collapsible=icon]:hidden">
         {pinnedFiles.length > 0 && (
           <Collapsible open={pinnedOpen} onOpenChange={setPinnedOpen}>
             <SidebarGroup>
@@ -441,6 +448,7 @@ export function AppSidebar({
             </CollapsibleContent>
           </SidebarGroup>
         </Collapsible>
+        </div>
       </SidebarContent>
 
       <SidebarFooter>
@@ -452,7 +460,7 @@ export function AppSidebar({
           <Sparkles className="size-3.5" />
           Connect your AI
         </button>
-        <div className="flex items-center gap-1.5 px-2 pb-1 group-data-[collapsible=icon]:hidden">
+        <div className="flex items-center gap-1.5 px-2 pb-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <VaultSwitcher
             vaults={vaults}
             activeVaultId={activeVaultId}
@@ -472,6 +480,7 @@ export function AppSidebar({
               setSettingsSection('vaults')
               setSettingsOpen(true)
             }}
+            className="group-data-[collapsible=icon]:hidden"
           />
           <div className="hidden">
             <span
@@ -485,7 +494,7 @@ export function AppSidebar({
               ...
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 group-data-[collapsible=icon]:flex-col">
             {onSync && (
               <button
                 type="button"
@@ -601,12 +610,14 @@ function VaultSwitcher({
   switchingVaultId,
   onSwitch,
   onManage,
+  className,
 }: {
   vaults: StoredVault[]
   activeVaultId: string | null
   switchingVaultId: string | null
   onSwitch: (id: string) => Promise<void>
   onManage: () => void
+  className?: string
 }) {
   const activeVault = vaults.find((vault) => vault.id === activeVaultId) ?? vaults[0]
   const label = activeVault ? vaultLabel(activeVault.state) : 'Vault'
@@ -616,7 +627,10 @@ function VaultSwitcher({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="hover:bg-sidebar-accent flex h-8 min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 text-left text-sm"
+          className={cn(
+            'hover:bg-sidebar-accent flex h-8 min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 text-left text-sm',
+            className
+          )}
           aria-label="Switch vault"
         >
           <span className="truncate font-medium">{label}</span>

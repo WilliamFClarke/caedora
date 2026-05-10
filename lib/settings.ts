@@ -1,4 +1,14 @@
 export type SyncMode = 'auto' | 'manual'
+export type LocalLlmPreset = 'ollama' | 'lm-studio' | 'custom'
+export type AppearancePalette = 'default' | 'gray' | 'oled' | 'nocturne' | 'custom'
+
+export interface LocalLlmSettings {
+  enabled: boolean
+  preset: LocalLlmPreset
+  baseUrl: string
+  model: string
+  apiKey: string
+}
 
 export interface AppSettings {
   syncMode: SyncMode
@@ -8,7 +18,49 @@ export interface AppSettings {
    *   - Local: how often a git commit is batched (disk writes still happen at ~1 s)
    */
   syncIntervalMs: number
+  localLlm: LocalLlmSettings
+  desktopTransparencyEnabled: boolean
+  appearancePalette: AppearancePalette
+  customPaletteHex: string
 }
+
+export const APPEARANCE_PALETTES: Array<{
+  id: AppearancePalette
+  label: string
+  description: string
+  swatches: string[]
+}> = [
+  {
+    id: 'default',
+    label: 'Default',
+    description: 'Cool blue neutral',
+    swatches: ['#f7f8fb', '#e5e7ef', '#4f72d8', '#172033'],
+  },
+  {
+    id: 'gray',
+    label: 'Graphite',
+    description: 'Charcoal and soft gray',
+    swatches: ['#f7f7f7', '#a8a8a8', '#808080', '#181818'],
+  },
+  {
+    id: 'oled',
+    label: 'True Black',
+    description: 'OLED black surfaces',
+    swatches: ['#000000', '#080808', '#1a1a1a', '#f5f5f5'],
+  },
+  {
+    id: 'nocturne',
+    label: 'Nocturne',
+    description: 'Purple night palette',
+    swatches: ['#282a36', '#44475a', '#bd93f9', '#ff79c6'],
+  },
+  {
+    id: 'custom',
+    label: 'Custom',
+    description: 'Use your own hex color',
+    swatches: ['#f7f7f7', '#5b8cff', '#3558c9', '#141820'],
+  },
+]
 
 export const SYNC_INTERVAL_OPTIONS = [
   { label: '30 seconds', ms: 30_000 },
@@ -20,4 +72,40 @@ export const SYNC_INTERVAL_OPTIONS = [
 export const DEFAULT_SETTINGS: AppSettings = {
   syncMode: 'auto',
   syncIntervalMs: 30_000,
+  desktopTransparencyEnabled: true,
+  appearancePalette: 'default',
+  customPaletteHex: '#5b8cff',
+  localLlm: {
+    enabled: false,
+    preset: 'ollama',
+    baseUrl: 'http://localhost:11434/v1',
+    model: 'llama3.2',
+    apiKey: '',
+  },
 }
+
+export const LOCAL_LLM_PRESETS: Array<{
+  id: LocalLlmPreset
+  label: string
+  baseUrl: string
+  model: string
+}> = [
+  {
+    id: 'ollama',
+    label: 'Ollama',
+    baseUrl: 'http://localhost:11434/v1',
+    model: 'llama3.2',
+  },
+  {
+    id: 'lm-studio',
+    label: 'LM Studio',
+    baseUrl: 'http://localhost:1234/v1',
+    model: 'local-model',
+  },
+  {
+    id: 'custom',
+    label: 'Custom',
+    baseUrl: 'http://localhost:11434/v1',
+    model: 'local-model',
+  },
+]
