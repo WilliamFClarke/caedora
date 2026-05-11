@@ -239,6 +239,37 @@ export async function saveVaultState(state: PersistedVaultState): Promise<void> 
 
 function mergeSettings(stored?: Partial<AppSettings>): AppSettings {
   if (!stored) return DEFAULT_SETTINGS
+  const storedAi = stored.ai
+  const toolPermissionLevelConfigured =
+    storedAi?.toolPermissionLevelConfigured === true
+  const shouldUpgradeOldAiPermissionDefault =
+    !toolPermissionLevelConfigured &&
+    storedAi?.toolPermissionLevel === 'require-approval' &&
+    storedAi.autoApproveSafeOperations === false
+  const ai = {
+    ...DEFAULT_SETTINGS.ai,
+    ...storedAi,
+    toolPermissionLevel:
+      shouldUpgradeOldAiPermissionDefault
+        ? DEFAULT_SETTINGS.ai.toolPermissionLevel
+        : (storedAi?.toolPermissionLevel ??
+            (storedAi?.autoApproveSafeOperations
+              ? 'allow-all'
+              : DEFAULT_SETTINGS.ai.toolPermissionLevel)),
+    toolPermissionLevelConfigured,
+    sidebar: {
+      ...DEFAULT_SETTINGS.ai.sidebar,
+      ...storedAi?.sidebar,
+    },
+    bundledModel: {
+      ...DEFAULT_SETTINGS.ai.bundledModel,
+      ...storedAi?.bundledModel,
+    },
+    cloud: {
+      ...DEFAULT_SETTINGS.ai.cloud,
+      ...storedAi?.cloud,
+    },
+  }
   return {
     ...DEFAULT_SETTINGS,
     ...stored,
@@ -246,6 +277,7 @@ function mergeSettings(stored?: Partial<AppSettings>): AppSettings {
       ...DEFAULT_SETTINGS.localLlm,
       ...stored.localLlm,
     },
+    ai,
   }
 }
 

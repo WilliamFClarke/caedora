@@ -92,6 +92,33 @@ contextBridge.exposeInMainWorld('personalMdDesktop', {
     chatCompletion: (config, messages) =>
       ipcRenderer.invoke('localLlm:chatCompletion', config, messages),
   },
+  ai: {
+    getState: () => ipcRenderer.invoke('ai:getState'),
+    getSettings: () => ipcRenderer.invoke('ai:getSettings'),
+    updateSettings: (settings) => ipcRenderer.invoke('ai:updateSettings', settings),
+    saveCloudApiKey: (apiKey) => ipcRenderer.invoke('ai:saveCloudApiKey', apiKey),
+    clearCloudApiKey: () => ipcRenderer.invoke('ai:clearCloudApiKey'),
+    startModelDownload: (modelId) => ipcRenderer.invoke('ai:startModelDownload', modelId),
+    cancelModelDownload: (modelId) => ipcRenderer.invoke('ai:cancelModelDownload', modelId),
+    deleteBundledModel: (modelId) => ipcRenderer.invoke('ai:deleteBundledModel', modelId),
+    onModelDownloadEvent: (listener) => {
+      const handler = (_event, payload) => listener(payload)
+      ipcRenderer.on('ai:modelDownloadEvent', handler)
+      return () => ipcRenderer.removeListener('ai:modelDownloadEvent', handler)
+    },
+    startChat: (request) => ipcRenderer.invoke('ai:startChat', request),
+    cancelChat: (requestId) => ipcRenderer.invoke('ai:cancelChat', requestId),
+    onChatEvent: (listener) => {
+      const handler = (_event, payload) => listener(payload)
+      ipcRenderer.on('ai:chatEvent', handler)
+      return () => ipcRenderer.removeListener('ai:chatEvent', handler)
+    },
+    loadThread: (rootPath) => ipcRenderer.invoke('ai:loadThread', rootPath),
+    appendThread: (request) => ipcRenderer.invoke('ai:appendThread', request),
+    clearThread: (rootPath) => ipcRenderer.invoke('ai:clearThread', rootPath),
+    executeFileTool: (request) => ipcRenderer.invoke('ai:executeFileTool', request),
+    previewFileMutation: (request) => ipcRenderer.invoke('ai:previewFileMutation', request),
+  },
   window: {
     setTransparency: (enabled) => ipcRenderer.invoke('window:setTransparency', enabled),
   },

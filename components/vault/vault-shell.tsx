@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
+import { AssistantSidebarLoader } from '@/components/assistant/assistant-sidebar-loader'
+import { SettingsDialog } from '@/components/settings-dialog'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
 import { getActiveVaultId } from '@/lib/storage/idb'
@@ -35,6 +37,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [seeding, setSeeding] = useState(false)
   const [syncNonce, setSyncNonce] = useState(0)
   const [activeVaultId, setActiveVaultIdState] = useState<string | null>(null)
+  const [assistantSettingsOpen, setAssistantSettingsOpen] = useState(false)
   const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
   const {
     folderAppearances,
@@ -417,28 +420,40 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         onSync={onSync}
       />
       <SidebarInset className="min-w-0">
-        <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-          {loadError ? (
-            <div className="flex h-full items-center justify-center">
-              <p className="text-destructive text-sm">{loadError}</p>
-            </div>
-          ) : (
-            <EditorPane
-              provider={provider}
-              path={selected}
-              lastModified={
-                selected
-                  ? entries.find((e) => e.path === selected)?.lastModified
-                  : undefined
-              }
-              syncNonce={syncNonce}
-              isPinned={selected ? pinned.has(selected) : false}
-              onTogglePin={togglePin}
-              onSaveNow={(fn) => { editorSaveRef.current = fn }}
-            />
-          )}
+        <div className="personal-md-vault-workspace relative flex h-full min-w-0 flex-1 overflow-hidden bg-card">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            {loadError ? (
+              <div className="flex h-full items-center justify-center">
+                <p className="text-destructive text-sm">{loadError}</p>
+              </div>
+            ) : (
+              <EditorPane
+                provider={provider}
+                path={selected}
+                lastModified={
+                  selected
+                    ? entries.find((e) => e.path === selected)?.lastModified
+                    : undefined
+                }
+                syncNonce={syncNonce}
+                isPinned={selected ? pinned.has(selected) : false}
+                onTogglePin={togglePin}
+                onSaveNow={(fn) => { editorSaveRef.current = fn }}
+              />
+            )}
+          </div>
+          <AssistantSidebarLoader
+            provider={provider}
+            currentFilePath={selected}
+            onOpenSettings={() => setAssistantSettingsOpen(true)}
+          />
         </div>
       </SidebarInset>
+      <SettingsDialog
+        open={assistantSettingsOpen}
+        onOpenChange={setAssistantSettingsOpen}
+        initialSection="ai"
+      />
     </SidebarProvider>
   )
 }
