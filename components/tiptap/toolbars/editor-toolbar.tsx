@@ -45,7 +45,7 @@ export const EditorToolbar = ({ editor }: { editor: Editor }) => {
   const collapseLevel = useToolbarCollapseLevel(toolsRowRef);
 
   return (
-    <div className="personal-md-editor-toolbar sticky top-0 z-20 h-11 w-full min-w-0 border-b bg-card">
+    <div className="caedora-editor-toolbar sticky top-0 z-20 h-11 w-full min-w-0 border-b bg-card">
       <ToolbarProvider editor={editor}>
         <TooltipProvider>
           <div
@@ -121,7 +121,7 @@ export const EditorToolbar = ({ editor }: { editor: Editor }) => {
               </span>
             </div>
 
-            <div className="personal-md-editor-toolbar-actions ml-auto flex shrink-0 items-center gap-0.5">
+            <div className="caedora-editor-toolbar-actions ml-auto flex shrink-0 items-center gap-0.5">
               <ResponsiveOverflowToolbar collapseLevel={collapseLevel} />
               <DesktopAssistantToolbarToggle />
             </div>
@@ -147,8 +147,8 @@ function DesktopAssistantToolbarToggle() {
     <Button
       variant="ghost"
       size="icon"
-      aria-label={open ? "Close AI assistant" : "Open AI assistant"}
-      title={open ? "Close AI assistant" : "Open AI assistant"}
+      aria-label={open ? "Close Argus (AI Assistant)" : "Open Argus (AI Assistant)"}
+      title={open ? "Close Argus (AI Assistant)" : "Open Argus (AI Assistant)"}
       className="h-8 w-8 shrink-0 p-0"
       onClick={() =>
         void updateSettings({

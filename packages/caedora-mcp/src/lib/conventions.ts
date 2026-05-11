@@ -1,5 +1,5 @@
 /**
- * Shared helpers that enforce personal-md vault conventions. Any write path
+ * Shared helpers that enforce Caedora vault conventions. Any write path
  * that creates or modifies a note should go through these so files the MCP
  * server produces are indistinguishable from files the editor produces.
  */

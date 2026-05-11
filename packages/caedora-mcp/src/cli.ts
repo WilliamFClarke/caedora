@@ -46,12 +46,12 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 function printHelp(): void {
-  console.error(`personal-md-mcp — MCP server for personal-md vaults
+  console.error(`caedora-mcp — MCP server for Caedora vaults
 
 Usage:
-  personal-md-mcp --vault <path>
-  personal-md-mcp --github <owner>/<repo> --pat <token>
-  personal-md-mcp --vault <path> --read-only
+  caedora-mcp --vault <path>
+  caedora-mcp --github <owner>/<repo> --pat <token>
+  caedora-mcp --vault <path> --read-only
 
 Options:
   --vault <path>       Serve a local folder (absolute path recommended).
@@ -65,9 +65,9 @@ The server speaks stdio. Wire it into your AI client's MCP config:
 
   {
     "mcpServers": {
-      "personal-md": {
+      "caedora": {
         "command": "npx",
-        "args": ["-y", "personal-md-mcp", "--vault", "/path/to/vault"]
+        "args": ["-y", "caedora-mcp", "--vault", "/path/to/vault"]
       }
     }
   }
@@ -110,6 +110,6 @@ async function main(): Promise<void> {
 
 main().catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err)
-  console.error(`personal-md-mcp: fatal error — ${message}`)
+  console.error(`caedora-mcp: fatal error — ${message}`)
   process.exit(1)
 })

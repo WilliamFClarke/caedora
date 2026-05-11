@@ -34,10 +34,10 @@ export function ConnectAiDialog({ open, onOpenChange, provider }: ConnectAiDialo
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-4" />
-            Connect your AI
+            Connect external AI
           </DialogTitle>
           <DialogDescription>
-            Point your AI assistant at this vault so it can answer questions,
+            Point an external AI assistant at this vault so it can answer questions,
             draft notes, and help maintain it.
           </DialogDescription>
         </DialogHeader>
@@ -89,7 +89,7 @@ function ClaudeCodeTab({
       <Snippet label="Terminal" value={cdCommand} />
       <p className="text-muted-foreground text-xs">
         For richer tag-indexed search and maintenance-quality writes, also wire
-        up <code className="bg-muted rounded px-1">personal-md-mcp</code> —
+        up <code className="bg-muted rounded px-1">caedora-mcp</code> —
         see the <em>Desktop / Cursor</em> tab for the same config.
       </p>
     </div>
@@ -105,19 +105,19 @@ function DesktopTab({
 }) {
   const localConfig = `{
   "mcpServers": {
-    "personal-md": {
+    "caedora": {
       "command": "npx",
-      "args": ["-y", "personal-md-mcp", "--vault", "/path/to/${folderName ?? 'your-vault'}"]
+      "args": ["-y", "caedora-mcp", "--vault", "/path/to/${folderName ?? 'your-vault'}"]
     }
   }
 }`
   const githubConfig = gh
     ? `{
   "mcpServers": {
-    "personal-md": {
+    "caedora": {
       "command": "npx",
       "args": [
-        "-y", "personal-md-mcp",
+        "-y", "caedora-mcp",
         "--github", "${gh.owner}/${gh.repo}",
         "--pat", "<your-github-pat>"
       ]

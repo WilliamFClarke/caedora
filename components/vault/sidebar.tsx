@@ -286,11 +286,16 @@ export function AppSidebar({
       <SidebarHeader>
         <div className="flex items-center justify-between gap-2 px-2 pt-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:px-0">
           <div className="flex items-center gap-1.5">
-            <div className="bg-primary text-primary-foreground flex size-5 items-center justify-center rounded-sm font-mono text-[10px] font-semibold">
-              pm
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/caedora-logo.png"
+              alt="Caedora"
+              width={20}
+              height={20}
+              className="size-5 shrink-0"
+            />
             <span className="text-sm font-semibold group-data-[collapsible=icon]:hidden">
-              personal-md
+              Caedora
             </span>
           </div>
           <div>
@@ -458,7 +463,7 @@ export function AppSidebar({
           className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition group-data-[collapsible=icon]:hidden"
         >
           <Sparkles className="size-3.5" />
-          Connect your AI
+          Connect external AI
         </button>
         <div className="flex items-center gap-1.5 px-2 pb-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <VaultSwitcher

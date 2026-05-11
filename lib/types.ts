@@ -93,8 +93,8 @@ export interface VaultContextValue {
   provider: VaultProvider | null
   status: VaultStatus
   connectLocal: (preselected?: FileSystemDirectoryHandle) => Promise<FileSystemDirectoryHandle | null>
-  connectDesktopLocal: (root: { path: string; name: string }) => Promise<void>
-  connectGitHub: (pat: string, owner: string, repo: string) => Promise<void>
+  connectDesktopLocal: (root: { path: string; name: string }) => Promise<boolean>
+  connectGitHub: (pat: string, owner: string, repo: string) => Promise<boolean>
   connectToVault: (id: string) => Promise<void>
   grantPermission: () => Promise<void>
   disconnect: () => void

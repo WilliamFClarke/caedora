@@ -34,7 +34,7 @@ const SIDEBAR_WIDTH_MAX = 520
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
-const SIDEBAR_WIDTH_STORAGE_KEY = "personal-md-sidebar-width"
+const SIDEBAR_WIDTH_STORAGE_KEY = "caedora-sidebar-width"
 
 type SidebarContextProps = {
   state: "expanded" | "collapsed"
@@ -98,8 +98,8 @@ function SidebarProvider({
 
   React.useEffect(() => {
     const desktop =
-      Boolean(window.personalMdDesktop) ||
-      document.documentElement.classList.contains("personal-md-desktop")
+      Boolean(window.caedoraDesktop) ||
+      document.documentElement.classList.contains("caedora-desktop")
     setIsDesktopShell(desktop)
     if (!desktop) return
 
@@ -206,8 +206,8 @@ function Sidebar({
     (event: React.PointerEvent<HTMLDivElement>) => {
       const desktop =
         isDesktopShell ||
-        Boolean(window.personalMdDesktop) ||
-        document.documentElement.classList.contains("personal-md-desktop")
+        Boolean(window.caedoraDesktop) ||
+        document.documentElement.classList.contains("caedora-desktop")
       if (!desktop || state !== "expanded") return
       event.preventDefault()
       event.stopPropagation()
@@ -225,14 +225,14 @@ function Sidebar({
       }
 
       const onPointerUp = () => {
-        document.documentElement.classList.remove("personal-md-resizing-sidebar")
+        document.documentElement.classList.remove("caedora-resizing-sidebar")
         document.body.style.cursor = ""
         document.body.style.userSelect = ""
         window.removeEventListener("pointermove", onPointerMove)
         window.removeEventListener("pointerup", onPointerUp)
       }
 
-      document.documentElement.classList.add("personal-md-resizing-sidebar")
+      document.documentElement.classList.add("caedora-resizing-sidebar")
       document.body.style.cursor = side === "left" ? "col-resize" : "col-resize"
       document.body.style.userSelect = "none"
       window.addEventListener("pointermove", onPointerMove)

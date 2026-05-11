@@ -15,13 +15,19 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'personal-md — Your life, documented',
+  metadataBase: new URL('https://caedora.app'),
+  title: 'Caedora - Your life, documented',
   description:
     'A private, AI-ready personal wiki. Track everything about your life in markdown notes that live on your own device.',
+  alternates: {
+    canonical: 'https://caedora.app',
+  },
   openGraph: {
-    title: 'personal-md',
+    title: 'Caedora',
     description: 'Your life, fully documented. Private by design.',
     type: 'website',
+    url: 'https://caedora.app',
+    siteName: 'Caedora',
   },
 }
 

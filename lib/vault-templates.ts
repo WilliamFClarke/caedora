@@ -30,7 +30,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     name: 'Fitness planner',
     description: 'Workouts, measurements, nutrition notes, and coaching prompts.',
     category: 'Fitness',
-    repository: 'WilliamFClarke/personal-md-template-fitness',
+    repository: 'WilliamFClarke/caedora-template-fitness',
     skills: ['AGENTS.md coaching guidance'],
     conventions: ['workout logs', 'measurement frontmatter', 'nutrition tags'],
     tags: ['fitness', 'health', 'planning'],
@@ -46,7 +46,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     name: 'Reading system',
     description: 'Books, article notes, source queues, and review workflows.',
     category: 'Learning',
-    repository: 'WilliamFClarke/personal-md-template-reading',
+    repository: 'WilliamFClarke/caedora-template-reading',
     skills: ['AGENTS.md synthesis guidance'],
     conventions: ['source status', 'author frontmatter', 'review tags'],
     tags: ['reading', 'research', 'learning'],
@@ -62,7 +62,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     name: 'Daily journal',
     description: 'Daily notes, weekly reviews, decisions, and lightweight habit tracking.',
     category: 'Personal OS',
-    repository: 'WilliamFClarke/personal-md-template-journal',
+    repository: 'WilliamFClarke/caedora-template-journal',
     skills: ['AGENTS.md reflection guidance'],
     conventions: ['daily note dates', 'weekly reviews', 'decision logs'],
     tags: ['journal', 'review', 'habits'],
@@ -79,7 +79,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     name: 'Project hub',
     description: 'Active projects, specs, milestones, meeting notes, and retrospectives.',
     category: 'Work',
-    repository: 'WilliamFClarke/personal-md-template-projects',
+    repository: 'WilliamFClarke/caedora-template-projects',
     skills: ['AGENTS.md project planning guidance'],
     conventions: ['project status', 'spec templates', 'retrospective notes'],
     tags: ['projects', 'planning', 'work'],
@@ -96,7 +96,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     name: 'Job search tracker',
     description: 'Applications, company research, interviews, and follow-up notes.',
     category: 'Career',
-    repository: 'WilliamFClarke/personal-md-template-job-search',
+    repository: 'WilliamFClarke/caedora-template-job-search',
     skills: ['AGENTS.md interview prep guidance'],
     conventions: ['application status', 'company tags', 'contact logs'],
     tags: ['career', 'jobs', 'crm'],
@@ -112,7 +112,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     name: 'Personal CRM',
     description: 'People notes, follow-ups, conversations, and relationship context.',
     category: 'Relationships',
-    repository: 'WilliamFClarke/personal-md-template-crm',
+    repository: 'WilliamFClarke/caedora-template-crm',
     skills: ['AGENTS.md relationship context guidance'],
     conventions: ['person notes', 'follow-up dates', 'conversation logs'],
     tags: ['crm', 'people', 'relationships'],
@@ -129,7 +129,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     name: 'Home operations',
     description: 'Maintenance, documents, inventory, recurring chores, and vendor notes.',
     category: 'Home',
-    repository: 'WilliamFClarke/personal-md-template-home',
+    repository: 'WilliamFClarke/caedora-template-home',
     skills: ['AGENTS.md household operations guidance'],
     conventions: ['maintenance logs', 'inventory tables', 'vendor notes'],
     tags: ['home', 'maintenance', 'operations'],
@@ -146,7 +146,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     name: 'Travel planner',
     description: 'Trips, itineraries, packing lists, reservations, and post-trip notes.',
     category: 'Travel',
-    repository: 'WilliamFClarke/personal-md-template-travel',
+    repository: 'WilliamFClarke/caedora-template-travel',
     skills: ['AGENTS.md travel planning guidance'],
     conventions: ['trip folders', 'reservation tables', 'packing lists'],
     tags: ['travel', 'planning', 'itinerary'],
@@ -163,7 +163,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     name: 'Finance tracker',
     description: 'Budgets, subscriptions, savings goals, and recurring money reviews.',
     category: 'Finance',
-    repository: 'WilliamFClarke/personal-md-template-finance',
+    repository: 'WilliamFClarke/caedora-template-finance',
     skills: ['AGENTS.md finance review guidance'],
     conventions: ['budget tables', 'subscription lists', 'monthly reviews'],
     tags: ['finance', 'budget', 'subscriptions'],
@@ -180,7 +180,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     name: 'Investment tracker',
     description: 'Portfolio notes, investment thesis tracking, contributions, allocation reviews, and watchlists.',
     category: 'Finance',
-    repository: 'WilliamFClarke/personal-md-template-investments',
+    repository: 'WilliamFClarke/caedora-template-investments',
     skills: ['AGENTS.md investment tracking guidance'],
     conventions: ['portfolio snapshots', 'thesis notes', 'allocation reviews'],
     tags: ['finance', 'investments', 'portfolio'],
@@ -198,7 +198,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     name: 'UK student loan tracker',
     description: 'UK student loan plan notes, statements, repayments, interest changes, and annual reviews.',
     category: 'Finance',
-    repository: 'WilliamFClarke/personal-md-template-uk-student-loan',
+    repository: 'WilliamFClarke/caedora-template-uk-student-loan',
     skills: ['AGENTS.md UK student loan tracking guidance'],
     conventions: ['statement logs', 'plan details', 'repayment reviews'],
     tags: ['finance', 'student-loan', 'uk'],
@@ -307,7 +307,7 @@ export async function importTemplateFiles(
 
 async function readManifest(repository: string, ref: string) {
   const [owner, repo] = repository.split('/')
-  for (const path of ['personal-md-template.json', 'template.json']) {
+  for (const path of ['caedora-template.json', 'template.json']) {
     const res = await fetch(
       `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(ref)}/${path}`,
       { cache: 'no-store' }
@@ -346,7 +346,7 @@ function isImportable(path: string, root: string): boolean {
   if (root && path !== root && !path.startsWith(`${root}/`)) return false
   const rel = root ? path.slice(root.length + 1) : path
   if (!rel || rel.startsWith('.github/')) return false
-  if (rel === 'personal-md-template.json' || rel === 'template.json') return false
+  if (rel === 'caedora-template.json' || rel === 'template.json') return false
   return rel.endsWith('.md') || rel === 'SKILL.md' || rel === 'AGENTS.md'
 }
 

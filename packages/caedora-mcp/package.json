@@ -1,11 +1,12 @@
 {
-  "name": "personal-md-mcp",
+  "name": "caedora-mcp",
   "version": "0.1.0",
-  "description": "Model Context Protocol server for personal-md vaults — read, search, and maintain your vault from any MCP client.",
+  "description": "Model Context Protocol server for Caedora vaults — read, search, and maintain your vault from any MCP client.",
   "license": "MIT",
+  "homepage": "https://caedora.app",
   "type": "module",
   "bin": {
-    "personal-md-mcp": "./dist/cli.js"
+    "caedora-mcp": "./dist/cli.js"
   },
   "main": "./dist/server.js",
   "types": "./dist/server.d.ts",
@@ -30,7 +31,7 @@
     "mcp",
     "model-context-protocol",
     "claude",
-    "personal-md",
+    "caedora",
     "markdown",
     "notes",
     "vault"

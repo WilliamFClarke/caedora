@@ -1,8 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 function markDesktopShell() {
-  document.documentElement.classList.add('personal-md-desktop')
-  document.documentElement.classList.add(`personal-md-platform-${process.platform}`)
+  document.documentElement.classList.add('caedora-desktop')
+  document.documentElement.classList.add(`caedora-platform-${process.platform}`)
   updateTitlebarMetrics()
   installTitlebarDoubleClickHandler()
 }
@@ -44,7 +44,7 @@ function isCustomTitlebarDoubleClick(event) {
   if (event.button !== 0) return false
   const target = event.target
   if (!(target instanceof Element)) return false
-  if (!target.closest('.personal-md-editor-toolbar, .personal-md-home-titlebar')) return false
+  if (!target.closest('.caedora-editor-toolbar, .caedora-home-titlebar')) return false
   return !target.closest(
     [
       'button',
@@ -61,7 +61,7 @@ function isCustomTitlebarDoubleClick(event) {
   )
 }
 
-contextBridge.exposeInMainWorld('personalMdDesktop', {
+contextBridge.exposeInMainWorld('caedoraDesktop', {
   isDesktop: true,
   platform: process.platform,
   versions: {

@@ -6,9 +6,9 @@ const crypto = require('node:crypto')
 const git = require('isomorphic-git')
 const ignore = require('ignore')
 const { createTwoFilesPatch } = require('diff')
-const { prompt: PERSONAL_MD_ASSISTANT_PROMPT } = require('../lib/ai/personal-md-context.json')
+const { prompt: ARGUS_ASSISTANT_PROMPT } = require('../lib/ai/argus-context.json')
 
-const GIT_AUTHOR = { name: 'personal-md', email: 'local@personal-md' }
+const GIT_AUTHOR = { name: 'caedora', email: 'local@caedora' }
 const ENABLE_NATIVE_WINDOW_SHADOW = process.platform === 'win32'
 const AI_SETTINGS_FILE = 'ai-settings.json'
 const AI_CLOUD_KEY_FILE = 'ai-cloud-key.bin'
@@ -53,7 +53,7 @@ const aiModelDownloads = new Map()
 let localLlamaRuntime = null
 
 function getAppUrl() {
-  return process.env.PERSONAL_MD_DESKTOP_URL || 'http://localhost:3000'
+  return process.env.CAEDORA_DESKTOP_URL || 'http://localhost:3000'
 }
 
 function createWindow() {
@@ -66,7 +66,8 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    title: 'personal-md',
+    title: 'Caedora',
+    icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     autoHideMenuBar: true,
     transparent: !ENABLE_NATIVE_WINDOW_SHADOW,
     backgroundColor: ENABLE_NATIVE_WINDOW_SHADOW ? '#111827' : '#00000000',
@@ -1215,7 +1216,7 @@ async function runAiChat(request, abortSignal, emit) {
 
   const settings = await loadAiSettings()
   const provider = getLlmProvider(state.selectedProvider)
-  const requestWithContext = await withPersonalMdContext(request, settings)
+  const requestWithContext = await withArgusContext(request, settings)
   await provider.chat(
     settings,
     state,
@@ -1225,30 +1226,30 @@ async function runAiChat(request, abortSignal, emit) {
   )
 }
 
-async function withPersonalMdContext(request, settings) {
+async function withArgusContext(request, settings) {
   const messages = Array.isArray(request?.messages) ? request.messages : []
-  const prompt = await buildPersonalMdSystemPrompt(settings, request)
-  const hasPersonalMdContext = messages.some(
+  const prompt = await buildArgusSystemPrompt(settings, request)
+  const hasArgusContext = messages.some(
     (message) =>
       message.role === 'system' &&
       typeof message.content === 'string' &&
-      message.content.includes('personal-md desktop assistant')
+      message.content.includes('Argus, the Caedora desktop assistant')
   )
   return {
     ...request,
-    messages: hasPersonalMdContext
+    messages: hasArgusContext
       ? messages
       : [{ role: 'system', content: prompt }, ...messages],
   }
 }
 
-async function buildPersonalMdSystemPrompt(settings, request) {
+async function buildArgusSystemPrompt(settings, request) {
   const extra = typeof settings?.extraSystemPrompt === 'string'
     ? settings.extraSystemPrompt.trim()
     : ''
   const currentFileContext = await buildCurrentFileContext(request)
   return [
-    PERSONAL_MD_ASSISTANT_PROMPT,
+    ARGUS_ASSISTANT_PROMPT,
     currentFileContext,
     extra ? `Additional user-provided context:\n${extra}` : '',
   ].filter(Boolean).join('\n\n')
@@ -1502,7 +1503,7 @@ async function localLlamaSystemPrompt(settings, request) {
   const toolSummary = request.tools?.length
     ? `\n\nUse the provided functions when you need to inspect or change project files. File mutations are routed through the desktop approval UI before they execute.`
     : ''
-  return `${await buildPersonalMdSystemPrompt(settings, request)}${toolSummary}`
+  return `${await buildArgusSystemPrompt(settings, request)}${toolSummary}`
 }
 
 function toLocalLlamaFunctions(tools = []) {

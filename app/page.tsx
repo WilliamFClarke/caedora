@@ -83,7 +83,7 @@ export default function Home() {
       <div className="flex w-full max-w-md flex-col items-center gap-8 text-center">
         <div className="flex items-center gap-3">
           <FileText className="size-10" />
-          <span className="text-3xl font-semibold tracking-tight">personal-md</span>
+          <span className="text-3xl font-semibold tracking-tight">Caedora</span>
         </div>
 
         {status.state === 'permission-required' ? (
@@ -95,6 +95,22 @@ export default function Home() {
             <Button size="lg" onClick={() => void grantPermission()}>
               Grant access
             </Button>
+          </div>
+        ) : status.state === 'error' ? (
+          <div className="flex w-full max-w-sm flex-col items-center gap-4">
+            <div className="border-destructive/40 bg-destructive/5 text-destructive rounded-md border px-4 py-3 text-sm">
+              {status.error}
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button size="lg" onClick={() => setDialogMode('create')}>
+                <FolderPlus className="size-4" />
+                Create vault
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => setDialogMode('open')}>
+                <FolderOpen className="size-4" />
+                Open another vault
+              </Button>
+            </div>
           </div>
         ) : (
           <>
@@ -141,9 +157,9 @@ export default function Home() {
 
 function HomeShell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="personal-md-home-screen bg-background relative flex min-h-screen flex-col items-center justify-center px-6">
-      <div className="personal-md-home-titlebar absolute inset-x-0 top-0 z-20 h-11" />
-      <div className="personal-md-home-theme-toggle absolute top-3 left-4 z-30">
+    <main className="caedora-home-screen bg-background relative flex min-h-screen flex-col items-center justify-center px-6">
+      <div className="caedora-home-titlebar absolute inset-x-0 top-0 z-20 h-11" />
+      <div className="caedora-home-theme-toggle absolute top-3 left-4 z-30">
         <ModeToggle />
       </div>
       {children}

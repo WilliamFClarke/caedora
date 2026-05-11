@@ -182,7 +182,7 @@ const AssistantThinkingIndicator: FC = () => {
   return (
     <div className="aui-thinking-indicator flex shrink-0 items-center gap-2 px-2 text-muted-foreground text-sm">
       <Loader2Icon className="size-4 animate-spin" />
-      <span>Assistant is thinking...</span>
+      <span>Argus (AI Assistant) is thinking...</span>
     </div>
   );
 };

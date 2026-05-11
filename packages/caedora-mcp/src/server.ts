@@ -36,7 +36,7 @@ export interface BuildServerOptions {
 
 export function buildServer({ provider, readOnly = false }: BuildServerOptions): McpServer {
   const server = new McpServer({
-    name: 'personal-md-mcp',
+    name: 'caedora-mcp',
     version: '0.1.0',
   })
 

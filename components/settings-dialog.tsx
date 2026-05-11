@@ -45,7 +45,7 @@ import {
 import { useSettings } from '@/lib/settings-context'
 import { useVault } from '@/lib/vault-context'
 import { getDesktopApi } from '@/lib/desktop'
-import { PERSONAL_MD_ASSISTANT_PROMPT } from '@/lib/ai/personal-md-context'
+import { ARGUS_ASSISTANT_PROMPT } from '@/lib/ai/argus-context'
 import {
   cancelModelDownload,
   clearCloudApiKey,
@@ -73,7 +73,7 @@ const sections: Array<{
     group: 'Options',
     items: [
       { id: 'general', label: 'General', Icon: SlidersHorizontal },
-      { id: 'ai', label: 'AI', Icon: Bot },
+      { id: 'ai', label: 'Argus (AI Assistant)', Icon: Bot },
       { id: 'editor', label: 'Editor', Icon: Type },
       { id: 'appearance', label: 'Appearance', Icon: Palette },
       { id: 'hotkeys', label: 'Hotkeys', Icon: Keyboard },
@@ -244,7 +244,7 @@ function VaultSettings() {
           <ItemContent>
             <ItemTitle>Add a vault</ItemTitle>
             <ItemDescription>
-              Create a new personal-md vault or reconnect to an existing one.
+              Create a new Caedora vault or reconnect to an existing one.
             </ItemDescription>
           </ItemContent>
           <ItemActions>
@@ -417,7 +417,7 @@ function AiSettings() {
   }
 
   async function deleteModel() {
-    if (!window.confirm('Delete the bundled AI model? You will need to re-download ~4.7 GB to use it again.')) {
+    if (!window.confirm('Delete the bundled local model? You will need to re-download ~4.7 GB to use it again.')) {
       return
     }
     setBusy(true)
@@ -452,7 +452,7 @@ function AiSettings() {
     try {
       setState(await updateAiSettings(updates))
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not update AI settings.')
+      setMessage(error instanceof Error ? error.message : 'Could not update Argus (AI Assistant) settings.')
     }
   }
 
@@ -493,7 +493,7 @@ function AiSettings() {
         <ItemContent>
           <ItemTitle>Provider</ItemTitle>
           <ItemDescription>
-            AI assistant features run only in the desktop app.
+            Argus (AI Assistant) runs only in the desktop app.
           </ItemDescription>
           {state && (
             <p className="text-muted-foreground mt-1 text-xs">
@@ -605,7 +605,7 @@ function AiSettings() {
             <p className="text-muted-foreground mt-1 text-xs">
               {state?.bundledModelDownloaded
                 ? 'Model downloaded and ready.'
-                : 'Download AI model (approx 4.7 GB) to enable.'}
+                : 'Download local model (approx 4.7 GB) to enable.'}
             </p>
           )}
         </ItemContent>
@@ -747,7 +747,7 @@ function AiSettings() {
               })
             }}
             className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-            aria-label="AI tool permission level"
+            aria-label="Argus (AI Assistant) tool permission level"
           >
             <option value="require-approval">Ask for all</option>
             <option value="allow-all-except-delete">Ask for delete only</option>
@@ -760,10 +760,10 @@ function AiSettings() {
         <ItemContent className="min-w-0">
           <ItemTitle>Built-in system context</ItemTitle>
           <ItemDescription>
-            This read-only context is sent to the assistant before each request.
+            This read-only context is sent to Argus (AI Assistant) before each request.
           </ItemDescription>
           <pre className="bg-muted text-muted-foreground mt-3 max-h-64 overflow-auto rounded-md p-3 whitespace-pre-wrap text-xs">
-            {PERSONAL_MD_ASSISTANT_PROMPT}
+            {ARGUS_ASSISTANT_PROMPT}
           </pre>
         </ItemContent>
       </Item>
