@@ -24,8 +24,8 @@ const defaultContext: VaultContextValue = {
   provider: null,
   status: { state: 'checking' },
   connectLocal: async () => null,
-  connectDesktopLocal: async () => {},
-  connectGitHub: async () => {},
+  connectDesktopLocal: async () => false,
+  connectGitHub: async () => false,
   connectToVault: async () => {},
   grantPermission: async () => {},
   disconnect: () => {},
@@ -72,13 +72,13 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
     setStatus({ state: 'connecting' })
     try {
       const handle = preselected ?? (await window.showDirectoryPicker({ mode: 'readwrite' }))
+      const p = new LocalGitProvider(handle)
+      await p.init()
       await saveVaultState({
         type: 'local',
         directoryHandle: handle,
         lastOpenedAt: Date.now(),
       })
-      const p = new LocalGitProvider(handle)
-      await p.init()
       setProvider(p)
       setStatus({ state: 'ready', providerType: 'local' })
       return handle
@@ -91,28 +91,30 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
         state: 'error',
         error: e instanceof Error ? e.message : 'Failed to open folder',
       })
-      return null
+      throw e
     }
   }, [])
 
   const connectDesktopLocal = useCallback(async (root: { path: string; name: string }) => {
     setStatus({ state: 'connecting' })
     try {
+      const p = new ElectronLocalProvider(root.path, root.name)
+      await p.init()
       await saveVaultState({
         type: 'local',
         directoryPath: root.path,
         directoryName: root.name,
         lastOpenedAt: Date.now(),
       })
-      const p = new ElectronLocalProvider(root.path, root.name)
-      await p.init()
       setProvider(p)
       setStatus({ state: 'ready', providerType: 'local' })
+      return true
     } catch (e) {
       setStatus({
         state: 'error',
         error: e instanceof Error ? e.message : 'Failed to open desktop folder',
       })
+      return false
     }
   }, [])
 
@@ -127,16 +129,18 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
           githubRepo: repo,
           lastOpenedAt: Date.now(),
         })
-        const p = new GitHubProvider(pat, owner, repo)
-        setProvider(p)
-        setStatus({ state: 'ready', providerType: 'github' })
-      } catch (e) {
-        setStatus({
-          state: 'error',
-          error: e instanceof Error ? e.message : 'Failed to connect GitHub',
-        })
-      }
-    },
+      const p = new GitHubProvider(pat, owner, repo)
+      setProvider(p)
+      setStatus({ state: 'ready', providerType: 'github' })
+      return true
+    } catch (e) {
+      setStatus({
+        state: 'error',
+        error: e instanceof Error ? e.message : 'Failed to connect GitHub',
+      })
+      return false
+    }
+  },
     []
   )
 

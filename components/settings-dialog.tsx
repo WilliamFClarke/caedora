@@ -73,7 +73,7 @@ const sections: Array<{
     group: 'Options',
     items: [
       { id: 'general', label: 'General', Icon: SlidersHorizontal },
-      { id: 'ai', label: 'Argus', Icon: Bot },
+      { id: 'ai', label: 'Argus (AI Assistant)', Icon: Bot },
       { id: 'editor', label: 'Editor', Icon: Type },
       { id: 'appearance', label: 'Appearance', Icon: Palette },
       { id: 'hotkeys', label: 'Hotkeys', Icon: Keyboard },
@@ -452,7 +452,7 @@ function AiSettings() {
     try {
       setState(await updateAiSettings(updates))
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not update Argus settings.')
+      setMessage(error instanceof Error ? error.message : 'Could not update Argus (AI Assistant) settings.')
     }
   }
 
@@ -493,7 +493,7 @@ function AiSettings() {
         <ItemContent>
           <ItemTitle>Provider</ItemTitle>
           <ItemDescription>
-            Argus runs only in the desktop app.
+            Argus (AI Assistant) runs only in the desktop app.
           </ItemDescription>
           {state && (
             <p className="text-muted-foreground mt-1 text-xs">
@@ -747,7 +747,7 @@ function AiSettings() {
               })
             }}
             className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-            aria-label="Argus tool permission level"
+            aria-label="Argus (AI Assistant) tool permission level"
           >
             <option value="require-approval">Ask for all</option>
             <option value="allow-all-except-delete">Ask for delete only</option>
@@ -760,7 +760,7 @@ function AiSettings() {
         <ItemContent className="min-w-0">
           <ItemTitle>Built-in system context</ItemTitle>
           <ItemDescription>
-            This read-only context is sent to Argus before each request.
+            This read-only context is sent to Argus (AI Assistant) before each request.
           </ItemDescription>
           <pre className="bg-muted text-muted-foreground mt-3 max-h-64 overflow-auto rounded-md p-3 whitespace-pre-wrap text-xs">
             {ARGUS_ASSISTANT_PROMPT}

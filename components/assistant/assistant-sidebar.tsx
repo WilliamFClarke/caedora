@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Bot, MessageSquarePlus, Settings, Sparkles } from 'lucide-react'
+import { MessageSquarePlus, Settings, Sparkles } from 'lucide-react'
 import { Thread } from '@/components/assistant-ui/thread'
 import { Button } from '@/components/ui/button'
 import { DesktopAssistantRuntimeProvider } from './desktop-assistant-runtime'
@@ -105,11 +105,17 @@ export function AssistantSidebar({
       />
       <div className="flex h-full min-w-0 flex-col bg-background pb-3">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-background px-3">
-          <div className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-md">
-            <Bot className="size-4" />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/caedora-logo.png"
+            alt="Argus"
+            width={28}
+            height={28}
+            className="size-7 shrink-0"
+          />
+
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">Argus</p>
+            <p className="truncate text-sm font-medium">Argus (AI Assistant)</p>
             <p className="text-muted-foreground truncate text-[11px]">
               {providerState?.state === 'ready'
                 ? `${providerState.providerLabel}${providerState.modelLabel ? ` - ${providerState.modelLabel}` : ''}`
@@ -138,8 +144,8 @@ export function AssistantSidebar({
             variant="ghost"
             className="size-8"
             onClick={onOpenSettings}
-            aria-label="Argus settings"
-            title="Argus settings"
+            aria-label="Argus (AI Assistant) settings"
+            title="Argus (AI Assistant) settings"
           >
             <Settings className="size-4" />
           </Button>
@@ -167,8 +173,8 @@ export function AssistantSidebar({
               download={providerState?.download ?? null}
               message={
                 !rootPath
-                  ? 'Open a desktop local vault to let Argus read and edit project files.'
-                  : providerState?.message ?? 'Choose an Argus provider to enable chat.'
+                  ? 'Open a desktop local vault to let Argus (AI Assistant) read and edit project files.'
+                  : providerState?.message ?? 'Choose an Argus (AI Assistant) provider to enable chat.'
               }
               onOpenSettings={onOpenSettings}
             />
@@ -228,7 +234,7 @@ function AssistantLockedState({
         <Sparkles className="size-5" />
       </div>
       <div>
-        <p className="text-sm font-medium">Argus is not ready</p>
+        <p className="text-sm font-medium">Argus (AI Assistant) is not ready</p>
         <p className="text-muted-foreground mt-1 text-sm">{message}</p>
       </div>
       {download && (
@@ -256,7 +262,7 @@ function AssistantLockedState({
           </Button>
         )}
         <Button type="button" size="sm" onClick={onOpenSettings}>
-          Configure Argus
+          Configure Argus (AI Assistant)
         </Button>
       </div>
     </div>

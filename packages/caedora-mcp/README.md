@@ -1,7 +1,7 @@
 # caedora-mcp
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for
-[Caedora](https://github.com/WilliamFClarke/caedora) vaults. Gives
+[Caedora](https://caedora.app) vaults. Gives
 any MCP-aware AI (Claude Code, Claude Desktop, Cursor, etc.) **vault-aware**
 search and write tools that preserve the app's conventions — H1 ↔ filename,
 YAML frontmatter round-trip, tag normalisation.

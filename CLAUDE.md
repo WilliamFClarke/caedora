@@ -62,4 +62,4 @@ Tailwind CSS v4 (PostCSS plugin, no `tailwind.config.*` — config lives in `app
 
 - Path alias `@/*` → repo root (see `tsconfig.json`).
 - Workspace is configured for `packages/*`, currently including `packages/caedora-mcp`.
-- Hosted on Vercel (free tier, team `williamfclarkes-projects`); `vercel.json` is intentionally minimal.
+- Hosted on Vercel (free tier, team `williamfclarkes-projects`) at the production domain **[caedora.app](https://caedora.app)**; `vercel.json` is intentionally minimal.

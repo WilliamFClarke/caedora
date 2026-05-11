@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Model Context Protocol server for Caedora vaults — read, search, and maintain your vault from any MCP client.",
   "license": "MIT",
+  "homepage": "https://caedora.app",
   "type": "module",
   "bin": {
     "caedora-mcp": "./dist/cli.js"

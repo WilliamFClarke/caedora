@@ -220,7 +220,12 @@ function LocalPanel({
           }
           setPhase('preparing')
           await seedLocalVault(provider, vaultTemplate)
-          await connectDesktopLocal(root)
+          const connected = await connectDesktopLocal(root)
+          if (!connected) {
+            setPhase('idle')
+            onDone()
+            return
+          }
           router.push(`/vault/${WELCOME_PATH}`)
         } else {
           const root = await desktop.vault.selectDirectory({
@@ -230,7 +235,12 @@ function LocalPanel({
             setPhase('idle')
             return
           }
-          await connectDesktopLocal(root)
+          const connected = await connectDesktopLocal(root)
+          if (!connected) {
+            setPhase('idle')
+            onDone()
+            return
+          }
           router.push('/vault')
           onDone()
         }
@@ -266,7 +276,12 @@ function LocalPanel({
         }
         setPhase('preparing')
         await seedLocalVault(provider, vaultTemplate)
-        await connectLocal(handle)
+        const connectedHandle = await connectLocal(handle)
+        if (!connectedHandle) {
+          setError('Could not open the new vault folder.')
+          setPhase('idle')
+          return
+        }
         router.push(`/vault/${WELCOME_PATH}`)
         // Don't close the dialog — the route change unmounts it and prevents a
         // race with the home page's auto-redirect.
@@ -277,8 +292,6 @@ function LocalPanel({
           setPhase('idle')
           return
         }
-        const provider = new LocalGitProvider(handle)
-        await provider.init()
         router.push('/vault')
         onDone()
       }
@@ -289,6 +302,7 @@ function LocalPanel({
       }
       setError(e instanceof Error ? e.message : 'Could not open folder')
       setPhase('idle')
+      if (mode === 'open') onDone()
     }
   }
 
@@ -471,7 +485,8 @@ function GitHubPanel({
           SKILL_PATH,
         ])
 
-        await connectGitHub(pat, actualOwner, repo)
+        const connected = await connectGitHub(pat, actualOwner, repo)
+        if (!connected) throw new Error('Could not connect to the new GitHub vault.')
       } else {
         // Open: verify access
         const verify = await fetch(
@@ -490,7 +505,8 @@ function GitHubPanel({
               : `Could not reach GitHub (${verify.status}).`
           )
         }
-        await connectGitHub(pat, owner, repo)
+        const connected = await connectGitHub(pat, owner, repo)
+        if (!connected) throw new Error('Could not connect to that GitHub vault.')
       }
       if (mode === 'create') {
         router.push(`/vault/${WELCOME_PATH}`)

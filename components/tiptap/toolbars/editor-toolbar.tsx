@@ -147,8 +147,8 @@ function DesktopAssistantToolbarToggle() {
     <Button
       variant="ghost"
       size="icon"
-      aria-label={open ? "Close Argus" : "Open Argus"}
-      title={open ? "Close Argus" : "Open Argus"}
+      aria-label={open ? "Close Argus (AI Assistant)" : "Open Argus (AI Assistant)"}
+      title={open ? "Close Argus (AI Assistant)" : "Open Argus (AI Assistant)"}
       className="h-8 w-8 shrink-0 p-0"
       onClick={() =>
         void updateSettings({

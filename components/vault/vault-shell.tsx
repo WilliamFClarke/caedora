@@ -70,7 +70,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   }, [])
 
   useEffect(() => {
-    if (status.state === 'idle' || status.state === 'permission-required') {
+    if (status.state === 'idle' || status.state === 'permission-required' || status.state === 'error') {
       router.replace('/')
     }
   }, [status.state, router])

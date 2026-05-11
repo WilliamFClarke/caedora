@@ -2,6 +2,7 @@
   "name": "caedora",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://caedora.app",
   "main": "electron/main.cjs",
   "workspaces": [
     "packages/*"

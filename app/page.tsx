@@ -96,6 +96,22 @@ export default function Home() {
               Grant access
             </Button>
           </div>
+        ) : status.state === 'error' ? (
+          <div className="flex w-full max-w-sm flex-col items-center gap-4">
+            <div className="border-destructive/40 bg-destructive/5 text-destructive rounded-md border px-4 py-3 text-sm">
+              {status.error}
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button size="lg" onClick={() => setDialogMode('create')}>
+                <FolderPlus className="size-4" />
+                Create vault
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => setDialogMode('open')}>
+                <FolderOpen className="size-4" />
+                Open another vault
+              </Button>
+            </div>
+          </div>
         ) : (
           <>
             {vaults.length > 0 && (

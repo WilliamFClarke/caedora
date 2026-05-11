@@ -67,6 +67,7 @@ function createWindow() {
     minHeight: 640,
     show: false,
     title: 'Caedora',
+    icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     autoHideMenuBar: true,
     transparent: !ENABLE_NATIVE_WINDOW_SHADOW,
     backgroundColor: ENABLE_NATIVE_WINDOW_SHADOW ? '#111827' : '#00000000',
