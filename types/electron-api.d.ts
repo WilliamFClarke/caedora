@@ -67,6 +67,7 @@ export interface PersonalMdDesktopApi {
     clearCloudApiKey(): Promise<AiProviderState>
     startModelDownload(modelId?: string): Promise<AiProviderState>
     cancelModelDownload(modelId?: string): Promise<AiProviderState>
+    deleteBundledModel(modelId?: string): Promise<AiProviderState>
     onModelDownloadEvent(listener: (event: AiModelDownloadEvent) => void): () => void
     startChat(request: AiChatRequest): Promise<void>
     cancelChat(requestId: string): Promise<void>

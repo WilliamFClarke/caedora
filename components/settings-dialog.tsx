@@ -49,6 +49,7 @@ import { PERSONAL_MD_ASSISTANT_PROMPT } from '@/lib/ai/personal-md-context'
 import {
   cancelModelDownload,
   clearCloudApiKey,
+  deleteBundledModel,
   getAiState,
   onModelDownloadEvent,
   saveCloudApiKey,
@@ -415,6 +416,21 @@ function AiSettings() {
     }
   }
 
+  async function deleteModel() {
+    if (!window.confirm('Delete the bundled AI model? You will need to re-download ~4.7 GB to use it again.')) {
+      return
+    }
+    setBusy(true)
+    setMessage(null)
+    try {
+      setState(await deleteBundledModel(ai.bundledModel.modelId))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not delete model.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function updateDesktopAi(updates: Partial<DesktopAiSettings>) {
     const next = {
       ...ai,
@@ -599,16 +615,31 @@ function AiSettings() {
               Cancel
             </Button>
           ) : (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => void startDownload()}
-              disabled={busy || state?.bundledModelDownloaded}
-            >
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-              {state?.bundledModelDownloaded ? 'Downloaded' : 'Download model'}
-            </Button>
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void startDownload()}
+                disabled={busy || state?.bundledModelDownloaded}
+              >
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                {state?.bundledModelDownloaded ? 'Downloaded' : 'Download model'}
+              </Button>
+              {state?.bundledModelDownloaded && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => void deleteModel()}
+                  disabled={busy}
+                  aria-label="Delete bundled model"
+                >
+                  <Trash2 className="size-4" />
+                  Delete
+                </Button>
+              )}
+            </>
           )}
         </ItemActions>
       </Item>

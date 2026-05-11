@@ -402,6 +402,11 @@ function registerIpc() {
     return detectAiState()
   })
 
+  ipcMain.handle('ai:deleteBundledModel', async (_event, modelId) => {
+    await deleteBundledModel(modelId)
+    return detectAiState()
+  })
+
   ipcMain.handle('ai:startChat', async (event, request) => {
     const requestId = String(request?.requestId || crypto.randomUUID())
     const abortController = new AbortController()
@@ -960,6 +965,17 @@ async function cancelAiModelDownload(modelId) {
     message: 'Download cancelled.',
   }
   emitAiModelDownloadEvent({ type: 'cancelled', progress: record.progress })
+}
+
+async function deleteBundledModel(modelId) {
+  const settings = await loadAiSettings()
+  const id = modelId ? String(modelId) : settings.bundledModel.modelId
+  if (!id) return
+  if (aiModelDownloads.has(id)) {
+    await cancelAiModelDownload(id)
+  }
+  await fsp.rm(aiModelPath(id), { force: true }).catch(() => {})
+  await fsp.rm(aiModelTempPath(id), { force: true }).catch(() => {})
 }
 
 function bundledModelDefinition(settings, modelId) {

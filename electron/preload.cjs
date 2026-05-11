@@ -100,6 +100,7 @@ contextBridge.exposeInMainWorld('personalMdDesktop', {
     clearCloudApiKey: () => ipcRenderer.invoke('ai:clearCloudApiKey'),
     startModelDownload: (modelId) => ipcRenderer.invoke('ai:startModelDownload', modelId),
     cancelModelDownload: (modelId) => ipcRenderer.invoke('ai:cancelModelDownload', modelId),
+    deleteBundledModel: (modelId) => ipcRenderer.invoke('ai:deleteBundledModel', modelId),
     onModelDownloadEvent: (listener) => {
       const handler = (_event, payload) => listener(payload)
       ipcRenderer.on('ai:modelDownloadEvent', handler)

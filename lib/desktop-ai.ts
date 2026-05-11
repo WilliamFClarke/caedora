@@ -52,6 +52,10 @@ export function cancelModelDownload(modelId?: string): Promise<AiProviderState> 
   return desktopAi().cancelModelDownload(modelId)
 }
 
+export function deleteBundledModel(modelId?: string): Promise<AiProviderState> {
+  return desktopAi().deleteBundledModel(modelId)
+}
+
 export function onModelDownloadEvent(
   listener: (event: AiModelDownloadEvent) => void
 ): () => void {

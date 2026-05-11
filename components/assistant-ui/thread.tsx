@@ -157,7 +157,7 @@ export const Thread: FC = () => {
           </div>
         </div>
 
-        <div className="aui-thread-viewport-footer relative z-10 mx-auto flex w-full max-w-(--thread-max-width) shrink-0 flex-col gap-3 bg-background px-4 pb-3 pt-2">
+        <div className="aui-thread-viewport-footer relative z-10 mx-auto flex w-full max-w-(--thread-max-width) shrink-0 flex-col gap-3 bg-background px-4 pb-6 pt-2">
           <ThreadScrollToBottom
             isAtBottom={isAtBottom}
             onScrollToBottom={() => scrollToBottom("smooth")}
