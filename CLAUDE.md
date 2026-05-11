@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-personal-md is a privacy-first personal wiki / "life OS". User markdown notes live in the user's own storage (local folder via the File System Access API, or a GitHub repo via PAT) — **never on our servers**. An MCP server (planned, separate package) will expose that data to AI assistants.
+Caedora is a privacy-first personal wiki / "life OS". User markdown notes live in the user's own storage (local folder via the File System Access API, or a GitHub repo via PAT) — **never on our servers**. Argus is the built-in desktop assistant, and `packages/caedora-mcp` exposes vault data to MCP-aware AI assistants.
 
 When proposing features or architecture, default to the no-server-side-data constraint. Anything that requires storing user content on our infrastructure is out of scope.
 
@@ -61,5 +61,5 @@ Tailwind CSS v4 (PostCSS plugin, no `tailwind.config.*` — config lives in `app
 ## Conventions
 
 - Path alias `@/*` → repo root (see `tsconfig.json`).
-- Workspace is configured for `packages/*` (none yet — reserved for the future `personal-md-mcp` package).
+- Workspace is configured for `packages/*`, currently including `packages/caedora-mcp`.
 - Hosted on Vercel (free tier, team `williamfclarkes-projects`); `vercel.json` is intentionally minimal.

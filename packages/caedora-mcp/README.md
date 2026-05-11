@@ -1,7 +1,7 @@
-# personal-md-mcp
+# caedora-mcp
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for
-[personal-md](https://github.com/WilliamFClarke/personal-md) vaults. Gives
+[Caedora](https://github.com/WilliamFClarke/caedora) vaults. Gives
 any MCP-aware AI (Claude Code, Claude Desktop, Cursor, etc.) **vault-aware**
 search and write tools that preserve the app's conventions — H1 ↔ filename,
 YAML frontmatter round-trip, tag normalisation.
@@ -10,10 +10,10 @@ YAML frontmatter round-trip, tag normalisation.
 
 ```bash
 # Against a local folder
-npx personal-md-mcp --vault /path/to/my-vault
+npx caedora-mcp --vault /path/to/my-vault
 
 # Against a GitHub repo
-GITHUB_TOKEN=ghp_xxx npx personal-md-mcp --github you/your-vault
+GITHUB_TOKEN=ghp_xxx npx caedora-mcp --github you/your-vault
 ```
 
 Add it to your MCP client config (Claude Desktop shown):
@@ -21,9 +21,9 @@ Add it to your MCP client config (Claude Desktop shown):
 ```json
 {
   "mcpServers": {
-    "personal-md": {
+    "caedora": {
       "command": "npx",
-      "args": ["-y", "personal-md-mcp", "--vault", "/path/to/your-vault"]
+      "args": ["-y", "caedora-mcp", "--vault", "/path/to/your-vault"]
     }
   }
 }

@@ -31,7 +31,7 @@ import type { PersistedVaultState } from '../types'
 import { DEFAULT_SETTINGS, type AppSettings } from '../settings'
 import type { FolderAppearance } from '../folder-appearance'
 
-const DB_NAME = 'personal-md'
+const DB_NAME = 'caedora'
 const DB_VERSION = 4
 const LEGACY_STATE_STORE = 'vault-state'
 const VAULTS_STORE = 'vaults'

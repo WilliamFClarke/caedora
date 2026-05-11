@@ -334,7 +334,7 @@
     --desktop-titlebar-height: 44px;
   }
 
-  html.personal-md-desktop::before {
+  html.caedora-desktop::before {
     position: fixed;
     top: env(titlebar-area-y, 0);
     left: env(titlebar-area-x, 0);
@@ -346,15 +346,15 @@
     -webkit-app-region: drag;
   }
 
-  html.personal-md-desktop:not(.personal-md-platform-darwin) .personal-md-editor-toolbar {
+  html.caedora-desktop:not(.caedora-platform-darwin) .caedora-editor-toolbar {
     padding-right: calc(var(--desktop-window-controls-width) + 5.5rem);
   }
 
-  html.personal-md-desktop:not(.personal-md-platform-darwin) .personal-md-vault-workspace:has(.personal-md-ai-sidebar[aria-hidden="false"]) .personal-md-editor-toolbar {
+  html.caedora-desktop:not(.caedora-platform-darwin) .caedora-vault-workspace:has(.caedora-ai-sidebar[aria-hidden="false"]) .caedora-editor-toolbar {
     padding-right: 0.5rem;
   }
 
-  html.personal-md-desktop:not(.personal-md-platform-darwin) .personal-md-editor-toolbar-actions {
+  html.caedora-desktop:not(.caedora-platform-darwin) .caedora-editor-toolbar-actions {
     position: fixed;
     top: 6px;
     right: calc(var(--desktop-window-controls-width) + 8px);
@@ -363,32 +363,32 @@
     -webkit-app-region: no-drag;
   }
 
-  html.personal-md-desktop:not(.personal-md-platform-darwin) .personal-md-ai-sidebar {
+  html.caedora-desktop:not(.caedora-platform-darwin) .caedora-ai-sidebar {
     box-sizing: border-box;
     height: calc(100% - var(--desktop-titlebar-height));
     margin-top: var(--desktop-titlebar-height);
     border-top: 1px solid var(--border);
   }
 
-  .personal-md-ai-thread-host .aui-thread-root {
+  .caedora-ai-thread-host .aui-thread-root {
     height: 100%;
     min-height: 0;
     overflow: hidden;
     border-radius: 0.5rem;
   }
 
-  .personal-md-ai-thread-host .aui-thread-viewport {
+  .caedora-ai-thread-host .aui-thread-viewport {
     height: 100%;
     min-height: 0;
     overflow: hidden;
   }
 
-  .personal-md-ai-thread-host [data-slot="aui_thread-scroll"] {
+  .caedora-ai-thread-host [data-slot="aui_thread-scroll"] {
     min-height: 0;
     overscroll-behavior: contain;
   }
 
-  .personal-md-ai-thread-host [data-slot="aui_thread-content"] {
+  .caedora-ai-thread-host [data-slot="aui_thread-content"] {
     display: flex;
     min-height: 0;
     min-width: 0;
@@ -397,7 +397,7 @@
     padding-left: 0;
   }
 
-  .personal-md-ai-thread-host .aui-thread-viewport-footer {
+  .caedora-ai-thread-host .aui-thread-viewport-footer {
     position: relative;
     flex-shrink: 0;
     margin-top: 0;
@@ -407,23 +407,23 @@
     overflow: hidden;
   }
 
-  .personal-md-ai-thread-host .aui-composer-root {
+  .caedora-ai-thread-host .aui-composer-root {
     flex-shrink: 0;
     margin-bottom: 0.25rem;
     max-height: min(14rem, 32vh);
   }
 
-  .personal-md-ai-thread-host [data-slot="aui_composer-shell"] {
+  .caedora-ai-thread-host [data-slot="aui_composer-shell"] {
     max-height: min(14rem, 32vh);
     overflow: hidden;
   }
 
-  .personal-md-ai-thread-host .aui-composer-input {
+  .caedora-ai-thread-host .aui-composer-input {
     max-height: min(8rem, 20vh);
     overflow-y: auto;
   }
 
-  .personal-md-ai-thread-host [data-slot="aui_message-group"] {
+  .caedora-ai-thread-host [data-slot="aui_message-group"] {
     min-height: 0;
     flex: 0 0 auto;
     overflow-x: hidden;
@@ -433,12 +433,12 @@
     align-content: flex-start;
   }
 
-  .personal-md-ai-thread-host .aui-thinking-indicator {
+  .caedora-ai-thread-host .aui-thinking-indicator {
     margin-top: 0;
     margin-bottom: 0.5rem;
   }
 
-  html.personal-md-desktop [data-slot="sidebar-resizer"] {
+  html.caedora-desktop [data-slot="sidebar-resizer"] {
     position: absolute;
     top: 0;
     right: -6px;
@@ -452,7 +452,7 @@
     -webkit-app-region: no-drag;
   }
 
-  html.personal-md-desktop [data-slot="sidebar-resizer"]::after {
+  html.caedora-desktop [data-slot="sidebar-resizer"]::after {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -463,11 +463,11 @@
     transition: background-color 150ms ease;
   }
 
-  html.personal-md-desktop [data-slot="sidebar-resizer"]:hover::after {
+  html.caedora-desktop [data-slot="sidebar-resizer"]:hover::after {
     background: color-mix(in oklch, var(--sidebar-ring) 55%, transparent);
   }
 
-  html.personal-md-desktop [data-slot="sidebar-container"] {
+  html.caedora-desktop [data-slot="sidebar-container"] {
     z-index: 30;
   }
 
@@ -475,65 +475,65 @@
     display: none;
   }
 
-  html.personal-md-desktop [data-state="collapsed"] [data-slot="sidebar-resizer"] {
+  html.caedora-desktop [data-state="collapsed"] [data-slot="sidebar-resizer"] {
     display: none !important;
   }
 
-  html.personal-md-desktop.personal-md-resizing-sidebar [data-slot="sidebar-gap"],
-  html.personal-md-desktop.personal-md-resizing-sidebar [data-slot="sidebar-container"] {
+  html.caedora-desktop.caedora-resizing-sidebar [data-slot="sidebar-gap"],
+  html.caedora-desktop.caedora-resizing-sidebar [data-slot="sidebar-container"] {
     transition: none;
   }
 
-  html.personal-md-desktop .personal-md-editor-toolbar {
+  html.caedora-desktop .caedora-editor-toolbar {
     app-region: drag;
     -webkit-app-region: drag;
   }
 
-  html.personal-md-desktop .personal-md-home-titlebar {
+  html.caedora-desktop .caedora-home-titlebar {
     app-region: drag;
     -webkit-app-region: drag;
   }
 
-  html.personal-md-desktop .personal-md-home-theme-toggle {
+  html.caedora-desktop .caedora-home-theme-toggle {
     app-region: no-drag;
     -webkit-app-region: no-drag;
   }
 
-  html.personal-md-platform-darwin .personal-md-home-theme-toggle {
+  html.caedora-platform-darwin .caedora-home-theme-toggle {
     left: 5rem;
   }
 
-  html.personal-md-desktop .personal-md-editor-toolbar button,
-  html.personal-md-desktop .personal-md-editor-toolbar a,
-  html.personal-md-desktop .personal-md-editor-toolbar input,
-  html.personal-md-desktop .personal-md-editor-toolbar textarea,
-  html.personal-md-desktop .personal-md-editor-toolbar select,
-  html.personal-md-desktop .personal-md-editor-toolbar [role="button"],
-  html.personal-md-desktop .personal-md-editor-toolbar [role="menuitem"],
-  html.personal-md-desktop .personal-md-editor-toolbar [role="checkbox"],
-  html.personal-md-desktop .personal-md-editor-toolbar [contenteditable="true"],
-  html.personal-md-desktop .personal-md-editor-toolbar [data-radix-collection-item] {
+  html.caedora-desktop .caedora-editor-toolbar button,
+  html.caedora-desktop .caedora-editor-toolbar a,
+  html.caedora-desktop .caedora-editor-toolbar input,
+  html.caedora-desktop .caedora-editor-toolbar textarea,
+  html.caedora-desktop .caedora-editor-toolbar select,
+  html.caedora-desktop .caedora-editor-toolbar [role="button"],
+  html.caedora-desktop .caedora-editor-toolbar [role="menuitem"],
+  html.caedora-desktop .caedora-editor-toolbar [role="checkbox"],
+  html.caedora-desktop .caedora-editor-toolbar [contenteditable="true"],
+  html.caedora-desktop .caedora-editor-toolbar [data-radix-collection-item] {
     app-region: no-drag;
     -webkit-app-region: no-drag;
   }
 
-  html.personal-md-desktop.desktop-transparency-enabled,
-  html.personal-md-desktop.desktop-transparency-enabled body {
+  html.caedora-desktop.desktop-transparency-enabled,
+  html.caedora-desktop.desktop-transparency-enabled body {
     background: transparent;
   }
 
-  html.personal-md-desktop.desktop-transparency-enabled .personal-md-home-screen {
+  html.caedora-desktop.desktop-transparency-enabled .caedora-home-screen {
     background: var(--background);
   }
 
-  html.personal-md-desktop.desktop-transparency-enabled [data-slot="sidebar-wrapper"],
-  html.personal-md-desktop.desktop-transparency-enabled [data-slot="sidebar-gap"],
-  html.personal-md-desktop.desktop-transparency-enabled [data-slot="sidebar"],
-  html.personal-md-desktop.desktop-transparency-enabled [data-sidebar="sidebar"] {
+  html.caedora-desktop.desktop-transparency-enabled [data-slot="sidebar-wrapper"],
+  html.caedora-desktop.desktop-transparency-enabled [data-slot="sidebar-gap"],
+  html.caedora-desktop.desktop-transparency-enabled [data-slot="sidebar"],
+  html.caedora-desktop.desktop-transparency-enabled [data-sidebar="sidebar"] {
     background: transparent !important;
   }
 
-  html.personal-md-desktop.desktop-transparency-enabled [data-slot="sidebar-inner"] {
+  html.caedora-desktop.desktop-transparency-enabled [data-slot="sidebar-inner"] {
     background:
       linear-gradient(
         180deg,
@@ -556,7 +556,7 @@
       inset 0 1px color-mix(in oklch, white 48%, transparent);
   }
 
-  .dark.personal-md-desktop.desktop-transparency-enabled [data-slot="sidebar-inner"] {
+  .dark.caedora-desktop.desktop-transparency-enabled [data-slot="sidebar-inner"] {
     background:
       linear-gradient(
         180deg,
@@ -577,12 +577,12 @@
       inset 0 1px color-mix(in oklch, var(--primary) 14%, transparent);
   }
 
-  html.personal-md-desktop.desktop-transparency-enabled [data-slot="sidebar-container"] {
+  html.caedora-desktop.desktop-transparency-enabled [data-slot="sidebar-container"] {
     background: transparent !important;
   }
 
-  html.personal-md-desktop.desktop-transparency-enabled [data-slot="sidebar-inset"],
-  html.personal-md-desktop.desktop-transparency-enabled .personal-md-editor-toolbar {
+  html.caedora-desktop.desktop-transparency-enabled [data-slot="sidebar-inset"],
+  html.caedora-desktop.desktop-transparency-enabled .caedora-editor-toolbar {
     background: var(--background);
   }
 

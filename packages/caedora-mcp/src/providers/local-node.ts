@@ -100,7 +100,7 @@ export class LocalNodeProvider implements VaultProvider {
     try {
       const { stdout } = await execFileAsync(
         'git',
-        ['commit', '-m', message, '--author', 'personal-md-mcp <mcp@personal-md>'],
+        ['commit', '-m', message, '--author', 'caedora-mcp <mcp@caedora>'],
         { cwd: this.root }
       )
       const match = stdout.match(/\[[^\]]*\s([0-9a-f]{7,})\]/)

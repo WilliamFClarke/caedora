@@ -43,7 +43,7 @@ interface ConnectDialogProps {
 export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) {
   const defaultTab =
     typeof window !== 'undefined' &&
-    (window.personalMdDesktop || 'showDirectoryPicker' in window)
+    (window.caedoraDesktop || 'showDirectoryPicker' in window)
       ? 'local'
       : 'github'
 
@@ -423,7 +423,7 @@ function GitHubPanel({
           body: JSON.stringify({
             name: repo,
             private: true,
-            description: 'My personal-md vault',
+            description: 'My Caedora vault',
             auto_init: true,
           }),
         })

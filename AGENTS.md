@@ -4,7 +4,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## Project
 
-personal-md is a privacy-first personal wiki / "life OS". User markdown notes live in the user's own storage (local folder via the File System Access API, or a GitHub repo via PAT) ? **never on our servers**. An MCP server (planned, separate package) will expose that data to AI assistants.
+Caedora is a privacy-first personal wiki / "life OS". User markdown notes live in the user's own storage (local folder via the File System Access API, or a GitHub repo via PAT) - **never on our servers**. Argus is the built-in desktop assistant, and `packages/caedora-mcp` exposes vault data to MCP-aware AI assistants.
 
 When proposing features or architecture, default to the no-server-side-data constraint. Anything that requires storing user content on our infrastructure is out of scope.
 
@@ -21,30 +21,30 @@ npx playwright test e2e/home.spec.ts          # Run a single spec
 npx playwright test -g "name of test"         # Filter by test name
 ```
 
-CI (`.github/workflows/ci.yml`) runs build ? e2e in sequence; e2e runs inside the official Playwright container (`mcr.microsoft.com/playwright:v1.59.1-noble`) on Chromium only.
+CI (`.github/workflows/ci.yml`) runs build then e2e in sequence; e2e runs inside the official Playwright container (`mcr.microsoft.com/playwright:v1.59.1-noble`) on Chromium only.
 
 ## Architecture
 
 ### Provider abstraction (the central pattern)
 
-`lib/types.ts` defines `VaultProvider` ? a single interface implemented by:
+`lib/types.ts` defines `VaultProvider` - a single interface implemented by:
 
 - `lib/storage/local-provider.ts` (`LocalGitProvider`): wraps a `FileSystemDirectoryHandle` from the File System Access API and uses `isomorphic-git` against an `fs-adapter.ts` shim.
 - `lib/storage/github-provider.ts` (`GitHubProvider`): GitHub Contents API; `writesAreCommits === true` so callers skip the explicit `commit()` step.
 
-UI code (`components/vault/*`) only sees `VaultProvider` ? it must not branch on `type` except via the existing `writesAreCommits` flag. Add new backends by implementing the interface and wiring them into `lib/storage/index.ts`.
+UI code (`components/vault/*`) only sees `VaultProvider` - it must not branch on `type` except via the existing `writesAreCommits` flag. Add new backends by implementing the interface and wiring them into `lib/storage/index.ts`.
 
 ### Vault state lifecycle
 
 - `lib/vault-context.tsx` owns the singleton provider and `VaultStatus` state machine (`idle | connecting | permission-required | ready | error`). Mounted via `components/vault-provider-wrapper.tsx` inside the root layout.
-- Persistence is **IndexedDB only** (`lib/storage/idb.ts`) ? `FileSystemDirectoryHandle` for local, PAT/owner/repo for GitHub. Never write tokens to localStorage, cookies, or the server.
+- Persistence is **IndexedDB only** (`lib/storage/idb.ts`) - `FileSystemDirectoryHandle` for local, PAT/owner/repo for GitHub. Never write tokens to localStorage, cookies, or the server.
 - On reload, `createProviderFromPersistedState()` may return `needsPermission: true` for local handles where the browser revoked permission; `requestPermissionAndCreate()` must be invoked from a user gesture (button click) to re-grant.
 
 ### Routing
 
 App Router with two main routes:
-- `/` ? landing + connect dialog
-- `/vault` and `/vault/[...path]` ? both render `<VaultShell />`. The catch-all is the source of truth for the selected note; `VaultShell` syncs URL ? selection and auto-selects the first note when landing on `/vault` bare.
+- `/` - landing + connect dialog
+- `/vault` and `/vault/[...path]` - both render `<VaultShell />`. The catch-all is the source of truth for the selected note; `VaultShell` syncs URL and selection and auto-selects the first note when landing on `/vault` bare.
 
 ### Editor
 
@@ -56,10 +56,10 @@ Components are **hand-coded into `components/ui/`**, not added via the shadcn CL
 
 ### Styling
 
-Tailwind CSS v4 (PostCSS plugin, no `tailwind.config.*` ? config lives in `app/globals.css` via `@theme`). Dark mode via `next-themes` (`attribute="class"`, system default). Use the `cn()` helper from `@/lib/utils`.
+Tailwind CSS v4 (PostCSS plugin, no `tailwind.config.*` - config lives in `app/globals.css` via `@theme`). Dark mode via `next-themes` (`attribute="class"`, system default). Use the `cn()` helper from `@/lib/utils`.
 
 ## Conventions
 
-- Path alias `@/*` ? repo root (see `tsconfig.json`).
-- Workspace is configured for `packages/*` (none yet ? reserved for the future `personal-md-mcp` package).
+- Path alias `@/*` - repo root (see `tsconfig.json`).
+- Workspace is configured for `packages/*`, currently including `packages/caedora-mcp`.
 - Hosted on Vercel (free tier, team `williamfclarkes-projects`); `vercel.json` is intentionally minimal.

@@ -3,7 +3,7 @@ import { createFsAdapter } from './fs-adapter'
 import { buildDiffResult } from '../diff'
 import type { VaultProvider, FileEntry, CommitEntry, DiffResult } from '../types'
 
-const GIT_AUTHOR = { name: 'personal-md', email: 'local@personal-md' }
+const GIT_AUTHOR = { name: 'caedora', email: 'local@caedora' }
 const DIR = '/'
 
 export class LocalGitProvider implements VaultProvider {

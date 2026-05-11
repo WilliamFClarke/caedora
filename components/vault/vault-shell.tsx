@@ -97,7 +97,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       let all = await listFilesRecursive(provider)
 
       // First-open seed: if the repo/folder has no README at all, treat it
-      // as a pre-personal-md repo and seed welcome.md + SKILL.md so the user
+      // as a pre-Caedora repo and seed welcome.md + SKILL.md so the user
       // gets the same out-of-the-box state Create gives them. Runs once per
       // session so a manual delete of the README afterwards won't re-seed.
       // Treat any readme or welcome file (including the legacy 'welcome.md'
@@ -276,7 +276,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     async (from: string, to: string) => {
       if (!provider) return
       if (LOCKED_PATHS.has(from)) {
-        throw new Error(`${from} is maintained by personal-md and can't be renamed or moved.`)
+        throw new Error(`${from} is maintained by Caedora and can't be renamed or moved.`)
       }
       // Slugify just the final segment of the destination, keeping parent
       // folders untouched. Renames of folder paths also get a clean slug.
@@ -337,7 +337,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     async (path: string) => {
       if (!provider) return
       if (LOCKED_PATHS.has(path)) {
-        throw new Error(`${path} is maintained by personal-md and can't be deleted.`)
+        throw new Error(`${path} is maintained by Caedora and can't be deleted.`)
       }
       if (virtualFolders.has(path)) {
         // Virtual folder — just remove from state
@@ -420,7 +420,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         onSync={onSync}
       />
       <SidebarInset className="min-w-0">
-        <div className="personal-md-vault-workspace relative flex h-full min-w-0 flex-1 overflow-hidden bg-card">
+        <div className="caedora-vault-workspace relative flex h-full min-w-0 flex-1 overflow-hidden bg-card">
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             {loadError ? (
               <div className="flex h-full items-center justify-center">

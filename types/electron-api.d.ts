@@ -29,7 +29,7 @@ export interface LocalLlmConnectionResult {
   models: string[]
 }
 
-export interface PersonalMdDesktopApi {
+export interface CaedoraDesktopApi {
   isDesktop: true
   platform: NodeJS.Platform
   versions: {
@@ -85,7 +85,7 @@ export interface PersonalMdDesktopApi {
 
 declare global {
   interface Window {
-    personalMdDesktop?: PersonalMdDesktopApi
+    caedoraDesktop?: CaedoraDesktopApi
   }
 }
 

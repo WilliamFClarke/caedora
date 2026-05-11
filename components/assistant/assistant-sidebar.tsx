@@ -93,7 +93,7 @@ export function AssistantSidebar({
   return (
     <aside
       className={cn(
-        'personal-md-ai-sidebar relative h-full shrink-0 overflow-hidden border-l bg-background text-foreground transition-[width,opacity] duration-200 ease-out',
+        'caedora-ai-sidebar relative h-full shrink-0 overflow-hidden border-l bg-background text-foreground transition-[width,opacity] duration-200 ease-out',
         open ? 'opacity-100' : 'w-0! opacity-0'
       )}
       style={{ width: open ? width : 0 }}
@@ -109,7 +109,7 @@ export function AssistantSidebar({
             <Bot className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">Assistant</p>
+            <p className="truncate text-sm font-medium">Argus</p>
             <p className="text-muted-foreground truncate text-[11px]">
               {providerState?.state === 'ready'
                 ? `${providerState.providerLabel}${providerState.modelLabel ? ` - ${providerState.modelLabel}` : ''}`
@@ -138,14 +138,14 @@ export function AssistantSidebar({
             variant="ghost"
             className="size-8"
             onClick={onOpenSettings}
-            aria-label="AI settings"
-            title="AI settings"
+            aria-label="Argus settings"
+            title="Argus settings"
           >
             <Settings className="size-4" />
           </Button>
         </header>
 
-        <div className="personal-md-ai-thread-host min-h-0 flex-1 overflow-hidden bg-background p-3 pt-0">
+        <div className="caedora-ai-thread-host min-h-0 flex-1 overflow-hidden bg-background p-3 pt-0">
           {providerState?.state === 'ready' && rootPath ? (
             <DesktopAssistantRuntimeProvider
               key={`${rootPath}:${threadNonce}`}
@@ -167,8 +167,8 @@ export function AssistantSidebar({
               download={providerState?.download ?? null}
               message={
                 !rootPath
-                  ? 'Open a desktop local vault to let the assistant read and edit project files.'
-                  : providerState?.message ?? 'Choose an AI provider to enable the assistant.'
+                  ? 'Open a desktop local vault to let Argus read and edit project files.'
+                  : providerState?.message ?? 'Choose an Argus provider to enable chat.'
               }
               onOpenSettings={onOpenSettings}
             />
@@ -228,7 +228,7 @@ function AssistantLockedState({
         <Sparkles className="size-5" />
       </div>
       <div>
-        <p className="text-sm font-medium">AI assistant is not ready</p>
+        <p className="text-sm font-medium">Argus is not ready</p>
         <p className="text-muted-foreground mt-1 text-sm">{message}</p>
       </div>
       {download && (
@@ -256,7 +256,7 @@ function AssistantLockedState({
           </Button>
         )}
         <Button type="button" size="sm" onClick={onOpenSettings}>
-          Configure AI
+          Configure Argus
         </Button>
       </div>
     </div>

@@ -147,10 +147,10 @@ export const SKILL_PATH = 'AGENTS.md'
 // AGENTS.md is the emerging cross-tool convention for agent-readable project
 // instructions (Codex, Cursor); Claude Code auto-loads CLAUDE.md so users
 // targeting Claude Code can symlink AGENTS.md -> CLAUDE.md. Keep in sync
-// with conventions enforced by the editor and the personal-md-mcp package.
+// with conventions enforced by the editor and the caedora-mcp package.
 export const SKILL_MARKDOWN = `# AGENTS.md — instructions for AI assistants
 
-You are looking at a **personal-md vault**. This repository is one person's
+You are looking at a **Caedora vault**. This repository is one person's
 "life OS": a private, markdown-first wiki of work, projects, health, finances,
 travel, reading, and anything else worth remembering. Your job is to help the
 owner read, maintain, and extend it.
@@ -166,7 +166,7 @@ Everything lives in plain markdown files — no database, no server, no lock-in.
   note; don't treat it as load-bearing content.
 - \`index.md\` at the root is a machine-maintained map of the vault — see
   "How to find things" below.
-- \`.gitignore\`, \`.git/\`, and any \`.personal-md/\` folder are system files;
+- \`.gitignore\`, \`.git/\`, and any \`.caedora/\` folder are system files;
   ignore them unless asked.
 
 ## Conventions every note follows
@@ -214,7 +214,7 @@ note is created, renamed, moved, or deleted, so you can trust it to be fresh.
 After \`index.md\` narrows down candidates, open specific notes for detail:
 
 - **By tag**: scan the Tags column in \`index.md\`, or (if you have the
-  \`personal-md-mcp\` tools) call \`notes_by_tag(name)\`.
+  \`caedora-mcp\` tools) call \`notes_by_tag(name)\`.
 - **Full-text**: \`grep -r "query" .\` or the \`search_notes\` MCP tool.
 - **By folder**: use the Folder structure tree in \`index.md\`, or \`ls Projects/\`.
 - **Recent work**: \`git log --oneline -20\` shows what's been edited lately.
@@ -235,7 +235,7 @@ When you create or update a note:
 - **Preserve existing frontmatter \`extra\` keys.** Read, modify, write back.
 - **Don't rewrite a file to rename it.** Use git \`mv\` (or the \`rename_note\`
   MCP tool) so history follows.
-- **Use real commits.** If you're running via the \`personal-md-mcp\` server
+- **Use real commits.** If you're running via the \`caedora-mcp\` server
   against a GitHub repo, writes become commits automatically. Against a local
   folder, stage + commit as you go with a descriptive message.
 - **Leave \`welcome.md\` and this \`AGENTS.md\` alone** unless the owner asks
@@ -384,7 +384,7 @@ tags: [travel, documents, personal, reference]
 A private record of travel document details and loyalty programme accounts.
 
 > **Security note:** This file lives in your own storage only — never on
-> personal-md servers. Treat it like a locked drawer.
+> Caedora servers. Treat it like a locked drawer.
 
 ## Passport
 
