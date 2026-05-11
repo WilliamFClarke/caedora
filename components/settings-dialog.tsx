@@ -3,13 +3,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Bot,
+  Cloud,
   CircleCheck,
-  CircleX,
+  Cpu,
+  Download,
   FolderOpen,
   FolderPlus,
   Keyboard,
+  KeyRound,
   Loader2,
   Palette,
+  Server,
   SlidersHorizontal,
   ToggleLeft,
   ToggleRight,
@@ -36,16 +40,24 @@ import { ConnectDialog } from '@/components/connect-dialog'
 import { Input } from '@/components/ui/input'
 import {
   APPEARANCE_PALETTES,
-  LOCAL_LLM_PRESETS,
   SYNC_INTERVAL_OPTIONS,
-  type LocalLlmSettings,
 } from '@/lib/settings'
 import { useSettings } from '@/lib/settings-context'
 import { useVault } from '@/lib/vault-context'
-import { testLocalLlmConnection, type LocalLlmTestResult } from '@/lib/local-llm'
 import { getDesktopApi } from '@/lib/desktop'
+import { PERSONAL_MD_ASSISTANT_PROMPT } from '@/lib/ai/personal-md-context'
+import {
+  cancelModelDownload,
+  clearCloudApiKey,
+  getAiState,
+  onModelDownloadEvent,
+  saveCloudApiKey,
+  startModelDownload,
+  updateAiSettings,
+} from '@/lib/desktop-ai'
 import { getActiveVaultId, listVaults, removeVault } from '@/lib/storage'
 import type { PersistedVaultState } from '@/lib/types'
+import type { AiProviderKind, AiProviderState, AiSettings as DesktopAiSettings } from '@/lib/ai/types'
 import { cn } from '@/lib/utils'
 
 export type SettingsSection = 'general' | 'ai' | 'editor' | 'appearance' | 'hotkeys' | 'vaults'
@@ -79,14 +91,23 @@ export function SettingsDialog({
   initialSection?: SettingsSection
 }) {
   const [section, setSection] = useState<SettingsSection>(initialSection)
+  const isDesktop = Boolean(getDesktopApi())
+  const visibleSections = useMemo(
+    () =>
+      sections.map((group) => ({
+        ...group,
+        items: group.items.filter((item) => isDesktop || item.id !== 'ai'),
+      })),
+    [isDesktop]
+  )
   const title = useMemo(
-    () => sections.flatMap((group) => group.items).find((item) => item.id === section)?.label,
-    [section]
+    () => visibleSections.flatMap((group) => group.items).find((item) => item.id === section)?.label,
+    [section, visibleSections]
   )
 
   useEffect(() => {
-    if (open) setSection(initialSection)
-  }, [open, initialSection])
+    if (open) setSection(!isDesktop && initialSection === 'ai' ? 'general' : initialSection)
+  }, [open, initialSection, isDesktop])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -94,7 +115,7 @@ export function SettingsDialog({
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[180px_1fr]">
           <aside className="border-b p-2 md:border-r md:border-b-0">
-            {sections.map((group) => (
+            {visibleSections.map((group) => (
               <div key={group.group} className="flex flex-col gap-1">
                 <div className="text-muted-foreground px-2 py-1 text-[10px] font-medium uppercase tracking-wide">
                   {group.group}
@@ -324,26 +345,129 @@ function GeneralSettings() {
 
 function AiSettings() {
   const { settings, updateSettings } = useSettings()
-  const [testing, setTesting] = useState(false)
-  const [result, setResult] = useState<LocalLlmTestResult | null>(null)
-  const localLlm = settings.localLlm
+  const [state, setState] = useState<AiProviderState | null>(null)
+  const [apiKey, setApiKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const ai = settings.ai
 
-  function updateLocalLlm(updates: Partial<LocalLlmSettings>) {
-    setResult(null)
-    void updateSettings({
-      localLlm: {
-        ...localLlm,
-        ...updates,
+  useEffect(() => {
+    let alive = true
+    const loadState = () => {
+      getAiState()
+        .then((next) => {
+          if (alive) setState(next)
+        })
+        .catch(() => {})
+    }
+    const unsubscribe = onModelDownloadEvent((event) => {
+      if (alive) {
+        setState((current) =>
+          current
+            ? {
+                ...current,
+                download: event.progress,
+                state: event.type === 'progress' ? 'downloading' : current.state,
+              }
+            : current
+        )
+        if (event.type !== 'progress') loadState()
+      }
+    })
+    loadState()
+    const timer = window.setInterval(loadState, 2_000)
+    return () => {
+      alive = false
+      window.clearInterval(timer)
+      unsubscribe()
+    }
+  }, [])
+
+  async function refreshAiState() {
+    try {
+      const next = await getAiState()
+      setState(next)
+      return next
+    } catch {
+      return null
+    }
+  }
+
+  async function startDownload() {
+    setBusy(true)
+    setMessage(null)
+    try {
+      setState(await startModelDownload(ai.bundledModel.modelId))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not start model download.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function cancelDownload() {
+    setBusy(true)
+    try {
+      setState(await cancelModelDownload(ai.bundledModel.modelId))
+    } finally {
+      setBusy(false)
+      void refreshAiState()
+    }
+  }
+
+  async function updateDesktopAi(updates: Partial<DesktopAiSettings>) {
+    const next = {
+      ...ai,
+      ...updates,
+      sidebar: {
+        ...ai.sidebar,
+        ...updates.sidebar,
       },
+      bundledModel: {
+        ...ai.bundledModel,
+        ...updates.bundledModel,
+      },
+      cloud: {
+        ...ai.cloud,
+        ...updates.cloud,
+      },
+    }
+    await updateSettings({ ai: next })
+    try {
+      setState(await updateAiSettings(updates))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update AI settings.')
+    }
+  }
+
+  async function selectProvider(provider: AiProviderKind | 'auto') {
+    await updateDesktopAi({
+      selectedProvider: provider,
+      explicitProviderChoice: provider !== 'auto',
     })
   }
 
-  async function runTest() {
-    setTesting(true)
+  async function saveKey() {
+    if (!apiKey.trim()) return
+    setBusy(true)
+    setMessage(null)
     try {
-      setResult(await testLocalLlmConnection(localLlm))
+      const next = await saveCloudApiKey(apiKey.trim())
+      setState(next)
+      setApiKey('')
+      await updateSettings({
+        ai: {
+          ...ai,
+          cloud: {
+            ...ai.cloud,
+            hasApiKey: true,
+          },
+        },
+      })
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not save API key.')
     } finally {
-      setTesting(false)
+      setBusy(false)
     }
   }
 
@@ -351,137 +475,283 @@ function AiSettings() {
     <ItemGroup>
       <Item>
         <ItemContent>
-          <ItemTitle>Local LLM</ItemTitle>
+          <ItemTitle>Provider</ItemTitle>
           <ItemDescription>
-            Use a local OpenAI-compatible server for desktop AI features.
+            AI assistant features run only in the desktop app.
           </ItemDescription>
-        </ItemContent>
-        <ItemActions>
-          <button
-            type="button"
-            onClick={() => updateLocalLlm({ enabled: !localLlm.enabled })}
-            className="text-muted-foreground hover:text-foreground"
-            aria-label="Toggle local LLM"
-          >
-            {localLlm.enabled ? (
-              <ToggleRight className="text-primary size-7" />
-            ) : (
-              <ToggleLeft className="size-7" />
-            )}
-          </button>
-        </ItemActions>
-      </Item>
-      <Separator />
-      <Item>
-        <ItemContent>
-          <ItemTitle>Runtime</ItemTitle>
-          <ItemDescription>
-            Pick a default endpoint or use a custom OpenAI-compatible URL.
-          </ItemDescription>
+          {state && (
+            <p className="text-muted-foreground mt-1 text-xs">
+              {state.message}
+            </p>
+          )}
         </ItemContent>
         <ItemActions className="flex-wrap justify-end">
-          {LOCAL_LLM_PRESETS.map((preset) => (
-            <Button
-              key={preset.id}
-              type="button"
-              size="sm"
-              variant={localLlm.preset === preset.id ? 'default' : 'outline'}
-              onClick={() =>
-                updateLocalLlm({
-                  preset: preset.id,
-                  baseUrl: preset.baseUrl,
-                  model: preset.model,
-                })
-              }
-            >
-              {preset.label}
-            </Button>
-          ))}
-        </ItemActions>
-      </Item>
-      <Separator />
-      <div className="grid gap-4 p-4 md:grid-cols-2">
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" htmlFor="local-llm-base-url">
-            Base URL
-          </label>
-          <Input
-            id="local-llm-base-url"
-            value={localLlm.baseUrl}
-            onChange={(e) =>
-              updateLocalLlm({
-                baseUrl: e.target.value,
-                preset: 'custom',
-              })
-            }
-            placeholder="http://localhost:11434/v1"
-            spellCheck={false}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" htmlFor="local-llm-model">
-            Model
-          </label>
-          <Input
-            id="local-llm-model"
-            value={localLlm.model}
-            onChange={(e) => updateLocalLlm({ model: e.target.value })}
-            placeholder="llama3.2"
-            spellCheck={false}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5 md:col-span-2">
-          <label className="text-sm font-medium" htmlFor="local-llm-api-key">
-            API key
-          </label>
-          <Input
-            id="local-llm-api-key"
-            type="password"
-            value={localLlm.apiKey}
-            onChange={(e) => updateLocalLlm({ apiKey: e.target.value })}
-            placeholder="Optional"
-            autoComplete="off"
-          />
-        </div>
-      </div>
-      <Separator />
-      <Item>
-        <ItemContent>
-          <ItemTitle>Connection</ItemTitle>
-          <ItemDescription>
-            {result
-              ? result.message
-              : 'Check that the selected local server is reachable.'}
-          </ItemDescription>
-          {result?.models.length ? (
-            <p className="text-muted-foreground mt-1 font-mono text-[10px]">
-              {result.models.slice(0, 5).join(', ')}
-            </p>
-          ) : null}
-        </ItemContent>
-        <ItemActions>
-          {result ? (
-            result.ok ? (
-              <CircleCheck className="text-good size-4" />
-            ) : (
-              <CircleX className="text-destructive size-4" />
-            )
-          ) : null}
           <Button
             type="button"
             size="sm"
-            variant="outline"
-            onClick={() => void runTest()}
-            disabled={testing || !localLlm.baseUrl}
+            variant={ai.selectedProvider === 'auto' ? 'default' : 'outline'}
+            onClick={() => void selectProvider('auto')}
           >
-            {testing ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Bot className="size-4" />
-            )}
-            Test
+            Auto
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={ai.selectedProvider === 'ollama' ? 'default' : 'outline'}
+            onClick={() => void selectProvider('ollama')}
+          >
+            <Server className="size-4" />
+            Ollama
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={ai.selectedProvider === 'local-llama' ? 'default' : 'outline'}
+            onClick={() => void selectProvider('local-llama')}
+          >
+            <Cpu className="size-4" />
+            Bundled
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={ai.selectedProvider === 'cloud' ? 'default' : 'outline'}
+            onClick={() => void selectProvider('cloud')}
+          >
+            <Cloud className="size-4" />
+            Cloud
           </Button>
         </ItemActions>
+      </Item>
+      <Separator />
+      <Item>
+        <ItemContent>
+          <ItemTitle>Ollama</ItemTitle>
+          <ItemDescription>
+            Local, free, and fully offline once Ollama and a model are installed.
+          </ItemDescription>
+          {state?.ollamaModels.length ? (
+            <p className="text-muted-foreground mt-1 font-mono text-[10px]">
+              Detected: {state.ollamaModels.map((model) => model.label).slice(0, 5).join(', ')}
+            </p>
+          ) : (
+            <a
+              href="https://ollama.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary mt-1 block text-xs underline underline-offset-2"
+            >
+              Install Ollama
+            </a>
+          )}
+        </ItemContent>
+        <ItemActions>
+          <select
+            value={ai.ollamaModel}
+            onChange={(event) => void updateDesktopAi({ ollamaModel: event.target.value })}
+            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+            disabled={!state?.ollamaModels.length}
+          >
+            <option value="">Auto</option>
+            {state?.ollamaModels.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.label}
+              </option>
+            ))}
+          </select>
+        </ItemActions>
+      </Item>
+      <Separator />
+      <Item>
+        <ItemContent>
+          <ItemTitle>Bundled local model</ItemTitle>
+          <ItemDescription>
+            Download a GGUF model into desktop app data before using this provider. This keeps
+            chat fully offline.
+          </ItemDescription>
+          {state?.download ? (
+            <div className="mt-3 max-w-xl">
+              <div className="bg-muted h-2 overflow-hidden rounded-sm">
+                <div
+                  className="bg-primary h-full transition-[width]"
+                  style={{ width: `${state.download.percent}%` }}
+                />
+              </div>
+              <p className="text-muted-foreground mt-1 text-xs">
+                {state.download.message ?? 'Downloading model...'} {state.download.percent.toFixed(1)}%
+                {' - '}
+                {formatBytes(state.download.downloadedBytes)}
+                {state.download.totalBytes ? ` of ${formatBytes(state.download.totalBytes)}` : ''}
+                {state.download.etaSeconds ? ` - about ${formatEta(state.download.etaSeconds)} remaining` : ''}
+              </p>
+            </div>
+          ) : (
+            <p className="text-muted-foreground mt-1 text-xs">
+              {state?.bundledModelDownloaded
+                ? 'Model downloaded and ready.'
+                : 'Download AI model (approx 4.7 GB) to enable.'}
+            </p>
+          )}
+        </ItemContent>
+        <ItemActions>
+          {state?.download ? (
+            <Button type="button" size="sm" variant="outline" onClick={() => void cancelDownload()} disabled={busy}>
+              Cancel
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void startDownload()}
+              disabled={busy || state?.bundledModelDownloaded}
+            >
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+              {state?.bundledModelDownloaded ? 'Downloaded' : 'Download model'}
+            </Button>
+          )}
+        </ItemActions>
+      </Item>
+      <Separator />
+      <Item>
+        <ItemContent>
+          <ItemTitle>Cloud API</ItemTitle>
+          <ItemDescription>
+            Your messages and file contents will be sent to {cloudProviderLabel(ai.cloud.provider)}.
+            Usage may incur provider charges.
+          </ItemDescription>
+          {message && <p className="text-destructive mt-1 text-xs">{message}</p>}
+        </ItemContent>
+        <ItemActions className="flex-wrap justify-end">
+          <select
+            value={ai.cloud.provider}
+            onChange={(event) =>
+              void updateDesktopAi({
+                cloud: {
+                  ...ai.cloud,
+                  provider: event.target.value as DesktopAiSettings['cloud']['provider'],
+                },
+              })
+            }
+            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+          >
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="custom-openai">Custom OpenAI-compatible</option>
+          </select>
+          <Input
+            value={ai.cloud.model}
+            onChange={(event) =>
+              void updateDesktopAi({ cloud: { ...ai.cloud, model: event.target.value } })
+            }
+            className="w-44"
+            placeholder="Model"
+          />
+          {ai.cloud.provider === 'custom-openai' && (
+            <Input
+              value={ai.cloud.baseUrl}
+              onChange={(event) =>
+                void updateDesktopAi({ cloud: { ...ai.cloud, baseUrl: event.target.value } })
+              }
+              className="w-56"
+              placeholder="Base URL"
+            />
+          )}
+          <Input
+            type="password"
+            value={apiKey}
+            onChange={(event) => setApiKey(event.target.value)}
+            className="w-44"
+            placeholder={ai.cloud.hasApiKey ? 'Key saved' : 'API key'}
+            autoComplete="off"
+          />
+          <Button type="button" size="sm" onClick={() => void saveKey()} disabled={busy || !apiKey.trim()}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
+            Save key
+          </Button>
+          {ai.cloud.hasApiKey && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                setState(await clearCloudApiKey())
+                await updateSettings({
+                  ai: {
+                    ...ai,
+                    cloud: {
+                      ...ai.cloud,
+                      hasApiKey: false,
+                    },
+                  },
+                })
+              }}
+            >
+              Clear key
+            </Button>
+          )}
+        </ItemActions>
+      </Item>
+      <Separator />
+      <Item>
+        <ItemContent>
+          <ItemTitle>Tool permissions</ItemTitle>
+          <ItemDescription>
+            Reads are always allowed. Choose when file changes can run without approval.
+          </ItemDescription>
+        </ItemContent>
+        <ItemActions>
+          <select
+            value={
+              ai.toolPermissionLevel ??
+              (ai.autoApproveSafeOperations ? 'allow-all' : 'require-approval')
+            }
+            onChange={(event) => {
+              const toolPermissionLevel = event.target
+                .value as DesktopAiSettings['toolPermissionLevel']
+              void updateDesktopAi({
+                toolPermissionLevel,
+                toolPermissionLevelConfigured: true,
+                autoApproveSafeOperations: toolPermissionLevel !== 'require-approval',
+              })
+            }}
+            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+            aria-label="AI tool permission level"
+          >
+            <option value="require-approval">Ask for all</option>
+            <option value="allow-all-except-delete">Ask for delete only</option>
+            <option value="allow-all">Allow all edits</option>
+          </select>
+        </ItemActions>
+      </Item>
+      <Separator />
+      <Item className="items-stretch">
+        <ItemContent className="min-w-0">
+          <ItemTitle>Built-in system context</ItemTitle>
+          <ItemDescription>
+            This read-only context is sent to the assistant before each request.
+          </ItemDescription>
+          <pre className="bg-muted text-muted-foreground mt-3 max-h-64 overflow-auto rounded-md p-3 whitespace-pre-wrap text-xs">
+            {PERSONAL_MD_ASSISTANT_PROMPT}
+          </pre>
+        </ItemContent>
+      </Item>
+      <Separator />
+      <Item className="items-stretch">
+        <ItemContent className="min-w-0">
+          <ItemTitle>Extra system context</ItemTitle>
+          <ItemDescription>
+            Add your own instructions. These are appended after the built-in context.
+          </ItemDescription>
+          <textarea
+            value={ai.extraSystemPrompt ?? ''}
+            onChange={(event) =>
+              void updateDesktopAi({ extraSystemPrompt: event.target.value })
+            }
+            className="border-input bg-background mt-3 min-h-32 w-full resize-y rounded-md border px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+            placeholder="Example: Prefer short travel notes with packing reminders."
+          />
+        </ItemContent>
       </Item>
     </ItemGroup>
   )
@@ -684,6 +954,31 @@ function normalizeHex(value: string): string {
 function customPaletteSwatches(value: string): string[] {
   const color = isValidHex(value) ? normalizeHex(value) : '#5b8cff'
   return ['#f7f7f7', color, '#181818', '#0f0f0f']
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit += 1
+  }
+  return `${value >= 10 || unit < 2 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`
+}
+
+function formatEta(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  return `${Math.round(minutes / 60)}h`
+}
+
+function cloudProviderLabel(provider: DesktopAiSettings['cloud']['provider']): string {
+  if (provider === 'anthropic') return 'Anthropic'
+  if (provider === 'custom-openai') return 'your custom endpoint'
+  return 'OpenAI'
 }
 
 function vaultKind(state: PersistedVaultState): string {

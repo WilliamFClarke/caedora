@@ -1,3 +1,5 @@
+import type { AiSettings } from '@/lib/ai/types'
+
 export type SyncMode = 'auto' | 'manual'
 export type LocalLlmPreset = 'ollama' | 'lm-studio' | 'custom'
 export type AppearancePalette = 'default' | 'gray' | 'oled' | 'nocturne' | 'custom'
@@ -19,6 +21,7 @@ export interface AppSettings {
    */
   syncIntervalMs: number
   localLlm: LocalLlmSettings
+  ai: AiSettings
   desktopTransparencyEnabled: boolean
   appearancePalette: AppearancePalette
   customPaletteHex: string
@@ -81,6 +84,30 @@ export const DEFAULT_SETTINGS: AppSettings = {
     baseUrl: 'http://localhost:11434/v1',
     model: 'llama3.2',
     apiKey: '',
+  },
+  ai: {
+    selectedProvider: 'auto',
+    explicitProviderChoice: false,
+    autoApproveSafeOperations: true,
+    toolPermissionLevel: 'allow-all',
+    toolPermissionLevelConfigured: false,
+    extraSystemPrompt: '',
+    sidebar: {
+      open: false,
+      width: 400,
+    },
+    ollamaModel: '',
+    bundledModel: {
+      modelId: 'qwen2.5-7b-instruct-q4_k_m',
+      modelUrl: 'https://huggingface.co/second-state/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf',
+      modelSha256: 'a30c3c08ca3284a7b59fa35cd835ec50b4a54e211379692b0e48a34bdb72c2fb',
+    },
+    cloud: {
+      provider: 'openai',
+      baseUrl: '',
+      model: 'gpt-4o-mini',
+      hasApiKey: false,
+    },
   },
 }
 

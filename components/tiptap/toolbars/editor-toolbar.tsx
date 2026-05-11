@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Editor } from "@tiptap/core";
-import { MoreVertical } from "lucide-react";
+import { ChevronsRight, MoreVertical, PanelRightOpen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +15,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { isDesktopAiAvailable } from "@/lib/desktop-ai";
+import { useSettings } from "@/lib/settings-context";
 import { cn } from "@/lib/utils";
 import { AlignmentTooolbar } from "./alignment";
 import { BlockquoteToolbar } from "./blockquote";
@@ -39,18 +41,18 @@ import { UnderlineToolbar } from "./underline";
 import { UndoToolbar } from "./undo";
 
 export const EditorToolbar = ({ editor }: { editor: Editor }) => {
-  const toolbarRef = React.useRef<HTMLDivElement>(null);
-  const collapseLevel = useToolbarCollapseLevel(toolbarRef);
+  const toolsRowRef = React.useRef<HTMLDivElement>(null);
+  const collapseLevel = useToolbarCollapseLevel(toolsRowRef);
 
   return (
     <div className="personal-md-editor-toolbar sticky top-0 z-20 h-11 w-full min-w-0 border-b bg-card">
       <ToolbarProvider editor={editor}>
         <TooltipProvider>
           <div
-            ref={toolbarRef}
             className="flex h-11 w-full min-w-0 max-w-full items-center overflow-hidden px-2 py-0"
           >
             <div
+              ref={toolsRowRef}
               className="flex min-w-0 flex-1 basis-0 items-center gap-0.5 overflow-hidden"
             >
               <SidebarTrigger className="size-8 shrink-0" />
@@ -119,8 +121,9 @@ export const EditorToolbar = ({ editor }: { editor: Editor }) => {
               </span>
             </div>
 
-            <div className="ml-auto shrink-0">
+            <div className="personal-md-editor-toolbar-actions ml-auto flex shrink-0 items-center gap-0.5">
               <ResponsiveOverflowToolbar collapseLevel={collapseLevel} />
+              <DesktopAssistantToolbarToggle />
             </div>
           </div>
         </TooltipProvider>
@@ -128,6 +131,41 @@ export const EditorToolbar = ({ editor }: { editor: Editor }) => {
     </div>
   );
 };
+
+function DesktopAssistantToolbarToggle() {
+  const { settings, updateSettings } = useSettings();
+  const [desktopReady, setDesktopReady] = React.useState(false);
+  const open = settings.ai.sidebar.open;
+
+  React.useEffect(() => {
+    setDesktopReady(isDesktopAiAvailable());
+  }, []);
+
+  if (!desktopReady) return null;
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={open ? "Close AI assistant" : "Open AI assistant"}
+      title={open ? "Close AI assistant" : "Open AI assistant"}
+      className="h-8 w-8 shrink-0 p-0"
+      onClick={() =>
+        void updateSettings({
+          ai: {
+            ...settings.ai,
+            sidebar: {
+              ...settings.ai.sidebar,
+              open: !open,
+            },
+          },
+        })
+      }
+    >
+      {open ? <ChevronsRight className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+    </Button>
+  );
+}
 
 function ResponsiveOverflowToolbar({ collapseLevel }: { collapseLevel: number }) {
   if (collapseLevel === 0) return null;
@@ -235,6 +273,9 @@ function showAt(collapseLevel: number, threshold: number) {
   return collapseLevel >= threshold ? "inline-flex" : "hidden";
 }
 
+const MAX_TOOLBAR_COLLAPSE_LEVEL = 5;
+const TOOLBAR_RESTORE_WIDTH_BY_LEVEL = [0, 224, 72, 120, 176, 156];
+
 function useToolbarCollapseLevel(toolbarRef: React.RefObject<HTMLDivElement | null>) {
   const [level, setLevel] = React.useState(0);
   const frameRef = React.useRef<number | null>(null);
@@ -244,10 +285,30 @@ function useToolbarCollapseLevel(toolbarRef: React.RefObject<HTMLDivElement | nu
     if (!toolbar) return;
 
     const update = () => {
-      const width = toolbar.getBoundingClientRect().width;
-      setLevel((currentLevel) =>
-        collapseLevelForWidth(width - desktopWindowControlsWidth(), currentLevel)
-      );
+      setLevel((currentLevel) => {
+        const overflows = toolbar.scrollWidth > toolbar.clientWidth + 1;
+
+        if (overflows) {
+          const nextLevel = Math.min(
+            MAX_TOOLBAR_COLLAPSE_LEVEL,
+            currentLevel + 1,
+          );
+          if (nextLevel !== currentLevel) {
+            frameRef.current = requestAnimationFrame(update);
+          }
+          return nextLevel;
+        }
+
+        if (currentLevel === 0) return currentLevel;
+
+        const availableExtraWidth = toolbar.clientWidth - toolbar.scrollWidth;
+        const requiredWidth =
+          TOOLBAR_RESTORE_WIDTH_BY_LEVEL[currentLevel] ?? 176;
+        if (availableExtraWidth < requiredWidth) return currentLevel;
+
+        frameRef.current = requestAnimationFrame(update);
+        return currentLevel - 1;
+      });
     };
 
     update();
@@ -264,48 +325,6 @@ function useToolbarCollapseLevel(toolbarRef: React.RefObject<HTMLDivElement | nu
   }, [toolbarRef]);
 
   return level;
-}
-
-function desktopWindowControlsWidth(): number {
-  if (typeof window === "undefined") return 0;
-  if (!document.documentElement.classList.contains("personal-md-desktop")) return 0;
-  if (document.documentElement.classList.contains("personal-md-platform-darwin")) return 0;
-
-  const overlay = (
-    navigator as Navigator & {
-      windowControlsOverlay?: {
-        getTitlebarAreaRect?: () => { x: number; width: number };
-      };
-    }
-  ).windowControlsOverlay;
-  const rect = overlay?.getTitlebarAreaRect?.();
-  if (rect) {
-    const reservedRight = Math.max(0, window.innerWidth - rect.x - rect.width);
-    if (reservedRight > 0) return reservedRight;
-  }
-
-  return 144;
-}
-
-function collapseLevelForWidth(width: number, currentLevel: number): number {
-  const collapseTarget =
-    width < 460
-      ? 5
-      : width < 600
-        ? 4
-        : width < 760
-          ? 3
-          : width < 920
-            ? 2
-            : width < 1120
-              ? 1
-              : 0;
-
-  if (collapseTarget > currentLevel) return collapseTarget;
-  if (collapseTarget === currentLevel) return currentLevel;
-
-  const expandAt = [1160, 960, 800, 640, 500, 0];
-  return width >= expandAt[currentLevel] ? collapseTarget : currentLevel;
 }
 
 function ToolbarDivider({ className }: { className?: string }) {
