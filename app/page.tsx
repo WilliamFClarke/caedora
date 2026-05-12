@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { useVault } from '@/lib/vault-context'
 import { CtaButtons } from '@/components/landing/cta-buttons'
 import { Launcher } from '@/components/landing/launcher'
+import { Reveal } from '@/components/landing/reveal'
 import { ScreenshotFrame } from '@/components/landing/screenshot-frame'
 import { SiteHeader } from '@/components/landing/site-header'
 import { SiteFooter } from '@/components/landing/site-footer'
@@ -49,13 +50,27 @@ export default function Home() {
 
       <main>
         <Hero />
-        <LogoStrip />
-        <FeatureGrid />
-        <TemplatesSection />
-        <ShowcaseAlternating />
-        <PrivacyCallout />
-        <ArgusSection />
-        <FinalCta />
+        <Reveal>
+          <LogoStrip />
+        </Reveal>
+        <Reveal>
+          <FeatureGrid />
+        </Reveal>
+        <Reveal>
+          <TemplatesSection />
+        </Reveal>
+        <Reveal>
+          <ShowcaseAlternating />
+        </Reveal>
+        <Reveal>
+          <PrivacyCallout />
+        </Reveal>
+        <Reveal>
+          <ArgusSection />
+        </Reveal>
+        <Reveal>
+          <FinalCta />
+        </Reveal>
       </main>
 
       <SiteFooter />
@@ -65,16 +80,20 @@ export default function Home() {
 
 function Hero() {
   return (
-    <section className="relative overflow-hidden border-b">
-      <div className="bg-[radial-gradient(circle_at_top,_color-mix(in_oklch,_var(--landing-accent)_18%,_transparent)_0%,_transparent_60%)] pointer-events-none absolute inset-0 -z-10" />
-      <div className="mx-auto flex w-full max-w-6xl flex-col items-center px-4 pt-20 pb-16 text-center sm:px-6 sm:pt-28 sm:pb-24">
+    <section className="relative isolate overflow-hidden border-b">
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <div className="caedora-hero-orb" aria-hidden="true" />
+        <div className="caedora-hero-orb caedora-hero-orb--alt" aria-hidden="true" />
+        <div className="caedora-hero-noise" aria-hidden="true" />
+      </div>
+      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center px-4 pt-20 pb-16 text-center sm:px-6 sm:pt-28 sm:pb-24">
         <Image
           src="/caedora-logo.png"
           alt="Caedora"
-          width={72}
-          height={72}
+          width={160}
+          height={160}
           priority
-          className="mb-6"
+          className="mb-8 size-32 sm:size-40"
         />
 
         <Badge variant="outline" className="mb-6 gap-1.5 rounded-full px-3 py-1">
@@ -90,7 +109,7 @@ function Hero() {
         <p className="text-muted-foreground mt-6 max-w-2xl text-balance text-base leading-relaxed sm:text-lg">
           Caedora is a markdown-first personal wiki for tracking anything that
           matters to you. Your notes live in your own folder or GitHub repo,
-          never on our servers. An AI assistant, Argus, sits beside you to help
+          never on our servers. Argus AI sits beside you to help
           you think.
         </p>
 
@@ -100,9 +119,13 @@ function Hero() {
           Free, works offline · No account required
         </p>
 
-        <div className="mt-16 w-full">
-          <ScreenshotFrame label="caedora.app — vault overview" />
-        </div>
+        <Reveal delay={200} className="mt-16 w-full">
+          <ScreenshotFrame
+            label="caedora.app — vault overview"
+            src="/landing/hero.png"
+            alt="Caedora app showing a Paris trip note with Argus AI in the sidebar"
+          />
+        </Reveal>
       </div>
     </section>
   )
@@ -130,7 +153,7 @@ const FEATURES = [
   },
   {
     icon: Bot,
-    title: 'Argus, built-in',
+    title: 'Argus AI, built-in',
     body:
       'A desktop assistant that reads your vault, drafts new notes, and answers questions — using the model you pick.',
   },
@@ -242,10 +265,16 @@ function TemplatesSection() {
           ))}
         </div>
 
-        <p className="text-muted-foreground mt-8 text-sm">
+        <p className="text-muted-foreground mt-8 mb-10 text-sm">
           Every template is just markdown files in your vault — rearrange them
           however you like.
         </p>
+
+        <ScreenshotFrame
+          label="caedora.app — template marketplace"
+          src="/landing/templates.png"
+          alt="Caedora template marketplace showing Fitness, Reading, Daily journal and other templates"
+        />
       </div>
     </section>
   )
@@ -255,6 +284,8 @@ function ShowcaseAlternating() {
   const rows = [
     {
       label: 'caedora.app — editor',
+      src: '/landing/editor.png',
+      alt: 'Welcome vault note showing markdown formatting cheatsheet',
       eyebrow: 'Editor',
       title: 'A markdown editor that gets out of the way.',
       body:
@@ -262,15 +293,19 @@ function ShowcaseAlternating() {
       reverse: false,
     },
     {
-      label: 'caedora.app — Argus assistant',
-      eyebrow: 'Argus assistant',
+      label: 'caedora.app — Argus AI',
+      src: '/landing/argus.png',
+      alt: 'Argus AI chat in the Caedora sidebar',
+      eyebrow: 'Argus AI',
       title: 'Your second brain, in your sidebar.',
       body:
-        'Ask Argus to summarise yesterday, draft a meeting note, or find that idea from last March. It only sees the notes you let it.',
+        'Ask Argus AI to summarise yesterday, draft a meeting note, or find that idea from last March. It only sees the notes you let it.',
       reverse: true,
     },
     {
-      label: 'caedora.app — graph & links',
+      label: 'caedora.app — connected notes',
+      src: '/landing/connected.png',
+      alt: 'Caedora showing backlinks and connected notes between pages',
       eyebrow: 'Connected notes',
       title: 'Knowledge that compounds.',
       body:
@@ -299,7 +334,7 @@ function ShowcaseAlternating() {
               <p className="text-muted-foreground mt-4 text-base leading-relaxed">{r.body}</p>
             </div>
             <div className="w-full lg:w-7/12">
-              <ScreenshotFrame label={r.label} />
+              <ScreenshotFrame label={r.label} src={r.src} alt={r.alt} />
             </div>
           </div>
         ))}
@@ -364,19 +399,24 @@ function ArgusSection() {
       <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-12 px-4 py-24 text-center sm:px-6 sm:py-32">
         <div className="max-w-2xl">
           <p className="text-primary mb-3 text-sm font-medium uppercase tracking-widest">
-            Argus
+            Argus AI
           </p>
           <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
             An AI that knows your notes — and only your notes.
           </h2>
           <p className="text-muted-foreground mt-5 text-base leading-relaxed">
-            Argus runs inside Caedora and reads from your vault, not the
+            Argus AI runs inside Caedora and reads from your vault, not the
             internet. Bring your own API key, or use any MCP-compatible
             assistant through caedora-mcp.
           </p>
         </div>
         <div className="w-full max-w-4xl">
-          <ScreenshotFrame label="caedora.app — Argus chat" aspect="aspect-[16/9]" />
+          <ScreenshotFrame
+            label="caedora.app — Argus AI chat"
+            src="/landing/argus.png"
+            alt="Argus AI chat in the Caedora sidebar"
+            aspect="aspect-[16/9]"
+          />
         </div>
       </div>
     </section>

@@ -36,7 +36,7 @@ export function SiteHeader() {
             href="/#argus"
             className="text-muted-foreground hover:text-foreground transition"
           >
-            Argus
+            Argus AI
           </Link>
           <Link
             href="/download"

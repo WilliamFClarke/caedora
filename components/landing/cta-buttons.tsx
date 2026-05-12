@@ -45,25 +45,25 @@ export function CtaButtons({ size = 'lg', className, showDownloadOnly }: CtaButt
           <Button
             size="lg"
             onClick={() => setConnectMode('create')}
-            className={cn(sizeClasses, 'w-full sm:w-auto')}
+            className={cn(sizeClasses, 'group w-full sm:w-auto')}
           >
             <Globe className="size-4" />
             Try in browser
-            <ArrowRight className="size-4" />
+            <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
           </Button>
           <Button
             size="lg"
             variant="outline"
             onClick={() => setConnectMode('open')}
-            className={cn(sizeClasses, 'w-full sm:w-auto')}
+            className={cn(sizeClasses, 'group w-full sm:w-auto')}
           >
-            <FolderOpen className="size-4" />
+            <FolderOpen className="size-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:scale-110" />
             Open existing vault
           </Button>
         </>
       )}
 
-      <div className="inline-flex w-full overflow-hidden rounded-md border bg-background shadow-xs sm:w-auto">
+      <div className="group/dl inline-flex w-full overflow-hidden rounded-md border bg-background shadow-xs sm:w-auto">
         <Button
           variant="outline"
           size="lg"
@@ -75,7 +75,7 @@ export function CtaButtons({ size = 'lg', className, showDownloadOnly }: CtaButt
             'flex-1 rounded-none border-0 bg-transparent shadow-none hover:bg-accent disabled:opacity-100 disabled:cursor-not-allowed sm:flex-none'
           )}
         >
-          <Download className="size-4" />
+          <Download className="size-4 transition-transform duration-300 group-hover/dl:translate-y-0.5" />
           {downloadLabel}
         </Button>
         <DropdownMenu>
@@ -84,9 +84,9 @@ export function CtaButtons({ size = 'lg', className, showDownloadOnly }: CtaButt
               variant="outline"
               size="icon"
               aria-label="Choose a different platform"
-              className="h-auto rounded-none border-0 border-l bg-transparent shadow-none hover:bg-accent"
+              className="group/chev h-auto rounded-none border-0 border-l bg-transparent shadow-none hover:bg-accent"
             >
-              <ChevronDown className="size-4" />
+              <ChevronDown className="size-4 transition-transform duration-300 group-hover/chev:translate-y-0.5 data-[state=open]:rotate-180" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
