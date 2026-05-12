@@ -17,9 +17,9 @@ test('Try in browser opens the connect dialog with Local and GitHub options', as
 
 test('Download page lists all platforms', async ({ page }) => {
   await page.goto('/download')
-  await expect(page.getByText('macOS', { exact: true })).toBeVisible()
-  await expect(page.getByText('Windows', { exact: true })).toBeVisible()
-  await expect(page.getByText('Linux', { exact: true })).toBeVisible()
+  await expect(page.getByText('macOS', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('Windows', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('Linux', { exact: true }).first()).toBeVisible()
 })
 
 test('vault page redirects home when no vault connected', async ({ page }) => {
