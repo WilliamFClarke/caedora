@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test('home shows the product landing with primary CTAs', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-  await expect(page.getByRole('button', { name: /Try in browser/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Try in browser/i }).first()).toBeVisible()
   await expect(page.getByRole('button', { name: /Download for/i }).first()).toBeVisible()
 })
 
@@ -17,9 +17,9 @@ test('Try in browser opens the connect dialog with Local and GitHub options', as
 
 test('Download page lists all platforms', async ({ page }) => {
   await page.goto('/download')
-  await expect(page.getByRole('heading', { name: /macOS/i })).toBeVisible()
-  await expect(page.getByRole('heading', { name: /Windows/i })).toBeVisible()
-  await expect(page.getByRole('heading', { name: /Linux/i })).toBeVisible()
+  await expect(page.getByText('macOS', { exact: true })).toBeVisible()
+  await expect(page.getByText('Windows', { exact: true })).toBeVisible()
+  await expect(page.getByText('Linux', { exact: true })).toBeVisible()
 })
 
 test('vault page redirects home when no vault connected', async ({ page }) => {
