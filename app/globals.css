@@ -298,6 +298,53 @@
   --sidebar-ring: oklch(0.62 0.18 300);
 }
 
+/* Marketing / landing pages — mostly black & white with a single accent.
+   Change `--landing-accent` (and optionally the neutrals) to retheme the
+   entire landing/download experience in one place. The block re-maps the
+   standard shadcn design tokens so existing components inherit the look. */
+.landing-theme {
+  --landing-accent: oklch(0.55 0.17 258);
+  --landing-accent-foreground: #ffffff;
+
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: var(--landing-accent);
+  --primary-foreground: var(--landing-accent-foreground);
+  --secondary: #f5f5f5;
+  --secondary-foreground: #0a0a0a;
+  --muted: #f5f5f5;
+  --muted-foreground: #6b7280;
+  --accent: #f5f5f5;
+  --accent-foreground: #0a0a0a;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: var(--landing-accent);
+}
+
+.dark .landing-theme {
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --card: #111111;
+  --card-foreground: #fafafa;
+  --popover: #111111;
+  --popover-foreground: #fafafa;
+  --primary: var(--landing-accent);
+  --primary-foreground: var(--landing-accent-foreground);
+  --secondary: #161616;
+  --secondary-foreground: #fafafa;
+  --muted: #171717;
+  --muted-foreground: #a1a1aa;
+  --accent: #1a1a1a;
+  --accent-foreground: #fafafa;
+  --border: #1f1f1f;
+  --input: #1f1f1f;
+  --ring: var(--landing-accent);
+}
+
 .dark.palette-nocturne {
   --background: oklch(0.22 0.035 286);
   --foreground: oklch(0.93 0.025 300);
