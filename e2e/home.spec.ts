@@ -1,17 +1,25 @@
 import { test, expect } from '@playwright/test'
 
-test('home shows Create vault and Open vault buttons', async ({ page }) => {
+test('home shows the product landing with primary CTAs', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('button', { name: /Create vault/i })).toBeVisible()
-  await expect(page.getByRole('button', { name: /Open vault/i })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Try in browser/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Download for/i }).first()).toBeVisible()
 })
 
-test('Create vault opens a dialog with Local and GitHub options', async ({ page }) => {
+test('Try in browser opens the connect dialog with Local and GitHub options', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: /Create vault/i }).click()
+  await page.getByRole('button', { name: /Try in browser/i }).first().click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await expect(page.getByRole('tab', { name: /On this computer/i })).toBeVisible()
   await expect(page.getByRole('tab', { name: /GitHub/i })).toBeVisible()
+})
+
+test('Download page lists all platforms', async ({ page }) => {
+  await page.goto('/download')
+  await expect(page.getByRole('heading', { name: /macOS/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Windows/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Linux/i })).toBeVisible()
 })
 
 test('vault page redirects home when no vault connected', async ({ page }) => {

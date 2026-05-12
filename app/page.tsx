@@ -1,245 +1,440 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
+import Link from 'next/link'
 import {
-  FileText,
-  FolderOpen,
-  FolderPlus,
-  Github,
-  Loader2,
-  Trash2,
+  ArrowRight,
+  Bot,
+  BriefcaseBusiness,
+  Folder,
+  FolderTree,
+  Lock,
+  Search,
+  Sparkles,
+  User,
+  Wifi,
 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ModeToggle } from '@/components/mode-toggle'
-import { ConnectDialog } from '@/components/connect-dialog'
 import { useVault } from '@/lib/vault-context'
-import { listVaults, removeVault } from '@/lib/storage'
-import type { PersistedVaultState } from '@/lib/types'
-import { cn } from '@/lib/utils'
-
-type StoredVault = { id: string; state: PersistedVaultState }
+import { CtaButtons } from '@/components/landing/cta-buttons'
+import { Launcher } from '@/components/landing/launcher'
+import { Reveal } from '@/components/landing/reveal'
+import { ScreenshotFrame } from '@/components/landing/screenshot-frame'
+import { SiteHeader } from '@/components/landing/site-header'
+import { SiteFooter } from '@/components/landing/site-footer'
+import { isDesktopApp } from '@/lib/desktop'
 
 export default function Home() {
   const router = useRouter()
-  const { status, grantPermission, connectToVault } = useVault()
-  const [dialogMode, setDialogMode] = useState<'create' | 'open' | null>(null)
-  const [vaults, setVaults] = useState<StoredVault[]>([])
-  const [connectingId, setConnectingId] = useState<string | null>(null)
+  const { status } = useVault()
+  const [isDesktop, setIsDesktop] = useState<boolean | null>(null)
 
-  // If a vault is already connected, jump straight in. But stay put while the
-  // connect dialog is open — dialog-driven flows (create) navigate to a
-  // specific note (e.g. /vault/welcome.md) themselves, and we don't want this
-  // effect to race them to `/vault`.
+  // Detect Electron after mount to avoid SSR/CSR mismatch.
   useEffect(() => {
-    if (dialogMode !== null) return
-    if (status.state === 'ready') router.replace('/vault')
-  }, [status.state, router, dialogMode])
-
-  const refreshVaults = useCallback(async () => {
-    setVaults(await listVaults())
+    setIsDesktop(isDesktopApp())
   }, [])
 
   useEffect(() => {
-    void refreshVaults()
-  }, [refreshVaults])
+    if (status.state === 'ready') router.replace('/vault')
+  }, [status.state, router])
 
-  const onOpenStored = useCallback(
-    async (id: string) => {
-      setConnectingId(id)
-      try {
-        await connectToVault(id)
-      } finally {
-        setConnectingId(null)
-      }
-    },
-    [connectToVault]
+  if (isDesktop === null) return null
+  if (isDesktop) return <Launcher />
+
+  return (
+    <div className="landing-theme bg-background text-foreground min-h-screen">
+      <SiteHeader />
+
+      <main>
+        <Hero />
+        <Reveal>
+          <LogoStrip />
+        </Reveal>
+        <Reveal>
+          <FeatureGrid />
+        </Reveal>
+        <Reveal>
+          <TemplatesSection />
+        </Reveal>
+        <Reveal>
+          <ShowcaseAlternating />
+        </Reveal>
+        <Reveal>
+          <PrivacyCallout />
+        </Reveal>
+        <Reveal>
+          <ArgusSection />
+        </Reveal>
+        <Reveal>
+          <FinalCta />
+        </Reveal>
+      </main>
+
+      <SiteFooter />
+    </div>
   )
+}
 
-  const onRemove = useCallback(
-    async (id: string, e: React.MouseEvent) => {
-      e.stopPropagation()
-      await removeVault(id)
-      await refreshVaults()
-    },
-    [refreshVaults]
+function Hero() {
+  return (
+    <section className="relative isolate overflow-hidden border-b">
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <div className="caedora-hero-orb" aria-hidden="true" />
+        <div className="caedora-hero-orb caedora-hero-orb--alt" aria-hidden="true" />
+        <div className="caedora-hero-noise" aria-hidden="true" />
+      </div>
+      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center px-4 pt-20 pb-16 text-center sm:px-6 sm:pt-28 sm:pb-24">
+        <Image
+          src="/caedora-logo.png"
+          alt="Caedora"
+          width={160}
+          height={160}
+          priority
+          className="mb-8 size-32 sm:size-40"
+        />
+
+        <Badge variant="outline" className="mb-6 gap-1.5 rounded-full px-3 py-1">
+          <Sparkles className="text-primary size-3" />
+          <span className="text-xs">Privacy-first personal wiki</span>
+        </Badge>
+
+        <h1 className="max-w-3xl text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
+          Your life&apos;s notes,
+          <span className="text-primary"> entirely yours.</span>
+        </h1>
+
+        <p className="text-muted-foreground mt-6 max-w-2xl text-balance text-base leading-relaxed sm:text-lg">
+          Caedora is a markdown-first personal wiki for tracking anything that
+          matters to you. Your notes live in your own folder or GitHub repo,
+          never on our servers. Argus AI sits beside you to help
+          you think.
+        </p>
+
+        <CtaButtons size="xl" className="mt-10" />
+
+        <p className="text-muted-foreground mt-6 text-xs">
+          Free, works offline · No account required
+        </p>
+
+        <Reveal delay={200} className="mt-16 w-full">
+          <ScreenshotFrame
+            label="caedora.app — vault overview"
+            src="/landing/hero.png"
+            alt="Caedora app showing a Paris trip note with Argus AI in the sidebar"
+          />
+        </Reveal>
+      </div>
+    </section>
   )
+}
 
-  if (status.state === 'checking' || status.state === 'connecting' || status.state === 'ready') {
-    return (
-      <HomeShell>
-        <div className="flex flex-col items-center gap-4 text-center">
-          <Loader2 className="text-primary size-6 animate-spin" />
-          <p className="text-muted-foreground text-sm">
-            {status.state === 'checking' ? 'Checking for vault...' : 'Opening vault...'}
+function LogoStrip() {
+  const items = ['Markdown', 'GitHub', 'File System Access', 'MCP', 'Local-first', 'Privacy-first']
+  return (
+    <section className="border-b">
+      <div className="text-muted-foreground mx-auto flex w-full max-w-6xl flex-wrap items-center justify-center gap-x-10 gap-y-3 px-4 py-8 text-xs uppercase tracking-widest sm:px-6">
+        {items.map((it) => (
+          <span key={it}>{it}</span>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+const FEATURES = [
+  {
+    icon: Lock,
+    title: 'Your storage, always',
+    body:
+      'Notes write directly to a folder on your machine or a GitHub repo you own. Nothing routes through our infrastructure.',
+  },
+  {
+    icon: Bot,
+    title: 'Argus AI, built-in',
+    body:
+      'A desktop assistant that reads your vault, drafts new notes, and answers questions — using the model you pick.',
+  },
+  {
+    icon: FolderTree,
+    title: 'Plain markdown',
+    body:
+      'Standard .md files, frontmatter, wiki-style links. Open the same files in any editor you already use.',
+  },
+  {
+    icon: Wifi,
+    title: 'Works offline',
+    body:
+      'Local-first by default. Open and edit your vault on a plane; sync happens when you reconnect.',
+  },
+  {
+    icon: Search,
+    title: 'Find anything',
+    body:
+      'Full-text search across notes, plus a quick command palette to jump straight to what you need.',
+  },
+  {
+    icon: Sparkles,
+    title: 'MCP-ready',
+    body:
+      'Expose your vault to any MCP-aware AI tool through caedora-mcp — bring your own assistant.',
+  },
+]
+
+function FeatureGrid() {
+  return (
+    <section id="features" className="border-b">
+      <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
+        <div className="mb-14 max-w-2xl">
+          <p className="text-primary mb-3 text-sm font-medium uppercase tracking-widest">
+            Features
+          </p>
+          <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+            A wiki that respects you.
+          </h2>
+          <p className="text-muted-foreground mt-4 text-base">
+            Every design choice in Caedora starts from one rule: your content
+            never leaves your control.
           </p>
         </div>
-      </HomeShell>
-    )
-  }
 
-  return (
-    <HomeShell>
-      <div className="flex w-full max-w-md flex-col items-center gap-8 text-center">
-        <div className="flex items-center gap-3">
-          <FileText className="size-10" />
-          <span className="text-3xl font-semibold tracking-tight">Caedora</span>
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map(({ icon: Icon, title, body }) => (
+            <div key={title} className="bg-background flex flex-col gap-3 p-6 sm:p-7">
+              <Icon className="text-primary size-5" />
+              <h3 className="text-base font-medium">{title}</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">{body}</p>
+            </div>
+          ))}
         </div>
+      </div>
+    </section>
+  )
+}
 
-        {status.state === 'permission-required' ? (
-          <div className="flex max-w-sm flex-col items-center gap-4">
-            <p className="text-muted-foreground text-sm">
-              Re-grant access to <span className="font-medium">{status.folderName}</span>{' '}
-              to continue.
+const TEMPLATES = [
+  {
+    icon: User,
+    title: 'Personal',
+    desc: 'Pre-wired pages for shopping, health, travel, contacts, and journaling so you can start tracking life on day one.',
+  },
+  {
+    icon: BriefcaseBusiness,
+    title: 'Work',
+    desc: 'Meeting notes, project briefs, weekly reviews, and 1:1 logs — ready to fill in.',
+  },
+  {
+    icon: Folder,
+    title: 'Blank',
+    desc: 'A single welcome note and nothing else. Build your own structure from scratch.',
+  },
+]
+
+function TemplatesSection() {
+  return (
+    <section id="templates" className="border-b">
+      <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
+        <div className="mb-12 flex flex-col items-start gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-primary mb-3 text-sm font-medium uppercase tracking-widest">
+              Templates
             </p>
-            <Button size="lg" onClick={() => void grantPermission()}>
-              Grant access
-            </Button>
+            <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+              Start with a shape, not a blank page.
+            </h2>
+            <p className="text-muted-foreground mt-4 text-base leading-relaxed">
+              Pick a template when you create your vault and Caedora seeds it
+              with example notes you can edit, rename, or delete. Or start
+              blank and grow your own structure.
+            </p>
           </div>
-        ) : status.state === 'error' ? (
-          <div className="flex w-full max-w-sm flex-col items-center gap-4">
-            <div className="border-destructive/40 bg-destructive/5 text-destructive rounded-md border px-4 py-3 text-sm">
-              {status.error}
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Button size="lg" onClick={() => setDialogMode('create')}>
-                <FolderPlus className="size-4" />
-                Create vault
-              </Button>
-              <Button size="lg" variant="outline" onClick={() => setDialogMode('open')}>
-                <FolderOpen className="size-4" />
-                Open another vault
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <>
-            {vaults.length > 0 && (
-              <div className="flex w-full flex-col gap-2">
-                <p className="text-muted-foreground self-start text-xs font-medium uppercase tracking-wider">
-                  Recent vaults
-                </p>
-                <ul className="flex w-full flex-col gap-1.5">
-                  {vaults.map((v) => (
-                    <VaultRow
-                      key={v.id}
-                      vault={v}
-                      connecting={connectingId === v.id}
-                      onOpen={() => onOpenStored(v.id)}
-                      onRemove={(e) => onRemove(v.id, e)}
-                    />
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Button size="lg" onClick={() => setDialogMode('create')}>
-                <FolderPlus className="size-4" />
-                Create vault
-              </Button>
-              <Button size="lg" variant="outline" onClick={() => setDialogMode('open')}>
-                <FolderOpen className="size-4" />
-                Open vault
-              </Button>
-            </div>
-          </>
-        )}
-      </div>
-
-      <ConnectDialog
-        open={dialogMode !== null}
-        onOpenChange={(open) => !open && setDialogMode(null)}
-        mode={dialogMode ?? 'create'}
-      />
-    </HomeShell>
-  )
-}
-
-function HomeShell({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="caedora-home-screen bg-background relative flex min-h-screen flex-col items-center justify-center px-6">
-      <div className="caedora-home-titlebar absolute inset-x-0 top-0 z-20 h-11" />
-      <div className="caedora-home-theme-toggle absolute top-3 left-4 z-30">
-        <ModeToggle />
-      </div>
-      {children}
-    </main>
-  )
-}
-
-function VaultRow({
-  vault,
-  connecting,
-  onOpen,
-  onRemove,
-}: {
-  vault: StoredVault
-  connecting: boolean
-  onOpen: () => void
-  onRemove: (e: React.MouseEvent) => void
-}) {
-  const isGithub = vault.state.type === 'github'
-  const label = isGithub
-    ? `${vault.state.githubOwner}/${vault.state.githubRepo}`
-    : vault.state.directoryName ?? vault.state.directoryHandle?.name ?? 'Local vault'
-  const subtitle = isGithub
-    ? 'GitHub'
-    : vault.state.directoryPath
-      ? 'Desktop folder'
-      : 'Local folder'
-  const lastOpened = vault.state.lastOpenedAt
-    ? timeAgo(vault.state.lastOpenedAt)
-    : 'never'
-
-  return (
-    <li
-      className={cn(
-        'hover:bg-accent hover:border-border group/vault border-border/60 flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition',
-        connecting && 'pointer-events-none opacity-60'
-      )}
-    >
-      <button
-        type="button"
-        onClick={onOpen}
-        disabled={connecting}
-        className="flex min-w-0 flex-1 items-center gap-3 text-left"
-      >
-        {isGithub ? (
-          <Github className="text-muted-foreground size-4 shrink-0" />
-        ) : (
-          <FolderOpen className="text-muted-foreground size-4 shrink-0" />
-        )}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm font-medium">{label}</span>
-          <span className="text-muted-foreground font-mono text-[10px]">
-            {subtitle} · opened {lastOpened}
-          </span>
         </div>
-      </button>
-      {connecting ? (
-        <Loader2 className="size-4 animate-spin" />
-      ) : (
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={`Remove ${label}`}
-          className="text-muted-foreground hover:text-destructive opacity-0 transition group-hover/vault:opacity-100"
-        >
-          <Trash2 className="size-4" />
-        </button>
-      )}
-    </li>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {TEMPLATES.map(({ icon: Icon, title, desc }) => (
+            <div
+              key={title}
+              className="border-border bg-card flex flex-col gap-3 rounded-xl border p-6"
+            >
+              <Icon className="text-primary size-5" />
+              <h3 className="text-base font-medium">{title}</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">{desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-muted-foreground mt-8 mb-10 text-sm">
+          Every template is just markdown files in your vault — rearrange them
+          however you like.
+        </p>
+
+        <ScreenshotFrame
+          label="caedora.app — template marketplace"
+          src="/landing/templates.png"
+          alt="Caedora template marketplace showing Fitness, Reading, Daily journal and other templates"
+        />
+      </div>
+    </section>
   )
 }
 
-function timeAgo(ts: number): string {
-  const sec = Math.floor((Date.now() - ts) / 1000)
-  if (sec < 60) return 'just now'
-  const min = Math.floor(sec / 60)
-  if (min < 60) return `${min}m ago`
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}h ago`
-  const day = Math.floor(hr / 24)
-  if (day < 30) return `${day}d ago`
-  return new Date(ts).toLocaleDateString()
+function ShowcaseAlternating() {
+  const rows = [
+    {
+      label: 'caedora.app — editor',
+      src: '/landing/editor.png',
+      alt: 'Welcome vault note showing markdown formatting cheatsheet',
+      eyebrow: 'Editor',
+      title: 'A markdown editor that gets out of the way.',
+      body:
+        'Rich-text feel, plain-markdown source. Frontmatter, slash commands, and wiki links work out of the box.',
+      reverse: false,
+    },
+    {
+      label: 'caedora.app — Argus AI',
+      src: '/landing/argus.png',
+      alt: 'Argus AI chat in the Caedora sidebar',
+      eyebrow: 'Argus AI',
+      title: 'Your second brain, in your sidebar.',
+      body:
+        'Ask Argus AI to summarise yesterday, draft a meeting note, or find that idea from last March. It only sees the notes you let it.',
+      reverse: true,
+    },
+    {
+      label: 'caedora.app — connected notes',
+      src: '/landing/connected.png',
+      alt: 'Caedora showing backlinks and connected notes between pages',
+      eyebrow: 'Connected notes',
+      title: 'Knowledge that compounds.',
+      body:
+        'Backlinks and bidirectional references turn loose notes into a living web of context that grows with you.',
+      reverse: false,
+    },
+  ]
+
+  return (
+    <section className="border-b">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-24 px-4 py-24 sm:px-6 sm:py-32">
+        {rows.map((r) => (
+          <div
+            key={r.label}
+            className={`flex flex-col items-center gap-10 lg:flex-row lg:gap-16 ${
+              r.reverse ? 'lg:flex-row-reverse' : ''
+            }`}
+          >
+            <div className="lg:w-5/12">
+              <p className="text-primary mb-3 text-sm font-medium uppercase tracking-widest">
+                {r.eyebrow}
+              </p>
+              <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+                {r.title}
+              </h2>
+              <p className="text-muted-foreground mt-4 text-base leading-relaxed">{r.body}</p>
+            </div>
+            <div className="w-full lg:w-7/12">
+              <ScreenshotFrame label={r.label} src={r.src} alt={r.alt} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function PrivacyCallout() {
+  return (
+    <section id="privacy" className="border-b">
+      <div className="mx-auto w-full max-w-6xl px-4 py-24 sm:px-6 sm:py-28">
+        <div className="border-border/80 bg-card relative overflow-hidden rounded-2xl border p-8 sm:p-14">
+          <div className="bg-[radial-gradient(circle_at_right,_color-mix(in_oklch,_var(--landing-accent)_22%,_transparent)_0%,_transparent_55%)] pointer-events-none absolute inset-0" />
+          <div className="relative grid gap-10 lg:grid-cols-2 lg:gap-16">
+            <div>
+              <Lock className="text-primary mb-5 size-6" />
+              <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+                We literally cannot read your notes.
+              </h2>
+              <p className="text-muted-foreground mt-5 text-base leading-relaxed">
+                Caedora has no backend that touches your content. Files write
+                directly from your browser or desktop app into the folder or
+                repo you chose. Tokens live in your browser&apos;s IndexedDB
+                only. There&apos;s no &ldquo;sign up&rdquo; — because there&apos;s
+                no account to sign up for.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Button asChild variant="outline">
+                  <Link href="/#features">
+                    See features <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+            <ul className="space-y-5">
+              {[
+                ['Local folder', 'File System Access API writes straight to disk.'],
+                ['GitHub repo', 'Commits land in a repo you own, with a PAT you control.'],
+                ['No telemetry by default', 'Opt-in only, and never includes note contents.'],
+                ['Yours to inspect', 'Run it locally, audit how your notes are handled.'],
+              ].map(([h, b]) => (
+                <li key={h} className="flex gap-4">
+                  <span className="bg-primary mt-2 size-1.5 shrink-0 rounded-full" />
+                  <div>
+                    <p className="font-medium">{h}</p>
+                    <p className="text-muted-foreground text-sm">{b}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ArgusSection() {
+  return (
+    <section id="argus" className="border-b">
+      <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-12 px-4 py-24 text-center sm:px-6 sm:py-32">
+        <div className="max-w-2xl">
+          <p className="text-primary mb-3 text-sm font-medium uppercase tracking-widest">
+            Argus AI
+          </p>
+          <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
+            An AI that knows your notes — and only your notes.
+          </h2>
+          <p className="text-muted-foreground mt-5 text-base leading-relaxed">
+            Argus AI runs inside Caedora and reads from your vault, not the
+            internet. Bring your own API key, or use any MCP-compatible
+            assistant through caedora-mcp.
+          </p>
+        </div>
+        <div className="w-full max-w-4xl">
+          <ScreenshotFrame
+            label="caedora.app — Argus AI chat"
+            src="/landing/argus.png"
+            alt="Argus AI chat in the Caedora sidebar"
+            aspect="aspect-[16/9]"
+          />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function FinalCta() {
+  return (
+    <section>
+      <div className="mx-auto flex w-full max-w-4xl flex-col items-center gap-8 px-4 py-24 text-center sm:px-6 sm:py-32">
+        <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
+          Start your vault in 30 seconds.
+        </h2>
+        <p className="text-muted-foreground max-w-xl text-base">
+          Open the web version right now, or grab the desktop app for your platform.
+        </p>
+        <CtaButtons size="xl" />
+      </div>
+    </section>
+  )
 }

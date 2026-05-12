@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Bot,
   Cloud,
@@ -12,6 +13,7 @@ import {
   Keyboard,
   KeyRound,
   Loader2,
+  LogOut,
   Palette,
   Server,
   SlidersHorizontal,
@@ -150,7 +152,7 @@ export function SettingsDialog({
             {section === 'editor' && <EditorSettings />}
             {section === 'appearance' && <AppearanceSettings />}
             {section === 'hotkeys' && <HotkeySettings />}
-            {section === 'vaults' && <VaultSettings />}
+            {section === 'vaults' && <VaultSettings onClose={() => onOpenChange(false)} />}
           </main>
         </div>
       </DialogContent>
@@ -158,12 +160,19 @@ export function SettingsDialog({
   )
 }
 
-function VaultSettings() {
-  const { connectToVault } = useVault()
+function VaultSettings({ onClose }: { onClose: () => void }) {
+  const router = useRouter()
+  const { connectToVault, disconnect } = useVault()
   const [vaults, setVaults] = useState<StoredVault[]>([])
   const [activeVaultId, setActiveVaultIdState] = useState<string | null>(null)
   const [switchingVaultId, setSwitchingVaultId] = useState<string | null>(null)
   const [connectMode, setConnectMode] = useState<'create' | 'open' | null>(null)
+
+  function closeCurrentVault() {
+    disconnect()
+    onClose()
+    router.push('/')
+  }
 
   async function refreshVaults() {
     const [stored, active] = await Promise.all([listVaults(), getActiveVaultId()])
@@ -205,15 +214,28 @@ function VaultSettings() {
                     <Loader2 className="size-4 animate-spin" />
                   ) : (
                     <>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void switchVault(vault.id)}
-                        disabled={vault.id === activeVaultId || !!switchingVaultId}
-                      >
-                        Open
-                      </Button>
+                      {vault.id === activeVaultId ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={closeCurrentVault}
+                          title="Return to the home screen without removing this vault"
+                        >
+                          <LogOut className="size-4" />
+                          Close vault
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void switchVault(vault.id)}
+                          disabled={!!switchingVaultId}
+                        >
+                          Open
+                        </Button>
+                      )}
                       <button
                         type="button"
                         onClick={async () => {
