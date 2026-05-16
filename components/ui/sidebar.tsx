@@ -44,6 +44,8 @@ type SidebarContextProps = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   isDesktopShell: boolean
+  isMacDesktopShell: boolean
+  canCollapse: boolean
   sidebarWidth: number
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
@@ -75,6 +77,7 @@ function SidebarProvider({
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
   const [isDesktopShell, setIsDesktopShell] = React.useState(false)
+  const [isMacDesktopShell, setIsMacDesktopShell] = React.useState(false)
   const [sidebarWidth, setSidebarWidthState] = React.useState(SIDEBAR_WIDTH_DEFAULT)
 
   const [_open, _setOpen] = React.useState(defaultOpen)
@@ -82,6 +85,7 @@ function SidebarProvider({
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
       const openState = typeof value === "function" ? value(open) : value
+      if (!isMobile && (isMacDesktopShell || isMacDesktopEnvironment()) && !openState) return
       if (setOpenProp) {
         setOpenProp(openState)
       } else {
@@ -89,18 +93,20 @@ function SidebarProvider({
       }
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
     },
-    [setOpenProp, open]
+    [isMacDesktopShell, isMobile, setOpenProp, open]
   )
 
   const toggleSidebar = React.useCallback(() => {
+    if (!isMobile && (isMacDesktopShell || isMacDesktopEnvironment())) return
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
-  }, [isMobile, setOpen, setOpenMobile])
+  }, [isMacDesktopShell, isMobile, setOpen, setOpenMobile])
 
   React.useEffect(() => {
-    const desktop =
-      Boolean(window.caedoraDesktop) ||
-      document.documentElement.classList.contains("caedora-desktop")
+    const desktop = isDesktopShellEnvironment()
+    const macDesktop = isMacDesktopEnvironment()
     setIsDesktopShell(desktop)
+    setIsMacDesktopShell(macDesktop)
+    if (macDesktop) setOpen(true)
     if (!desktop) return
 
     const stored = Number.parseInt(
@@ -110,7 +116,7 @@ function SidebarProvider({
     if (Number.isFinite(stored)) {
       setSidebarWidthState(clampSidebarWidth(stored))
     }
-  }, [])
+  }, [setOpen])
 
   const setSidebarWidth = React.useCallback((width: number) => {
     const next = clampSidebarWidth(width)
@@ -133,6 +139,7 @@ function SidebarProvider({
   }, [toggleSidebar])
 
   const state = open ? "expanded" : "collapsed"
+  const canCollapse = isMobile || !isMacDesktopShell
 
   const contextValue = React.useMemo<SidebarContextProps>(
     () => ({
@@ -141,6 +148,8 @@ function SidebarProvider({
       setOpen,
       isMobile,
       isDesktopShell,
+      isMacDesktopShell,
+      canCollapse,
       sidebarWidth,
       setSidebarWidth,
       openMobile,
@@ -153,6 +162,8 @@ function SidebarProvider({
       setOpen,
       isMobile,
       isDesktopShell,
+      isMacDesktopShell,
+      canCollapse,
       sidebarWidth,
       setSidebarWidth,
       openMobile,
@@ -336,12 +347,30 @@ function clampSidebarWidth(width: number) {
   return Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, Math.round(width)))
 }
 
+function isDesktopShellEnvironment() {
+  if (typeof window === "undefined") return false
+  return (
+    Boolean(window.caedoraDesktop) ||
+    document.documentElement.classList.contains("caedora-desktop")
+  )
+}
+
+function isMacDesktopEnvironment() {
+  if (typeof window === "undefined") return false
+  return (
+    window.caedoraDesktop?.platform === "darwin" ||
+    document.documentElement.classList.contains("caedora-platform-darwin")
+  )
+}
+
 function SidebarTrigger({
   className,
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
-  const { toggleSidebar } = useSidebar()
+  const { canCollapse, toggleSidebar } = useSidebar()
+
+  if (!canCollapse) return null
 
   return (
     <Button
@@ -363,7 +392,9 @@ function SidebarTrigger({
 }
 
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
-  const { toggleSidebar } = useSidebar()
+  const { canCollapse, toggleSidebar } = useSidebar()
+
+  if (!canCollapse) return null
 
   return (
     <button

@@ -628,8 +628,31 @@
     -webkit-app-region: no-drag;
   }
 
+  .caedora-home-theme-toggle {
+    top: 0.75rem;
+  }
+
   html.caedora-platform-darwin .caedora-home-theme-toggle {
+    top: 5rem;
     left: 5rem;
+  }
+
+  html.caedora-desktop.caedora-platform-darwin .caedora-sidebar-brand-row {
+    min-height: 5.25rem;
+    padding-top: 4rem;
+    padding-left: 1rem;
+    app-region: drag;
+    -webkit-app-region: drag;
+  }
+
+  html.caedora-desktop.caedora-platform-darwin [data-slot="sidebar-trigger"],
+  html.caedora-desktop.caedora-platform-darwin [data-slot="sidebar-rail"] {
+    display: none;
+  }
+
+  html.caedora-desktop.caedora-platform-darwin .caedora-sidebar-brand-row button {
+    app-region: no-drag;
+    -webkit-app-region: no-drag;
   }
 
   html.caedora-desktop .caedora-editor-toolbar button,
