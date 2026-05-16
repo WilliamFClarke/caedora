@@ -1,7 +1,8 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell, safeStorage } = require('electron')
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, safeStorage, utilityProcess } = require('electron')
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
+const net = require('node:net')
 const crypto = require('node:crypto')
 const git = require('isomorphic-git')
 const ignore = require('ignore')
@@ -46,18 +47,29 @@ const BUNDLED_MODEL_MANIFEST = {
   },
 }
 
+if (process.env.CAEDORA_DISABLE_GPU === '1') {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-gpu-compositing')
+  app.commandLine.appendSwitch('disable-software-rasterizer')
+}
+
 let mainWindow = null
+let desktopServerProcess = null
+let desktopServerUrl = null
 let currentAiProjectRoot = null
 const aiRuns = new Map()
 const aiModelDownloads = new Map()
 let localLlamaRuntime = null
 
-function getAppUrl() {
-  return process.env.CAEDORA_DESKTOP_URL || 'http://localhost:3000'
+async function getAppUrl() {
+  if (process.env.CAEDORA_DESKTOP_URL) return process.env.CAEDORA_DESKTOP_URL
+  if (!app.isPackaged) return 'http://localhost:3000'
+  return startPackagedDesktopServer()
 }
 
-function createWindow() {
-  const appUrl = getAppUrl()
+async function createWindow() {
+  const appUrl = await getAppUrl()
   const allowedOrigin = new URL(appUrl).origin
 
   mainWindow = new BrowserWindow({
@@ -119,20 +131,91 @@ function createWindow() {
   void mainWindow.loadURL(appUrl)
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
   registerIpc()
   void detectAiState().catch(() => {})
-  createWindow()
+  await createWindow()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) void createWindow()
   })
 })
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
+app.on('before-quit', () => {
+  desktopServerProcess?.kill()
+})
+
+async function startPackagedDesktopServer() {
+  if (desktopServerUrl) return desktopServerUrl
+
+  const serverRoot = path.join(process.resourcesPath, 'app')
+  const serverEntry = path.join(serverRoot, 'server.js')
+  const configuredPort = Number(process.env.CAEDORA_DESKTOP_PORT)
+  const port = Number.isInteger(configuredPort) && configuredPort > 0
+    ? configuredPort
+    : await getAvailablePort()
+  const url = `http://127.0.0.1:${port}`
+
+  desktopServerProcess = utilityProcess.fork(serverEntry, [], {
+    cwd: serverRoot,
+    env: {
+      ...process.env,
+      HOSTNAME: '127.0.0.1',
+      NODE_ENV: 'production',
+      PORT: String(port),
+    },
+    stdio: 'pipe',
+    serviceName: 'Caedora Desktop Server',
+  })
+
+  desktopServerProcess.stdout?.on('data', (chunk) => {
+    process.stdout.write(`[desktop-server] ${chunk}`)
+  })
+  desktopServerProcess.stderr?.on('data', (chunk) => {
+    process.stderr.write(`[desktop-server] ${chunk}`)
+  })
+
+  await waitForDesktopServer(url)
+  desktopServerUrl = url
+  return url
+}
+
+function getAvailablePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+    server.unref()
+    server.on('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address ? address.port : null
+      server.close((error) => {
+        if (error) reject(error)
+        else if (!port) reject(new Error('Failed to allocate local desktop server port'))
+        else resolve(port)
+      })
+    })
+  })
+}
+
+async function waitForDesktopServer(url) {
+  const deadline = Date.now() + 20_000
+
+  while (Date.now() < deadline) {
+    try {
+      await fetch(url)
+      return
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+  }
+
+  throw new Error('Timed out waiting for packaged desktop server startup')
+}
 
 function registerIpc() {
   ipcMain.handle('window:setTransparency', (event, enabled) => {
