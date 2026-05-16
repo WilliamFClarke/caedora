@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell, safeStorage, utilityProcess } = require('electron')
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, utilityProcess } = require('electron')
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
@@ -848,6 +848,7 @@ async function hasCloudKey() {
 }
 
 async function saveCloudKey(apiKey) {
+  const safeStorage = getSafeStorage()
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error('OS key storage is not available on this device.')
   }
@@ -856,8 +857,13 @@ async function saveCloudKey(apiKey) {
 }
 
 async function loadCloudKey() {
+  const safeStorage = getSafeStorage()
   const raw = await fsp.readFile(aiCloudKeyPath(), 'utf8')
   return safeStorage.decryptString(Buffer.from(raw, 'base64'))
+}
+
+function getSafeStorage() {
+  return require('electron').safeStorage
 }
 
 async function detectAiState() {

@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { SiteHeader } from '@/components/landing/site-header'
 import { SiteFooter } from '@/components/landing/site-footer'
 import { ConnectDialog } from '@/components/connect-dialog'
-import { useOs, OS_LABELS, type Os } from '@/components/landing/use-os'
+import { useOs, OS_LABELS } from '@/components/landing/use-os'
+import { DESKTOP_DOWNLOADS, RELEASES_URL } from '@/lib/downloads'
 import { cn } from '@/lib/utils'
 
 type PlatformId = 'macos' | 'windows' | 'linux'
@@ -18,15 +19,15 @@ const PLATFORMS: {
   icon: typeof Apple
   title: string
   subtitle: string
-  variants: { label: string; note: string }[]
+  variants: { label: string; note: string; href?: string }[]
 }[] = [
   {
     id: 'macos',
     icon: Apple,
     title: 'macOS',
-    subtitle: 'Universal · macOS 12 Monterey or later',
+    subtitle: 'macOS 12 Monterey or later',
     variants: [
-      { label: 'Apple Silicon (.dmg)', note: 'M1, M2, M3 and newer' },
+      DESKTOP_DOWNLOADS.macos.appleSilicon,
       { label: 'Intel (.dmg)', note: 'Older Intel-based Macs' },
     ],
   },
@@ -75,9 +76,9 @@ export default function DownloadPage() {
             .
           </h1>
           <p className="text-muted-foreground mt-5 text-base leading-relaxed">
-            Native desktop builds are coming soon. In the meantime you can use
-            the full Caedora experience right in your browser — your notes
-            still write straight to your own folder or GitHub repo.
+            Download the native macOS app for Apple Silicon, or use the full
+            Caedora experience right in your browser. Your notes still write
+            straight to your own folder or GitHub repo.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -135,20 +136,43 @@ function PlatformCard({
           <Button
             key={v.label}
             variant="outline"
-            disabled
-            aria-disabled
-            title="Desktop builds are coming soon"
-            className="h-auto w-full justify-start gap-3 px-4 py-3 disabled:opacity-100 disabled:cursor-not-allowed"
+            asChild={Boolean(v.href)}
+            disabled={!v.href}
+            aria-disabled={!v.href}
+            title={v.href ? `Download ${v.label}` : 'Coming soon'}
+            className="h-auto w-full justify-start gap-3 px-4 py-3 disabled:cursor-not-allowed disabled:opacity-100"
           >
-            <Download className="size-4" />
-            <span className="flex flex-col items-start text-left">
-              <span className="text-sm font-medium">{v.label}</span>
-              <span className="text-muted-foreground text-xs">{v.note}</span>
-            </span>
+            {v.href ? (
+              <a href={v.href}>
+                <Download className="size-4" />
+                <span className="flex flex-col items-start text-left">
+                  <span className="text-sm font-medium">{v.label}</span>
+                  <span className="text-muted-foreground text-xs">{v.note}</span>
+                </span>
+              </a>
+            ) : (
+              <>
+                <Download className="size-4" />
+                <span className="flex flex-col items-start text-left">
+                  <span className="text-sm font-medium">{v.label}</span>
+                  <span className="text-muted-foreground text-xs">{v.note}</span>
+                </span>
+              </>
+            )}
           </Button>
         ))}
         <p className="text-muted-foreground mt-2 text-xs">
-          Coming soon — downloads aren&apos;t live yet.
+          {platform.id === 'macos' ? (
+            <>
+              Downloads are served from{' '}
+              <a className="underline underline-offset-4" href={RELEASES_URL}>
+                GitHub Releases
+              </a>
+              .
+            </>
+          ) : (
+            'Coming soon.'
+          )}
         </p>
       </CardContent>
     </Card>

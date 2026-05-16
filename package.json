@@ -160,7 +160,8 @@
           ]
         }
       ],
-      "icon": "electron/icon.png",
+      "artifactName": "Caedora-macOS-${arch}.${ext}",
+      "icon": "electron/icon.icns",
       "category": "public.app-category.productivity"
     },
     "linux": {
