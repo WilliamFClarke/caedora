@@ -62,7 +62,7 @@ export function Launcher() {
 
   if (status.state === 'checking' || status.state === 'connecting' || status.state === 'ready') {
     return (
-      <Shell>
+      <Shell showThemeToggle={false}>
         <div className="flex flex-col items-center gap-4 text-center">
           <Loader2 className="text-primary size-6 animate-spin" />
           <p className="text-muted-foreground text-sm">
@@ -150,13 +150,21 @@ export function Launcher() {
   )
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({
+  children,
+  showThemeToggle = true,
+}: {
+  children: React.ReactNode
+  showThemeToggle?: boolean
+}) {
   return (
     <main className="caedora-home-screen bg-background relative flex min-h-screen flex-col items-center justify-center px-6">
       <div className="caedora-home-titlebar absolute inset-x-0 top-0 z-20 h-11" />
-      <div className="caedora-home-theme-toggle absolute top-3 left-4 z-30">
-        <ModeToggle />
-      </div>
+      {showThemeToggle && (
+        <div className="caedora-home-theme-toggle absolute left-4 z-30">
+          <ModeToggle />
+        </div>
+      )}
       {children}
     </main>
   )

@@ -46,6 +46,10 @@ const BUNDLED_MODEL_MANIFEST = {
   },
 }
 
+const APP_NAME = 'Caedora'
+const APP_ICON_PNG = path.join(__dirname, 'icon.png')
+const APP_ICON_ICO = path.join(__dirname, 'icon.ico')
+
 let mainWindow = null
 let currentAiProjectRoot = null
 const aiRuns = new Map()
@@ -54,6 +58,14 @@ let localLlamaRuntime = null
 
 function getAppUrl() {
   return process.env.CAEDORA_DESKTOP_URL || 'http://localhost:3000'
+}
+
+function applyAppIdentity() {
+  app.setName(APP_NAME)
+
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(APP_ICON_PNG)
+  }
 }
 
 function createWindow() {
@@ -67,7 +79,7 @@ function createWindow() {
     minHeight: 640,
     show: false,
     title: 'Caedora',
-    icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    icon: process.platform === 'win32' ? APP_ICON_ICO : APP_ICON_PNG,
     autoHideMenuBar: true,
     transparent: !ENABLE_NATIVE_WINDOW_SHADOW,
     backgroundColor: ENABLE_NATIVE_WINDOW_SHADOW ? '#111827' : '#00000000',
@@ -120,6 +132,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  applyAppIdentity()
   Menu.setApplicationMenu(null)
   registerIpc()
   void detectAiState().catch(() => {})

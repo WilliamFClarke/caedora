@@ -284,7 +284,7 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center justify-between gap-2 px-2 pt-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:px-0">
+        <div className="caedora-sidebar-brand-row flex items-center justify-between gap-2 px-2 pt-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:px-0">
           <div className="flex items-center gap-1.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

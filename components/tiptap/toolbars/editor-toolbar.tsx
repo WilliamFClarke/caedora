@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { isDesktopAiAvailable } from "@/lib/desktop-ai";
 import { useSettings } from "@/lib/settings-context";
@@ -55,68 +55,67 @@ export const EditorToolbar = ({ editor }: { editor: Editor }) => {
               ref={toolsRowRef}
               className="flex min-w-0 flex-1 basis-0 items-center gap-0.5 overflow-hidden"
             >
-              <SidebarTrigger className="size-8 shrink-0" />
-              <ToolbarDivider className="shrink-0" />
+              <PrimarySidebarControls />
 
-              <span className={hideAt(collapseLevel, 5)}>
+              <span data-collapse-threshold="16" className={hideAt(collapseLevel, 16)}>
                 <UndoToolbar />
               </span>
-              <span className={hideAt(collapseLevel, 5)}>
+              <span data-collapse-threshold="15" className={hideAt(collapseLevel, 15)}>
                 <RedoToolbar />
               </span>
-              <ToolbarDivider className={hideAt(collapseLevel, 5)} />
+              <ToolbarDivider collapseThreshold={15} className={hideAt(collapseLevel, 15)} />
 
-              <span className={hideAt(collapseLevel, 5)}>
+              <span data-collapse-threshold="14" className={hideAt(collapseLevel, 14)}>
                 <HeadingsToolbar />
               </span>
-              <span className={hideAt(collapseLevel, 4)}>
+              <span data-collapse-threshold="13" className={hideAt(collapseLevel, 13)}>
                 <BlockquoteToolbar />
               </span>
-              <span className={hideAt(collapseLevel, 4)}>
+              <span data-collapse-threshold="12" className={hideAt(collapseLevel, 12)}>
                 <CodeToolbar />
               </span>
-              <span className={hideAt(collapseLevel, 4)}>
+              <span data-collapse-threshold="11" className={hideAt(collapseLevel, 11)}>
                 <CodeBlockToolbar />
               </span>
-              <ToolbarDivider className={hideAt(collapseLevel, 4)} />
+              <ToolbarDivider collapseThreshold={11} className={hideAt(collapseLevel, 11)} />
 
               <BoldToolbar />
               <ItalicToolbar />
-              <span className={hideAt(collapseLevel, 4)}>
+              <span data-collapse-threshold="10" className={hideAt(collapseLevel, 10)}>
                 <UnderlineToolbar />
               </span>
               <LinkToolbar />
               <MoreFormattingToolbar />
-              <ToolbarDivider className={hideAt(collapseLevel, 3)} />
+              <ToolbarDivider collapseThreshold={7} className={hideAt(collapseLevel, 7)} />
 
-              <span className={hideAt(collapseLevel, 3)}>
+              <span data-collapse-threshold="9" className={hideAt(collapseLevel, 9)}>
                 <BulletListToolbar />
               </span>
-              <span className={hideAt(collapseLevel, 3)}>
+              <span data-collapse-threshold="8" className={hideAt(collapseLevel, 8)}>
                 <OrderedListToolbar />
               </span>
-              <span className={hideAt(collapseLevel, 3)}>
+              <span data-collapse-threshold="7" className={hideAt(collapseLevel, 7)}>
                 <TaskListToolbar />
               </span>
-              <span className={hideAt(collapseLevel, 2)}>
+              <span data-collapse-threshold="6" className={hideAt(collapseLevel, 6)}>
                 <TableToolbar />
               </span>
-              <span className={hideAt(collapseLevel, 2)}>
+              <span data-collapse-threshold="5" className={hideAt(collapseLevel, 5)}>
                 <HorizontalRuleToolbar />
               </span>
-              <ToolbarDivider className={hideAt(collapseLevel, 2)} />
+              <ToolbarDivider collapseThreshold={4} className={hideAt(collapseLevel, 4)} />
 
-              <span className={hideAt(collapseLevel, 1)}>
+              <span data-collapse-threshold="4" className={hideAt(collapseLevel, 4)}>
                 <AlignmentTooolbar />
               </span>
-              <span className={hideAt(collapseLevel, 1)}>
+              <span data-collapse-threshold="3" className={hideAt(collapseLevel, 3)}>
                 <ImagePlaceholderToolbar />
               </span>
-              <span className={hideAt(collapseLevel, 1)}>
+              <span data-collapse-threshold="2" className={hideAt(collapseLevel, 2)}>
                 <ColorHighlightToolbar />
               </span>
 
-              <span className={hideAt(collapseLevel, 1)}>
+              <span data-collapse-threshold="1" className={hideAt(collapseLevel, 1)}>
                 <SearchAndReplaceToolbar />
               </span>
             </div>
@@ -167,6 +166,19 @@ function DesktopAssistantToolbarToggle() {
   );
 }
 
+function PrimarySidebarControls() {
+  const { canCollapse } = useSidebar();
+
+  if (!canCollapse) return null;
+
+  return (
+    <>
+      <SidebarTrigger className="size-8 shrink-0" />
+      <ToolbarDivider className="shrink-0" />
+    </>
+  );
+}
+
 function ResponsiveOverflowToolbar({ collapseLevel }: { collapseLevel: number }) {
   if (collapseLevel === 0) return null;
 
@@ -187,56 +199,56 @@ function ResponsiveOverflowToolbar({ collapseLevel }: { collapseLevel: number })
         sideOffset={8}
         className="max-h-[min(28rem,calc(100vh-5rem))] w-[min(22rem,calc(100vw-1rem))] overflow-y-auto p-2"
       >
-        <OverflowSection label="History" hidden={collapseLevel < 5}>
-          <UndoToolbar />
-          <RedoToolbar />
+        <OverflowSection label="History" hidden={collapseLevel < 15}>
+          <span className={showAt(collapseLevel, 16)}><UndoToolbar /></span>
+          <span className={showAt(collapseLevel, 15)}><RedoToolbar /></span>
         </OverflowSection>
 
-        <OverflowSection label="Text blocks" hidden={collapseLevel < 4}>
-          <span className={showAt(collapseLevel, 5)}>
+        <OverflowSection label="Text blocks" hidden={collapseLevel < 11}>
+          <span className={showAt(collapseLevel, 14)}>
             <HeadingsToolbar />
           </span>
-          <span className={showAt(collapseLevel, 4)}>
+          <span className={showAt(collapseLevel, 13)}>
             <BlockquoteToolbar />
           </span>
-          <span className={showAt(collapseLevel, 4)}>
+          <span className={showAt(collapseLevel, 12)}>
             <CodeToolbar />
           </span>
-          <span className={showAt(collapseLevel, 4)}>
+          <span className={showAt(collapseLevel, 11)}>
             <CodeBlockToolbar />
           </span>
         </OverflowSection>
 
-        <OverflowSection label="Formatting" hidden={collapseLevel < 4}>
-          <UnderlineToolbar />
+        <OverflowSection label="Formatting" hidden={collapseLevel < 10}>
+          <span className={showAt(collapseLevel, 10)}><UnderlineToolbar /></span>
         </OverflowSection>
 
-        <OverflowSection label="Lists and inserts" hidden={collapseLevel < 2}>
-          <span className={showAt(collapseLevel, 3)}>
+        <OverflowSection label="Lists and inserts" hidden={collapseLevel < 5}>
+          <span className={showAt(collapseLevel, 9)}>
             <BulletListToolbar />
           </span>
-          <span className={showAt(collapseLevel, 3)}>
+          <span className={showAt(collapseLevel, 8)}>
             <OrderedListToolbar />
           </span>
-          <span className={showAt(collapseLevel, 3)}>
+          <span className={showAt(collapseLevel, 7)}>
             <TaskListToolbar />
           </span>
-          <span className={showAt(collapseLevel, 2)}>
+          <span className={showAt(collapseLevel, 6)}>
             <TableToolbar />
           </span>
-          <span className={showAt(collapseLevel, 2)}>
+          <span className={showAt(collapseLevel, 5)}>
             <HorizontalRuleToolbar />
           </span>
         </OverflowSection>
 
-        <OverflowSection label="Layout and color" hidden={collapseLevel < 1}>
-          <AlignmentTooolbar />
-          <ImagePlaceholderToolbar />
-          <ColorHighlightToolbar />
+        <OverflowSection label="Layout and color" hidden={collapseLevel < 2}>
+          <span className={showAt(collapseLevel, 4)}><AlignmentTooolbar /></span>
+          <span className={showAt(collapseLevel, 3)}><ImagePlaceholderToolbar /></span>
+          <span className={showAt(collapseLevel, 2)}><ColorHighlightToolbar /></span>
         </OverflowSection>
 
         <OverflowSection label="Utilities" hidden={collapseLevel < 1}>
-          <SearchAndReplaceToolbar />
+          <span className={showAt(collapseLevel, 1)}><SearchAndReplaceToolbar /></span>
         </OverflowSection>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -273,53 +285,41 @@ function showAt(collapseLevel: number, threshold: number) {
   return collapseLevel >= threshold ? "inline-flex" : "hidden";
 }
 
-const MAX_TOOLBAR_COLLAPSE_LEVEL = 5;
-const TOOLBAR_RESTORE_WIDTH_BY_LEVEL = [0, 224, 72, 120, 176, 156];
+const MAX_TOOLBAR_COLLAPSE_LEVEL = 16;
+const OVERFLOW_BUTTON_WIDTH = 36;
 
 function useToolbarCollapseLevel(toolbarRef: React.RefObject<HTMLDivElement | null>) {
   const [level, setLevel] = React.useState(0);
   const frameRef = React.useRef<number | null>(null);
+  const measurementsRef = React.useRef<ToolbarMeasurements | null>(null);
 
   React.useEffect(() => {
     const toolbar = toolbarRef.current;
     if (!toolbar) return;
 
     const update = () => {
-      setLevel((currentLevel) => {
-        const overflows = toolbar.scrollWidth > toolbar.clientWidth + 1;
+      const measurements = measurementsRef.current;
+      if (!measurements) return;
+      setLevel(collapseLevelForWidth(measurements, toolbar.clientWidth));
+    };
 
-        if (overflows) {
-          const nextLevel = Math.min(
-            MAX_TOOLBAR_COLLAPSE_LEVEL,
-            currentLevel + 1,
-          );
-          if (nextLevel !== currentLevel) {
-            frameRef.current = requestAnimationFrame(update);
-          }
-          return nextLevel;
-        }
-
-        if (currentLevel === 0) return currentLevel;
-
-        const availableExtraWidth = toolbar.clientWidth - toolbar.scrollWidth;
-        const requiredWidth =
-          TOOLBAR_RESTORE_WIDTH_BY_LEVEL[currentLevel] ?? 176;
-        if (availableExtraWidth < requiredWidth) return currentLevel;
-
-        frameRef.current = requestAnimationFrame(update);
-        return currentLevel - 1;
+    const measureAndUpdate = () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      frameRef.current = requestAnimationFrame(() => {
+        measurementsRef.current ??= measureToolbar(toolbar);
+        update();
       });
     };
 
+    measurementsRef.current = measureToolbar(toolbar);
     update();
-    const rafUpdate = () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-      frameRef.current = requestAnimationFrame(update);
-    };
-    const observer = new ResizeObserver(rafUpdate);
+
+    const observer = new ResizeObserver(measureAndUpdate);
     observer.observe(toolbar);
+    window.addEventListener("resize", measureAndUpdate);
     return () => {
       observer.disconnect();
+      window.removeEventListener("resize", measureAndUpdate);
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
     };
   }, [toolbarRef]);
@@ -327,10 +327,51 @@ function useToolbarCollapseLevel(toolbarRef: React.RefObject<HTMLDivElement | nu
   return level;
 }
 
-function ToolbarDivider({ className }: { className?: string }) {
+type ToolbarMeasurements = {
+  fullWidth: number;
+  widthsByThreshold: number[];
+};
+
+function measureToolbar(toolbar: HTMLDivElement): ToolbarMeasurements {
+  const widthsByThreshold = Array.from({ length: MAX_TOOLBAR_COLLAPSE_LEVEL + 1 }, () => 0);
+
+  for (const item of toolbar.querySelectorAll<HTMLElement>("[data-collapse-threshold]")) {
+    const threshold = Number.parseInt(item.dataset.collapseThreshold ?? "", 10);
+    if (!Number.isFinite(threshold)) continue;
+    widthsByThreshold[threshold] += item.getBoundingClientRect().width;
+  }
+
+  return {
+    fullWidth: toolbar.scrollWidth,
+    widthsByThreshold,
+  };
+}
+
+function collapseLevelForWidth(measurements: ToolbarMeasurements, availableWidth: number) {
+  let hiddenWidth = 0;
+
+  for (let level = 0; level <= MAX_TOOLBAR_COLLAPSE_LEVEL; level++) {
+    if (level > 0) hiddenWidth += measurements.widthsByThreshold[level] ?? 0;
+    const overflowReserve = level > 0 ? OVERFLOW_BUTTON_WIDTH : 0;
+    if (measurements.fullWidth - hiddenWidth <= availableWidth - overflowReserve) {
+      return level;
+    }
+  }
+
+  return MAX_TOOLBAR_COLLAPSE_LEVEL;
+}
+
+function ToolbarDivider({
+  className,
+  collapseThreshold,
+}: {
+  className?: string;
+  collapseThreshold?: number;
+}) {
   return (
     <Separator
       orientation="vertical"
+      data-collapse-threshold={collapseThreshold}
       className={cn("mx-1.5 h-6 data-[orientation=vertical]:h-6", className)}
     />
   );
