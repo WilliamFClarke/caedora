@@ -104,7 +104,7 @@ export function AssistantSidebar({
         width={width}
       />
       <div className="flex h-full min-w-0 flex-col bg-background pb-3">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-background px-3">
+        <header className="flex h-11 shrink-0 items-center gap-2 border-b bg-background px-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/caedora-logo.png"
@@ -114,14 +114,7 @@ export function AssistantSidebar({
             className="size-7 shrink-0"
           />
 
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">Argus (AI Assistant)</p>
-            <p className="text-muted-foreground truncate text-[11px]">
-              {providerState?.state === 'ready'
-                ? `${providerState.providerLabel}${providerState.modelLabel ? ` - ${providerState.modelLabel}` : ''}`
-                : providerState?.message ?? 'Checking providers...'}
-            </p>
-          </div>
+          <p className="min-w-0 flex-1 truncate text-sm font-medium">Argus (AI Assistant)</p>
           <Button
             type="button"
             size="icon"

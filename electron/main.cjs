@@ -54,6 +54,10 @@ if (process.env.CAEDORA_DISABLE_GPU === '1') {
   app.commandLine.appendSwitch('disable-software-rasterizer')
 }
 
+const APP_NAME = 'Caedora'
+const APP_ICON_PNG = path.join(__dirname, 'icon.png')
+const APP_ICON_ICO = path.join(__dirname, 'icon.ico')
+
 let mainWindow = null
 let desktopServerProcess = null
 let desktopServerUrl = null
@@ -68,6 +72,14 @@ async function getAppUrl() {
   return startPackagedDesktopServer()
 }
 
+function applyAppIdentity() {
+  app.setName(APP_NAME)
+
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(APP_ICON_PNG)
+  }
+}
+
 async function createWindow() {
   const appUrl = await getAppUrl()
   const allowedOrigin = new URL(appUrl).origin
@@ -79,7 +91,7 @@ async function createWindow() {
     minHeight: 640,
     show: false,
     title: 'Caedora',
-    icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    icon: process.platform === 'win32' ? APP_ICON_ICO : APP_ICON_PNG,
     autoHideMenuBar: true,
     transparent: !ENABLE_NATIVE_WINDOW_SHADOW,
     backgroundColor: ENABLE_NATIVE_WINDOW_SHADOW ? '#111827' : '#00000000',
@@ -132,6 +144,7 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  applyAppIdentity()
   Menu.setApplicationMenu(null)
   registerIpc()
   void detectAiState().catch(() => {})
