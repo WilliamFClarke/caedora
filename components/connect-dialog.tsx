@@ -226,6 +226,7 @@ function LocalPanel({
             onDone()
             return
           }
+          await pinInitial(WELCOME_PATH)
           router.push(`/vault/${WELCOME_PATH}`)
         } else {
           const root = await desktop.vault.selectDirectory({
@@ -282,6 +283,7 @@ function LocalPanel({
           setPhase('idle')
           return
         }
+        await pinInitial(WELCOME_PATH)
         router.push(`/vault/${WELCOME_PATH}`)
         // Don't close the dialog — the route change unmounts it and prevents a
         // race with the home page's auto-redirect.
@@ -474,8 +476,6 @@ function GitHubPanel({
             }
           )
         }
-        await pinInitial(WELCOME_PATH)
-
         // Wait for GitHub's contents listing to reflect the seeds before
         // navigating. Without this, VaultShell can mount, list an empty tree
         // (GitHub propagation lag on fresh repos), and show a blank sidebar
@@ -487,6 +487,7 @@ function GitHubPanel({
 
         const connected = await connectGitHub(pat, actualOwner, repo)
         if (!connected) throw new Error('Could not connect to the new GitHub vault.')
+        await pinInitial(WELCOME_PATH)
       } else {
         // Open: verify access
         const verify = await fetch(

@@ -3,21 +3,31 @@
 import { useCallback, useEffect, useState } from 'react'
 import { loadPinned, savePinned } from '@/lib/storage/idb'
 
-export function usePinned() {
+export function usePinned(vaultKey: string | null) {
   const [pinned, setPinned] = useState<Set<string>>(new Set())
-  const [loaded, setLoaded] = useState(false)
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
 
   useEffect(() => {
-    void loadPinned().then((paths) => {
+    let cancelled = false
+    if (!vaultKey) {
+      setPinned(new Set())
+      setLoadedKey(null)
+      return
+    }
+    void loadPinned(vaultKey).then((paths) => {
+      if (cancelled) return
       setPinned(new Set(paths))
-      setLoaded(true)
+      setLoadedKey(vaultKey)
     })
-  }, [])
+    return () => {
+      cancelled = true
+    }
+  }, [vaultKey])
 
   useEffect(() => {
-    if (!loaded) return
-    void savePinned([...pinned])
-  }, [pinned, loaded])
+    if (!vaultKey || loadedKey !== vaultKey) return
+    void savePinned(vaultKey, [...pinned])
+  }, [pinned, loadedKey, vaultKey])
 
   const toggle = useCallback((path: string) => {
     setPinned((prev) => {

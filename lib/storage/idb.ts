@@ -159,21 +159,30 @@ export async function loadActiveVault(): Promise<PersistedVaultState | null> {
   return all[0]?.state ?? null
 }
 
-// ─── Pinned notes (unchanged — global across vaults for now) ─────────────────
+// ─── Pinned notes ───────────────────────────────────────────────────────────
 
-export async function savePinned(paths: string[]): Promise<void> {
+export async function savePinned(vaultKey: string, paths: string[]): Promise<void> {
   try {
     const db = await getDB()
-    await db.put(PINNED_STORE, paths, 'current')
+    await db.put(PINNED_STORE, paths, vaultKey)
   } catch {
     // ignore
   }
 }
 
-export async function loadPinned(): Promise<string[]> {
+export async function loadPinned(vaultKey: string): Promise<string[]> {
   try {
     const db = await getDB()
-    return ((await db.get(PINNED_STORE, 'current')) as string[] | undefined) ?? []
+    const scoped = (await db.get(PINNED_STORE, vaultKey)) as string[] | undefined
+    if (scoped) return scoped
+
+    // One-time best-effort migration for users who had global pins before
+    // vault-scoped storage existed. The first active vault keeps the old pins.
+    const legacy = (await db.get(PINNED_STORE, 'current')) as string[] | undefined
+    if (!legacy) return []
+    await db.put(PINNED_STORE, legacy, vaultKey)
+    await db.delete(PINNED_STORE, 'current')
+    return legacy
   } catch {
     return []
   }

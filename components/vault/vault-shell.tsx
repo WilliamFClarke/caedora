@@ -12,6 +12,17 @@ import { getActiveVaultId } from '@/lib/storage/idb'
 import { seedEmptyVault, WELCOME_PATH, SKILL_PATH, INDEX_PATH } from '@/lib/vault-create'
 import { rebuildVaultIndex, LOCKED_PATHS } from '@/lib/vault-index'
 import { slugifyFilename } from '@/lib/frontmatter'
+import {
+  ancestors,
+  entriesForPaths,
+  mergeEntries,
+  pendingEntriesForPaths,
+  pruneVisiblePending,
+  removeExactPendingEntries,
+  removePendingEntries,
+  renamePendingEntries,
+  sameEntries,
+} from '@/lib/vault-entries'
 import { usePinned } from '@/hooks/use-pinned'
 import { useFolderAppearance } from '@/hooks/use-folder-appearance'
 import type { FolderAppearance } from '@/lib/folder-appearance'
@@ -38,7 +49,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [syncNonce, setSyncNonce] = useState(0)
   const [activeVaultId, setActiveVaultIdState] = useState<string | null>(null)
   const [assistantSettingsOpen, setAssistantSettingsOpen] = useState(false)
-  const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
+  const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } =
+    usePinned(activeVaultId)
   const {
     folderAppearances,
     setFolderAppearance,
@@ -473,123 +485,4 @@ async function waitForSeedVisible(
     await new Promise((r) => setTimeout(r, delayMs))
   }
   return latest
-}
-
-function sameEntries(a: FileEntry[], b: FileEntry[]): boolean {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) {
-    if (a[i].path !== b[i].path || a[i].type !== b[i].type) return false
-  }
-  return true
-}
-
-function pendingEntriesForPaths(paths: string[]): Record<string, FileEntry> {
-  const out = entriesForPaths(paths)
-  for (const entry of Object.values(out)) {
-    entry.pending = true
-  }
-  return out
-}
-
-function entriesForPaths(paths: string[]): Record<string, FileEntry> {
-  const out: Record<string, FileEntry> = {}
-  for (const path of paths) {
-    const parts = path.split('/')
-    for (let i = 1; i < parts.length; i++) {
-      const folderPath = parts.slice(0, i).join('/')
-      out[folderPath] = {
-        path: folderPath,
-        name: parts[i - 1],
-        type: 'dir',
-      }
-    }
-    out[path] = {
-      path,
-      name: parts[parts.length - 1] ?? path,
-      type: 'file',
-    }
-  }
-  return out
-}
-
-function mergeEntries(current: FileEntry[], incoming: Record<string, FileEntry>): FileEntry[] {
-  const byPath = new Map(current.map((entry) => [entry.path, entry]))
-  for (const [path, entry] of Object.entries(incoming)) {
-    byPath.set(path, entry)
-  }
-  return [...byPath.values()]
-}
-
-function pruneVisiblePending(
-  pending: Record<string, FileEntry>,
-  visibleEntries: FileEntry[]
-): Record<string, FileEntry> {
-  const visible = new Set(visibleEntries.map((entry) => entry.path))
-  const next: Record<string, FileEntry> = {}
-  for (const [path, entry] of Object.entries(pending)) {
-    if (!visible.has(path)) next[path] = entry
-  }
-  return next
-}
-
-function renamePendingEntries(
-  pending: Record<string, FileEntry>,
-  from: string,
-  to: string
-): Record<string, FileEntry> {
-  const next: Record<string, FileEntry> = {}
-  for (const [path, entry] of Object.entries(pending)) {
-    if (path === from || path.startsWith(`${from}/`)) {
-      const newPath = path === from ? to : `${to}${path.slice(from.length)}`
-      next[newPath] = {
-        ...entry,
-        path: newPath,
-        name: newPath.split('/').pop() ?? newPath,
-      }
-    } else {
-      next[path] = entry
-    }
-  }
-  return next
-}
-
-function removePendingEntries(
-  pending: Record<string, FileEntry>,
-  path: string
-): Record<string, FileEntry> {
-  const next: Record<string, FileEntry> = {}
-  for (const [entryPath, entry] of Object.entries(pending)) {
-    if (entryPath !== path && !entryPath.startsWith(`${path}/`)) {
-      next[entryPath] = entry
-    }
-  }
-  return next
-}
-
-function removeExactPendingEntries(
-  pending: Record<string, FileEntry>,
-  paths: string[]
-): Record<string, FileEntry> {
-  const remove = new Set<string>()
-  for (const path of paths) {
-    remove.add(path)
-    const parts = path.split('/')
-    for (let i = 1; i < parts.length; i++) {
-      remove.add(parts.slice(0, i).join('/'))
-    }
-  }
-  const next: Record<string, FileEntry> = {}
-  for (const [path, entry] of Object.entries(pending)) {
-    if (!remove.has(path)) next[path] = entry
-  }
-  return next
-}
-
-function ancestors(path: string): string[] {
-  const parts = path.split('/')
-  const out: string[] = []
-  for (let i = 1; i < parts.length; i++) {
-    out.push(parts.slice(0, i).join('/'))
-  }
-  return out
 }

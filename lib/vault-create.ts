@@ -2,7 +2,7 @@
  * Seed a new local vault: ensure .git exists, write a welcome note and
  * .gitignore, commit them.
  */
-import { savePinned, loadPinned } from './storage/idb'
+import { getActiveVaultId, savePinned, loadPinned } from './storage/idb'
 import { rebuildVaultIndex, INDEX_PATH } from './vault-index'
 import type { VaultProvider } from './types'
 
@@ -667,9 +667,11 @@ export const WELCOME_MARKDOWN = WELCOME_BODY
 /** Pin a note on first vault creation if nothing is pinned yet. */
 export async function pinInitial(path: string): Promise<void> {
   try {
-    const existing = await loadPinned()
+    const vaultKey = await getActiveVaultId()
+    if (!vaultKey) return
+    const existing = await loadPinned(vaultKey)
     if (existing.length > 0) return
-    await savePinned([path])
+    await savePinned(vaultKey, [path])
   } catch {
     // ignore
   }
