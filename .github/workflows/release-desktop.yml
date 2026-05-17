@@ -1,0 +1,139 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  web:
+    name: Web validation
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.59.1-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Run web Playwright tests
+        run: npm run test:e2e
+        env:
+          CI: true
+
+  desktop:
+    name: Desktop build and smoke test (${{ matrix.platform }})
+    needs: web
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+            executable: dist/win-unpacked/Caedora.exe
+            artifact_name: caedora-windows
+            artifact_path: |
+              dist/*.exe
+              dist/*.blockmap
+          - platform: macos
+            os: macos-latest
+            executable: dist/mac-arm64/Caedora.app/Contents/MacOS/Caedora
+            artifact_name: caedora-macos
+            artifact_path: |
+              dist/*.dmg
+              dist/*.blockmap
+          - platform: linux
+            os: ubuntu-latest
+            executable: dist/linux-unpacked/caedora
+            artifact_name: caedora-linux
+            artifact_path: |
+              dist/*.AppImage
+              dist/*.blockmap
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build desktop artifacts
+        run: npm run desktop:dist
+
+      - name: Install Linux runtime dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Run packaged desktop smoke test
+        if: runner.os != 'Linux'
+        run: npm run test:desktop
+        env:
+          CI: true
+          CAEDORA_DESKTOP_EXECUTABLE: ${{ matrix.executable }}
+
+      - name: Run packaged desktop smoke test
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npm run test:desktop
+        env:
+          CI: true
+          CAEDORA_DESKTOP_EXECUTABLE: ${{ matrix.executable }}
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: desktop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create checksums
+        run: |
+          cd release-assets
+          sha256sum * > checksums.txt
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" release-assets/* \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

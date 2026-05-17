@@ -2,7 +2,9 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
+import { Github } from 'lucide-react'
 import { ModeToggle } from '@/components/mode-toggle'
+import { REPOSITORY_URL } from '@/lib/downloads'
 
 export function SiteHeader() {
   return (
@@ -47,6 +49,16 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-1">
+          <a
+            href={REPOSITORY_URL}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="GitHub repository"
+            title="GitHub repository"
+            className="text-muted-foreground hover:text-foreground inline-flex size-9 items-center justify-center rounded-md transition"
+          >
+            <Github className="size-4" />
+          </a>
           <ModeToggle />
         </div>
       </div>

@@ -17,6 +17,8 @@
 
 # production
 /build
+/dist/
+/.desktop-app/
 
 # misc
 .DS_Store
@@ -28,6 +30,7 @@ yarn-debug.log*
 yarn-error.log*
 .npm-cache/
 .electron-cache/
+/.npm-cache/
 
 # local env files
 .env*.local

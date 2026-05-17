@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ConnectDialog } from '@/components/connect-dialog'
 import { useOs, OS_LABELS, type Os } from './use-os'
+import { DESKTOP_DOWNLOADS } from '@/lib/downloads'
 import { cn } from '@/lib/utils'
 
 type Size = 'lg' | 'xl'
@@ -35,6 +36,8 @@ export function CtaButtons({ size = 'lg', className, showDownloadOnly }: CtaButt
   const chosen: Os = override ?? (detected === 'mobile' || detected === 'unknown' ? 'macos' : detected)
   const downloadLabel = `Download for ${OS_LABELS[chosen]}`
   const isMobile = detected === 'mobile'
+  const downloadHref =
+    chosen === 'macos' ? DESKTOP_DOWNLOADS.macos.appleSilicon.href : undefined
 
   const sizeClasses = size === 'xl' ? 'h-12 px-6 text-base' : 'h-11 px-5 text-sm'
 
@@ -67,16 +70,26 @@ export function CtaButtons({ size = 'lg', className, showDownloadOnly }: CtaButt
         <Button
           variant="outline"
           size="lg"
-          disabled
-          aria-disabled
-          title="Desktop builds are coming soon"
+          asChild={Boolean(downloadHref)}
+          disabled={!downloadHref}
+          aria-disabled={!downloadHref}
+          title={downloadHref ? 'Download Apple Silicon macOS app' : 'Coming soon'}
           className={cn(
             sizeClasses,
             'flex-1 rounded-none border-0 bg-transparent shadow-none hover:bg-accent disabled:opacity-100 disabled:cursor-not-allowed sm:flex-none'
           )}
         >
-          <Download className="size-4 transition-transform duration-300 group-hover/dl:translate-y-0.5" />
-          {downloadLabel}
+          {downloadHref ? (
+            <a href={downloadHref}>
+              <Download className="size-4 transition-transform duration-300 group-hover/dl:translate-y-0.5" />
+              {downloadLabel}
+            </a>
+          ) : (
+            <>
+              <Download className="size-4 transition-transform duration-300 group-hover/dl:translate-y-0.5" />
+              {downloadLabel}
+            </>
+          )}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

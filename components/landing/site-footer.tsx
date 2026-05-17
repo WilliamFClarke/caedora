@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { REPOSITORY_URL } from '@/lib/downloads'
 
 export function SiteFooter() {
   return (
@@ -17,6 +18,14 @@ export function SiteFooter() {
           <Link href="/download" className="hover:text-foreground transition">
             Download
           </Link>
+          <a
+            href={REPOSITORY_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-foreground transition"
+          >
+            GitHub
+          </a>
         </div>
       </div>
     </footer>

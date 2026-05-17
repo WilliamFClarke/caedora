@@ -18,6 +18,10 @@ test('Try in browser opens the connect dialog with Local and GitHub options', as
 test('Download page lists all platforms', async ({ page }) => {
   await page.goto('/download')
   await expect(page.getByText('macOS', { exact: true }).first()).toBeVisible()
+  await expect(page.getByRole('link', { name: /Apple Silicon/i })).toHaveAttribute(
+    'href',
+    'https://github.com/WilliamFClarke/caedora/releases/latest/download/Caedora-macOS-arm64.dmg'
+  )
   await expect(page.getByText('Windows', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('Linux', { exact: true }).first()).toBeVisible()
 })

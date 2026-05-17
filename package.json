@@ -2,6 +2,9 @@
   "name": "caedora",
   "version": "0.1.0",
   "private": true,
+  "license": "MPL-2.0",
+  "description": "Privacy-first personal wiki and local-first desktop assistant.",
+  "author": "William F. Clarke",
   "homepage": "https://caedora.app",
   "main": "electron/main.cjs",
   "workspaces": [
@@ -10,9 +13,15 @@
   "scripts": {
     "dev": "next dev",
     "desktop:dev": "concurrently -k -s first -n next,electron \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "web:standalone": "next build && node scripts/prepare-desktop-app.mjs --standalone-only",
+    "desktop:build:web": "next build && node scripts/prepare-desktop-app.mjs",
+    "desktop:pack": "npm run desktop:build:web && electron-builder --dir --publish never",
+    "desktop:dist": "npm run desktop:build:web && electron-builder --publish never",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "postinstall": "electron-builder install-app-deps",
+    "test:desktop": "playwright test --config=playwright.desktop.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },
@@ -70,6 +79,7 @@
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "remark-stringify": "^11.0.0",
+    "sharp": "^0.34.4",
     "tailwind-merge": "^2.6.0",
     "tw-animate-css": "^1.2.5",
     "tw-shimmer": "^0.4.11",
@@ -87,10 +97,89 @@
     "@types/react-dom": "^19",
     "concurrently": "^9.2.1",
     "electron": "^42.0.1",
+    "electron-builder": "^26.0.12",
     "eslint": "^9",
     "eslint-config-next": "^15.3.3",
     "tailwindcss": "^4.1.4",
     "typescript": "^5",
     "wait-on": "^9.0.5"
+  },
+  "build": {
+    "appId": "app.caedora.desktop",
+    "productName": "Caedora",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "lib/ai/argus-context.json",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".desktop-app/server.js",
+        "to": "app/server.js"
+      },
+      {
+        "from": ".desktop-app/package.json",
+        "to": "app/package.json"
+      },
+      {
+        "from": ".desktop-app/.next",
+        "to": "app/.next"
+      },
+      {
+        "from": ".desktop-app/public",
+        "to": "app/public"
+      },
+      {
+        "from": ".desktop-app/node_modules",
+        "to": "app/node_modules"
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/node-llama-cpp/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "Caedora-macOS-${arch}.${ext}",
+      "icon": "electron/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/icon.png",
+      "category": "Utility"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
