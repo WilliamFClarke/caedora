@@ -20,7 +20,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run desktop:build:web && node .desktop-app/server.js',
+    command: 'npm run web:standalone && HOSTNAME=127.0.0.1 node .next/standalone/server.js',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,

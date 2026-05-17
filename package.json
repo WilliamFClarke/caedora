@@ -13,6 +13,7 @@
   "scripts": {
     "dev": "next dev",
     "desktop:dev": "concurrently -k -s first -n next,electron \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "web:standalone": "next build && node scripts/prepare-desktop-app.mjs --standalone-only",
     "desktop:build:web": "next build && node scripts/prepare-desktop-app.mjs",
     "desktop:pack": "npm run desktop:build:web && electron-builder --dir --publish never",
     "desktop:dist": "npm run desktop:build:web && electron-builder --publish never",

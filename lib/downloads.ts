@@ -1,5 +1,6 @@
 export type DownloadPlatform = 'macos' | 'windows' | 'linux'
 
+export const REPOSITORY_URL = 'https://github.com/WilliamFClarke/caedora'
 export const RELEASES_URL = 'https://github.com/WilliamFClarke/caedora/releases'
 
 export const DESKTOP_DOWNLOADS = {

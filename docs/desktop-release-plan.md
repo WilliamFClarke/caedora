@@ -6,7 +6,7 @@ Caedora will publish a public core application under the Mozilla Public License 
 
 - Repository license: `MPL-2.0`
 - Desktop app: fully offline-capable
-- Release hosting: public GitHub Releases from the main public repository once the repository is made public
+- Release hosting: public GitHub Releases from the main repository
 - Release trigger: semantic version tags such as `v0.1.0`
 - Release gate: no desktop release is published unless all required automated tests pass
 - Initial unsigned builds:
@@ -19,7 +19,6 @@ Caedora will publish a public core application under the Mozilla Public License 
 1. Public repository readiness
    - Add `MPL-2.0` licensing files and contributor guidance.
    - Review the repository for secrets, private URLs, and material that should not become public.
-   - Switch the GitHub repository visibility only after the review is complete.
 
 2. Offline desktop packaging
    - Replace the development-only `http://localhost:3000` desktop loading path with a production local-app strategy.
