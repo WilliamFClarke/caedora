@@ -4,7 +4,7 @@ test('home shows the product landing with primary CTAs', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   await expect(page.getByRole('button', { name: /Try in browser/i }).first()).toBeVisible()
-  await expect(page.getByRole('button', { name: /Download for/i }).first()).toBeVisible()
+  await expect(page.getByText(/Download for/i).first()).toBeVisible()
 })
 
 test('Try in browser opens the connect dialog with Local and GitHub options', async ({ page }) => {

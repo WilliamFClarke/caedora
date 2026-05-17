@@ -628,15 +628,6 @@
     -webkit-app-region: no-drag;
   }
 
-  .caedora-home-theme-toggle {
-    top: 0.75rem;
-  }
-
-  html.caedora-platform-darwin .caedora-home-theme-toggle {
-    top: 5rem;
-    left: 5rem;
-  }
-
   html.caedora-desktop.caedora-platform-darwin .caedora-sidebar-brand-row {
     min-height: 5.25rem;
     padding-top: 4rem;

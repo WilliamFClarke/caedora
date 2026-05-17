@@ -114,7 +114,11 @@
       "electron/**/*",
       "lib/ai/argus-context.json",
       "package.json",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "!node_modules/next/**/*",
+      "!node_modules/@next/**/*",
+      "!node_modules/sharp/**/*",
+      "!node_modules/@img/**/*"
     ],
     "extraResources": [
       {

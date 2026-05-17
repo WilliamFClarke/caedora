@@ -62,7 +62,7 @@ export function Launcher() {
 
   if (status.state === 'checking' || status.state === 'connecting' || status.state === 'ready') {
     return (
-      <Shell showThemeToggle={false}>
+      <Shell>
         <div className="flex flex-col items-center gap-4 text-center">
           <Loader2 className="text-primary size-6 animate-spin" />
           <p className="text-muted-foreground text-sm">
@@ -161,7 +161,7 @@ function Shell({
     <main className="caedora-home-screen bg-background relative flex min-h-screen flex-col items-center justify-center px-6">
       <div className="caedora-home-titlebar absolute inset-x-0 top-0 z-20 h-11" />
       {showThemeToggle && (
-        <div className="caedora-home-theme-toggle absolute left-4 z-30">
+        <div className="caedora-home-theme-toggle absolute bottom-4 left-4 z-30">
           <ModeToggle />
         </div>
       )}

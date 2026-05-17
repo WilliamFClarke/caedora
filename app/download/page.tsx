@@ -26,30 +26,21 @@ const PLATFORMS: {
     icon: Apple,
     title: 'macOS',
     subtitle: 'macOS 12 Monterey or later',
-    variants: [
-      DESKTOP_DOWNLOADS.macos.appleSilicon,
-      { label: 'Intel (.dmg)', note: 'Older Intel-based Macs' },
-    ],
+    variants: [DESKTOP_DOWNLOADS.macos.appleSilicon],
   },
   {
     id: 'windows',
     icon: Monitor,
     title: 'Windows',
     subtitle: 'Windows 10 / 11 · 64-bit',
-    variants: [
-      { label: 'Installer (.exe)', note: 'Recommended for most users' },
-      { label: 'Portable (.zip)', note: 'No installation required' },
-    ],
+    variants: [DESKTOP_DOWNLOADS.windows.installer],
   },
   {
     id: 'linux',
     icon: Terminal,
     title: 'Linux',
     subtitle: 'Ubuntu, Fedora, Arch, and other modern distros',
-    variants: [
-      { label: 'AppImage', note: 'Works on most distros' },
-      { label: 'Deb (.deb)', note: 'Debian / Ubuntu' },
-    ],
+    variants: [DESKTOP_DOWNLOADS.linux.appImage],
   },
 ]
 
@@ -76,9 +67,9 @@ export default function DownloadPage() {
             .
           </h1>
           <p className="text-muted-foreground mt-5 text-base leading-relaxed">
-            Download the native macOS app for Apple Silicon, or use the full
-            Caedora experience right in your browser. Your notes still write
-            straight to your own folder or GitHub repo.
+            Download the native desktop app, or use the full Caedora experience
+            right in your browser. Your notes still write straight to your own
+            folder or GitHub repo.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -162,17 +153,11 @@ function PlatformCard({
           </Button>
         ))}
         <p className="text-muted-foreground mt-2 text-xs">
-          {platform.id === 'macos' ? (
-            <>
-              Downloads are served from{' '}
-              <a className="underline underline-offset-4" href={RELEASES_URL}>
-                GitHub Releases
-              </a>
-              .
-            </>
-          ) : (
-            'Coming soon.'
-          )}
+          Downloads are served from{' '}
+          <a className="underline underline-offset-4" href={RELEASES_URL}>
+            GitHub Releases
+          </a>
+          .
         </p>
       </CardContent>
     </Card>
