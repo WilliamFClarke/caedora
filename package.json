@@ -23,7 +23,9 @@
     "postinstall": "electron-builder install-app-deps",
     "test:desktop": "playwright test --config=playwright.desktop.config.ts",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.14.0",
@@ -102,6 +104,7 @@
     "eslint-config-next": "^15.3.3",
     "tailwindcss": "^4.1.4",
     "typescript": "^5",
+    "vitest": "^4.1.6",
     "wait-on": "^9.0.5"
   },
   "build": {

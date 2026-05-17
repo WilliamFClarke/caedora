@@ -93,5 +93,6 @@ export function slugifyFilename(raw: string): string {
     .replace(/['"]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-  return slug || 'untitled'
+  const safeSlug = slug || 'untitled'
+  return hasMd ? `${safeSlug}.md` : safeSlug
 }

@@ -29,6 +29,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Run app unit tests
+        run: npm run test:unit
+
+      - name: Run MCP unit tests
+        run: npm --workspace packages/caedora-mcp test
+
       - name: Build
         run: npm run build
 
