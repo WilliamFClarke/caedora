@@ -2,7 +2,10 @@ import { test, expect } from '@playwright/test'
 
 test('home shows the product landing with primary CTAs', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { level: 1, name: /Your knowledge, open and entirely yours/i })
+  ).toBeVisible()
+  await expect(page.getByText('Open Knowledge Format workspace')).toBeVisible()
   await expect(page.getByRole('button', { name: /Try in browser/i }).first()).toBeVisible()
   await expect(page.getByRole('button', { name: /Download for/i }).first()).toBeVisible()
 })
@@ -11,6 +14,8 @@ test('Try in browser opens the connect dialog with Local and GitHub options', as
   await page.goto('/')
   await page.getByRole('button', { name: /Try in browser/i }).first().click()
   await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Create a new bundle' })).toBeVisible()
+  await expect(page.getByText(/Your OKF concepts live on your own computer/i)).toBeVisible()
   await expect(page.getByRole('tab', { name: /On this computer/i })).toBeVisible()
   await expect(page.getByRole('tab', { name: /GitHub/i })).toBeVisible()
 })

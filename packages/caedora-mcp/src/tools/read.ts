@@ -1,71 +1,82 @@
 import { z } from 'zod'
 import { parseFrontmatter } from '../lib/frontmatter.js'
+import { conceptId, isConceptPath } from '../lib/okf.js'
 import { listFilesRecursive, type VaultProvider } from '../providers/types.js'
 
-export const listNotesSchema = {
-  folder: z.string().optional().describe('Folder path relative to vault root. Omit for the whole vault.'),
+export const listConceptsSchema = {
+  folder: z.string().optional().describe('Directory path relative to the bundle root.'),
+  type: z.string().optional().describe('Optional exact concept type filter.'),
 }
 
-export async function listNotes(
+export async function listConcepts(
   provider: VaultProvider,
-  { folder }: { folder?: string }
+  { folder, type }: { folder?: string; type?: string }
 ) {
-  const all = await listFilesRecursive(provider)
-  const filtered = folder
-    ? all.filter((e) => e.path === folder || e.path.startsWith(`${folder}/`))
-    : all
-  const notes = filtered.filter((e) => e.type === 'file' && e.name.endsWith('.md'))
-  return notes.map((e) => ({
-    path: e.path,
-    name: e.name,
-    size: e.size,
-    lastModified: e.lastModified,
-  }))
+  const entries = await listFilesRecursive(provider)
+  const concepts = []
+  for (const entry of entries) {
+    if (entry.type !== 'file' || !isConceptPath(entry.path)) continue
+    if (folder && entry.path !== folder && !entry.path.startsWith(`${folder}/`)) continue
+    const raw = await provider.readFile(entry.path)
+    const parsed = parseFrontmatter(raw)
+    if (type && parsed.frontmatter.type !== type) continue
+    concepts.push({
+      id: conceptId(entry.path),
+      path: entry.path,
+      type: parsed.frontmatter.type || 'Unknown',
+      title: parsed.frontmatter.title,
+      description: parsed.frontmatter.description,
+      tags: parsed.frontmatter.tags,
+      timestamp: parsed.frontmatter.timestamp,
+      conformant: parsed.hasFrontmatter && !parsed.error && !!parsed.frontmatter.type.trim(),
+      size: entry.size,
+      lastModified: entry.lastModified,
+    })
+  }
+  return concepts
 }
 
-export const readNoteSchema = {
-  path: z.string().describe('Path to the note, relative to vault root (e.g. "Projects/Atlas.md").'),
+export const readConceptSchema = {
+  path: z.string().describe('Concept path relative to the bundle root.'),
 }
 
-export async function readNote(
+export async function readConcept(
   provider: VaultProvider,
   { path }: { path: string }
 ) {
+  if (!isConceptPath(path)) throw new Error(`${path} is not an OKF concept path.`)
   const raw = await provider.readFile(path)
-  const { frontmatter, body } = parseFrontmatter(raw)
+  const parsed = parseFrontmatter(raw)
   return {
+    id: conceptId(path),
     path,
-    frontmatter,
-    body,
+    metadata: parsed.frontmatter,
+    body: parsed.body,
+    conformant: parsed.hasFrontmatter && !parsed.error && !!parsed.frontmatter.type.trim(),
+    parseError: parsed.error,
   }
 }
 
-export const grepNotesSchema = {
-  regex: z.string().describe('Regular expression (JavaScript flavour) to search for.'),
-  flags: z.string().optional().describe('Regex flags (e.g. "i" for case-insensitive). Defaults to "i".'),
-  limit: z.number().int().positive().max(500).optional().describe('Max matches to return. Default 100.'),
+export const grepConceptsSchema = {
+  regex: z.string().describe('JavaScript regular expression to search for.'),
+  flags: z.string().optional().describe('Regex flags. Defaults to "i".'),
+  limit: z.number().int().positive().max(500).optional().describe('Maximum matches.'),
 }
 
-export async function grepNotes(
+export async function grepConcepts(
   provider: VaultProvider,
   { regex, flags = 'i', limit = 100 }: { regex: string; flags?: string; limit?: number }
 ) {
-  const re = new RegExp(regex, flags.includes('g') ? flags : flags + 'g')
-  const all = await listFilesRecursive(provider)
-  const notes = all.filter((e) => e.type === 'file' && e.name.endsWith('.md'))
+  const re = new RegExp(regex, flags.includes('g') ? flags : `${flags}g`)
+  const entries = await listFilesRecursive(provider)
   const hits: Array<{ path: string; line: number; text: string }> = []
-  for (const note of notes) {
-    if (hits.length >= limit) break
-    const content = await provider.readFile(note.path).catch(() => '')
-    const lines = content.split(/\r?\n/)
-    for (let i = 0; i < lines.length; i++) {
-      if (hits.length >= limit) break
-      const line = lines[i]
-      if (re.test(line)) {
-        hits.push({ path: note.path, line: i + 1, text: line.trim() })
-      }
+  for (const entry of entries.filter((item) => item.type === 'file' && isConceptPath(item.path))) {
+    const lines = (await provider.readFile(entry.path)).split(/\r?\n/)
+    for (let index = 0; index < lines.length && hits.length < limit; index++) {
+      if (re.test(lines[index])) hits.push({ path: entry.path, line: index + 1, text: lines[index].trim() })
       re.lastIndex = 0
     }
+    if (hits.length >= limit) break
   }
   return hits
 }

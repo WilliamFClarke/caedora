@@ -9,9 +9,21 @@ import { SettingsDialog } from '@/components/settings-dialog'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
 import { getActiveVaultId } from '@/lib/storage/idb'
-import { seedEmptyVault, WELCOME_PATH, SKILL_PATH, INDEX_PATH } from '@/lib/vault-create'
-import { rebuildVaultIndex, LOCKED_PATHS } from '@/lib/vault-index'
-import { slugifyFilename } from '@/lib/frontmatter'
+import { seedEmptyBundle, WELCOME_PATH } from '@/lib/vault-create'
+import { rebuildBundleIndexes, isLockedPath } from '@/lib/vault-index'
+import {
+  combine,
+  createConceptFrontmatter,
+  slugifyFilename,
+} from '@/lib/frontmatter'
+import {
+  isConceptPath,
+  loadConceptCatalog,
+  validateBundle,
+  type OkfBundleReport,
+  type OkfConceptSummary,
+} from '@/lib/okf'
+import { appendBundleLog } from '@/lib/bundle-log'
 import { usePinned } from '@/hooks/use-pinned'
 import { useFolderAppearance } from '@/hooks/use-folder-appearance'
 import type { FolderAppearance } from '@/lib/folder-appearance'
@@ -38,6 +50,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [syncNonce, setSyncNonce] = useState(0)
   const [activeVaultId, setActiveVaultIdState] = useState<string | null>(null)
   const [assistantSettingsOpen, setAssistantSettingsOpen] = useState(false)
+  const [conceptCatalog, setConceptCatalog] = useState<Record<string, OkfConceptSummary>>({})
+  const [bundleReport, setBundleReport] = useState<OkfBundleReport | null>(null)
   const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
   const {
     folderAppearances,
@@ -96,28 +110,24 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     try {
       let all = await listFilesRecursive(provider)
 
-      // First-open seed: if the repo/folder has no README at all, treat it
-      // as a pre-Caedora repo and seed welcome.md + SKILL.md so the user
-      // gets the same out-of-the-box state Create gives them. Runs once per
-      // session so a manual delete of the README afterwards won't re-seed.
-      // Treat any readme or welcome file (including the legacy 'welcome.md'
-      // from vaults created before the filename was updated) as "already seeded".
-      const hasReadme = all.some(
+      // First-open seed: an empty folder or repository gets the same minimal
+      // welcome concept and generated root index as the Create flow.
+      const hasWelcome = all.some(
         (e) =>
           e.type === 'file' &&
           (/^readme(\.|$)/i.test(e.name) || /^welcome(-[a-z-]+)?\.md$/i.test(e.name))
       )
-      if (!hasReadme && !didAutoSeed.current) {
+      if (!hasWelcome && !didAutoSeed.current) {
         didAutoSeed.current = true
         setSeeding(true)
         try {
-          const seeded = await seedEmptyVault(provider)
+          const seeded = await seedEmptyBundle(provider)
           if (seeded.length > 0) {
             // GitHub's Contents API can lag a beat between a PUT and the
-            // next listing reflecting it. Poll until welcome.md + AGENTS.md
-            // are visible (or give up after ~5s) so the UI doesn't flash
+            // next listing reflecting it. Poll until welcome.md is visible
+            // (or give up after ~5s) so the UI doesn't flash
             // an empty sidebar.
-            all = await waitForSeedVisible(provider, [WELCOME_PATH, SKILL_PATH])
+            all = await waitForSeedVisible(provider, [WELCOME_PATH])
           }
         } finally {
           setSeeding(false)
@@ -144,7 +154,9 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       })
 
       if (!initialPathRef.current && !didAutoSelect.current) {
-        const firstFile = mdEntries.find((e) => e.type === 'file')
+        const firstFile =
+          mdEntries.find((e) => e.path === WELCOME_PATH) ??
+          mdEntries.find((e) => e.type === 'file' && isConceptPath(e.path))
         if (firstFile) {
           didAutoSelect.current = true
           setSelected(firstFile.path)
@@ -152,13 +164,33 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         }
       }
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Failed to load notes')
+      setLoadError(e instanceof Error ? e.message : 'Failed to load concepts')
     }
   }, [provider, syncUrl])
 
   useEffect(() => {
     void refreshEntries()
   }, [refreshEntries])
+
+  useEffect(() => {
+    if (!provider || entries.length === 0) {
+      setConceptCatalog({})
+      setBundleReport(null)
+      return
+    }
+    let cancelled = false
+    void Promise.all([
+      loadConceptCatalog(provider, entries),
+      validateBundle(provider, entries),
+    ]).then(([catalog, report]) => {
+      if (cancelled) return
+      setConceptCatalog(catalog)
+      setBundleReport(report)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [provider, entries, syncNonce])
 
   // ── Background auto-refresh ───────────────────────────────────────────────
   // Poll to pick up external changes (other devices, direct GitHub edits).
@@ -188,13 +220,10 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   // doesn't trigger a re-render (sameEntries ignores it once it's present).
   const indexRebuildTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    const indexableEntries = entries.filter(
-      (e) => e.type === 'file' && e.name.endsWith('.md') && e.path !== INDEX_PATH
-    )
-    if (!provider || indexableEntries.length === 0) return
+    if (!provider || entries.length === 0) return
     if (indexRebuildTimer.current) clearTimeout(indexRebuildTimer.current)
     indexRebuildTimer.current = setTimeout(() => {
-      void rebuildVaultIndex(provider, entries)
+      void rebuildBundleIndexes(provider, entries)
     }, 3_000)
     return () => {
       if (indexRebuildTimer.current) clearTimeout(indexRebuildTimer.current)
@@ -223,19 +252,34 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   )
 
   const onCreateFile = useCallback(
-    async (parent: string, name: string) => {
+    async (
+      parent: string,
+      name: string,
+      metadata: { type: string; description: string }
+    ) => {
       if (!provider) return
       const display = name.replace(/\.md$/i, '').trim() || 'Untitled'
       const fileName = `${slugifyFilename(display)}.md`
       const fullPath = parent ? `${parent}/${fileName}` : fileName
       const all = await listFilesRecursive(provider)
       if (all.some((e) => e.path === fullPath)) {
-        throw new Error('A note with that name already exists.')
+        throw new Error('A concept with that path already exists.')
       }
-      await provider.writeFile(fullPath, `# ${display}\n\n`)
+      const content = combine(
+        createConceptFrontmatter(display, metadata.type, {
+          description: metadata.description,
+        }),
+        '# Notes\n\n'
+      )
+      await provider.writeFile(fullPath, content)
       if (!provider.writesAreCommits) {
         await provider.commit(`Create ${fullPath}`, [fullPath])
       }
+      await appendBundleLog(
+        provider,
+        'Creation',
+        `Created [${display}](/${fullPath}).`
+      )
       // Optimistic: show the new file immediately. Don't call refreshEntries
       // here — for GitHub the API lags and a stale listing would overwrite this.
       // Polling reconciles within 10–30 s.
@@ -275,7 +319,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const onRenamePath = useCallback(
     async (from: string, to: string) => {
       if (!provider) return
-      if (LOCKED_PATHS.has(from)) {
+      if (isLockedPath(from)) {
         throw new Error(`${from} is maintained by Caedora and can't be renamed or moved.`)
       }
       // Slugify just the final segment of the destination, keeping parent
@@ -308,6 +352,11 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       if (!provider.writesAreCommits) {
         await provider.commit(`Rename ${from} to ${to}`, [to])
       }
+      await appendBundleLog(
+        provider,
+        'Move',
+        `Moved \`${from}\` to [${to.replace(/\.md$/i, '')}](/${to}).`
+      )
       // Optimistic: update entries immediately so the sidebar reflects the
       // rename without waiting for a refresh (which may return stale data on
       // GitHub). Polling will reconcile within 10–30 s.
@@ -336,7 +385,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const onDeletePath = useCallback(
     async (path: string) => {
       if (!provider) return
-      if (LOCKED_PATHS.has(path)) {
+      if (isLockedPath(path)) {
         throw new Error(`${path} is maintained by Caedora and can't be deleted.`)
       }
       if (virtualFolders.has(path)) {
@@ -358,6 +407,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       if (!provider.writesAreCommits) {
         await provider.commit(`Delete ${path}`, [])
       }
+      await appendBundleLog(provider, 'Deletion', `Deleted \`${path}\`.`)
       // Optimistic: remove from entries immediately; polling reconciles.
       setEntries((prev) =>
         prev.filter((e) => e.path !== path && !e.path.startsWith(`${path}/`))
@@ -382,7 +432,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   if (status.state !== 'ready' || !provider) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading your vault…</p>
+        <p className="text-muted-foreground text-sm">Loading your bundle...</p>
       </div>
     )
   }
@@ -392,7 +442,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       <div className="flex h-screen flex-col items-center justify-center gap-3">
         <div className="border-muted-foreground/30 border-t-foreground size-6 animate-spin rounded-full border-2" />
         <p className="text-muted-foreground text-sm">
-          Setting up your vault — writing welcome + AGENTS files…
+          Setting up your bundle: writing the welcome concept and OKF index...
         </p>
       </div>
     )
@@ -418,6 +468,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         onRenamePath={onRenamePath}
         onDeletePath={onDeletePath}
         onSync={onSync}
+        conceptCatalog={conceptCatalog}
+        bundleReport={bundleReport}
       />
       <SidebarInset className="min-w-0">
         <div className="caedora-vault-workspace relative flex h-full min-w-0 flex-1 overflow-hidden bg-card">
@@ -439,6 +491,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
                 isPinned={selected ? pinned.has(selected) : false}
                 onTogglePin={togglePin}
                 onSaveNow={(fn) => { editorSaveRef.current = fn }}
+                conceptCatalog={conceptCatalog}
               />
             )}
           </div>
@@ -478,7 +531,14 @@ async function waitForSeedVisible(
 function sameEntries(a: FileEntry[], b: FileEntry[]): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) {
-    if (a[i].path !== b[i].path || a[i].type !== b[i].type) return false
+    if (
+      a[i].path !== b[i].path ||
+      a[i].type !== b[i].type ||
+      a[i].size !== b[i].size ||
+      a[i].lastModified !== b[i].lastModified
+    ) {
+      return false
+    }
   }
   return true
 }

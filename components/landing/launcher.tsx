@@ -66,7 +66,7 @@ export function Launcher() {
         <div className="flex flex-col items-center gap-4 text-center">
           <Loader2 className="text-primary size-6 animate-spin" />
           <p className="text-muted-foreground text-sm">
-            {status.state === 'checking' ? 'Checking for vault...' : 'Opening vault...'}
+            {status.state === 'checking' ? 'Checking for bundle...' : 'Opening bundle...'}
           </p>
         </div>
       </Shell>
@@ -99,11 +99,11 @@ export function Launcher() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button size="lg" onClick={() => setDialogMode('create')}>
                 <FolderPlus className="size-4" />
-                Create vault
+                Create bundle
               </Button>
               <Button size="lg" variant="outline" onClick={() => setDialogMode('open')}>
                 <FolderOpen className="size-4" />
-                Open another vault
+                Open another bundle
               </Button>
             </div>
           </div>
@@ -112,7 +112,7 @@ export function Launcher() {
             {vaults.length > 0 && (
               <div className="flex w-full flex-col gap-2">
                 <p className="text-muted-foreground self-start text-xs font-medium uppercase tracking-wider">
-                  Recent vaults
+                  Recent bundles
                 </p>
                 <ul className="flex w-full flex-col gap-1.5">
                   {vaults.map((v) => (
@@ -130,11 +130,11 @@ export function Launcher() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button size="lg" onClick={() => setDialogMode('create')}>
                 <FolderPlus className="size-4" />
-                Create vault
+                Create bundle
               </Button>
               <Button size="lg" variant="outline" onClick={() => setDialogMode('open')}>
                 <FolderOpen className="size-4" />
-                Open vault
+                Open bundle
               </Button>
             </div>
           </>
@@ -184,7 +184,7 @@ function VaultRow({
   const isGithub = vault.state.type === 'github'
   const label = isGithub
     ? `${vault.state.githubOwner}/${vault.state.githubRepo}`
-    : vault.state.directoryName ?? vault.state.directoryHandle?.name ?? 'Local vault'
+    : vault.state.directoryName ?? vault.state.directoryHandle?.name ?? 'Local bundle'
   const subtitle = isGithub
     ? 'GitHub'
     : vault.state.directoryPath

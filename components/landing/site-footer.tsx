@@ -9,7 +9,7 @@ export function SiteFooter() {
         <div className="flex items-center gap-2">
           <Image src="/caedora-logo.png" alt="" width={18} height={18} />
           <span className="text-foreground font-medium">Caedora</span>
-          <span className="text-xs">— your notes, your storage.</span>
+          <span className="text-xs">your knowledge, your storage.</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
           <Link href="/" className="hover:text-foreground transition">

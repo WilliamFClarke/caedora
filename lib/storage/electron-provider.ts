@@ -1,5 +1,6 @@
 import { buildDiffResult } from '../diff'
 import { getDesktopApi } from '../desktop'
+import { assertValidOkfDocument, isMarkdownPath } from '../okf'
 import type { CommitEntry, DiffResult, FileEntry, VaultProvider } from '../types'
 
 export class ElectronLocalProvider implements VaultProvider {
@@ -34,6 +35,7 @@ export class ElectronLocalProvider implements VaultProvider {
   }
 
   writeFile(path: string, content: string): Promise<void> {
+    if (isMarkdownPath(path)) assertValidOkfDocument(path, content)
     return api().vault.writeFile(this.rootPath, path, content)
   }
 

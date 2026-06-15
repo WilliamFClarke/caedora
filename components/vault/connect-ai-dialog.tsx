@@ -37,8 +37,8 @@ export function ConnectAiDialog({ open, onOpenChange, provider }: ConnectAiDialo
             Connect external AI
           </DialogTitle>
           <DialogDescription>
-            Point an external AI assistant at this vault so it can answer questions,
-            draft notes, and help maintain it.
+            Connect an external AI assistant to this OKF bundle so it can query,
+            ingest, link, and maintain concepts.
           </DialogDescription>
         </DialogHeader>
 
@@ -82,15 +82,16 @@ function ClaudeCodeTab({
   return (
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-muted-foreground">
-        Claude Code already has file tools. Open your vault folder and start
-        a session — the <code className="bg-muted rounded px-1">AGENTS.md</code>{' '}
-        at the root tells it how your vault is structured.
+        Claude Code already has file tools. Open your bundle folder and start a
+        session. The welcome concept explains the OKF structure, and an optional{' '}
+        <code className="bg-muted rounded px-1">AGENTS.md</code> can add
+        bundle-specific operating rules.
       </p>
       <Snippet label="Terminal" value={cdCommand} />
       <p className="text-muted-foreground text-xs">
-        For richer tag-indexed search and maintenance-quality writes, also wire
-        up <code className="bg-muted rounded px-1">caedora-mcp</code> —
-        see the <em>Desktop / Cursor</em> tab for the same config.
+        For indexed search, graph traversal, validation, and conformant writes,
+        also wire up <code className="bg-muted rounded px-1">caedora-mcp</code>.
+        See the <em>Desktop / Cursor</em> tab for the config.
       </p>
     </div>
   )
@@ -107,7 +108,7 @@ function DesktopTab({
   "mcpServers": {
     "caedora": {
       "command": "npx",
-      "args": ["-y", "caedora-mcp", "--vault", "/path/to/${folderName ?? 'your-vault'}"]
+      "args": ["-y", "caedora-mcp", "--bundle", "/path/to/${folderName ?? 'your-bundle'}"]
     }
   }
 }`
@@ -130,14 +131,21 @@ function DesktopTab({
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-muted-foreground">
         Add this block to your Claude Desktop or Cursor MCP config. The server
-        exposes vault-aware search and write tools that preserve frontmatter,
-        H1↔filename, and tag conventions.
+        exposes OKF concept search, graph, validation, ingest, and write tools
+        while preserving producer-defined YAML fields.
       </p>
-      {folderName && <Snippet label="Local vault" value={localConfig} multiline />}
-      {githubConfig && <Snippet label="GitHub vault" value={githubConfig} multiline />}
+      {folderName && <Snippet label="Local bundle" value={localConfig} multiline />}
+      {githubConfig && <Snippet label="GitHub bundle" value={githubConfig} multiline />}
       <p className="text-muted-foreground text-xs">
-        Config location: <code className="bg-muted rounded px-1">~/Library/Application Support/Claude/claude_desktop_config.json</code>{' '}
-        (macOS) or <code className="bg-muted rounded px-1">%APPDATA%\Claude\claude_desktop_config.json</code> (Windows).
+        Config location:{' '}
+        <code className="bg-muted rounded px-1">
+          ~/Library/Application Support/Claude/claude_desktop_config.json
+        </code>{' '}
+        (macOS) or{' '}
+        <code className="bg-muted rounded px-1">
+          %APPDATA%\Claude\claude_desktop_config.json
+        </code>{' '}
+        (Windows).
       </p>
     </div>
   )
@@ -147,8 +155,8 @@ function WebTab({ gh }: { gh: GitHubProvider | null }) {
   if (!gh) {
     return (
       <p className="text-muted-foreground text-sm">
-        claude.ai&apos;s GitHub connector only works for vaults hosted on GitHub.
-        Switch to Claude Code or Desktop for local vaults.
+        claude.ai&apos;s GitHub connector only works for bundles hosted on GitHub.
+        Switch to Claude Code or Desktop for local bundles.
       </p>
     )
   }
@@ -156,20 +164,28 @@ function WebTab({ gh }: { gh: GitHubProvider | null }) {
   return (
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-muted-foreground">
-        claude.ai can read your vault directly via its GitHub connector:
+        claude.ai can read your bundle directly through its GitHub connector:
       </p>
       <ol className="text-muted-foreground list-inside list-decimal space-y-1 text-sm">
         <li>
-          Open <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener noreferrer" className="underline">claude.ai → Settings → Connectors</a>.
+          Open{' '}
+          <a
+            href="https://claude.ai/settings/connectors"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            claude.ai Settings, then Connectors
+          </a>
+          .
         </li>
-        <li>Add the GitHub connector and grant access to this repo.</li>
-        <li>Start a new chat and ask about anything in your vault.</li>
+        <li>Add the GitHub connector and grant access to this repository.</li>
+        <li>Start a new chat and ask about concepts in your bundle.</li>
       </ol>
-      <Snippet label="Repo" value={repoUrl} />
+      <Snippet label="Repository" value={repoUrl} />
       <p className="text-muted-foreground text-xs">
-        The <code className="bg-muted rounded px-1">AGENTS.md</code> at the root
-        of your vault gets picked up automatically — Claude will use it to
-        understand your conventions.
+        Claude can follow the conventions in the welcome concept and any
+        optional <code className="bg-muted rounded px-1">AGENTS.md</code> you add.
       </p>
     </div>
   )

@@ -98,19 +98,18 @@ function Hero() {
 
         <Badge variant="outline" className="mb-6 gap-1.5 rounded-full px-3 py-1">
           <Sparkles className="text-primary size-3" />
-          <span className="text-xs">Privacy-first personal wiki</span>
+          <span className="text-xs">Open Knowledge Format workspace</span>
         </Badge>
 
         <h1 className="max-w-3xl text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
-          Your life&apos;s notes,
-          <span className="text-primary"> entirely yours.</span>
+          Your knowledge,
+          <span className="text-primary"> open and entirely yours.</span>
         </h1>
 
         <p className="text-muted-foreground mt-6 max-w-2xl text-balance text-base leading-relaxed sm:text-lg">
-          Caedora is a markdown-first personal wiki for tracking anything that
-          matters to you. Your notes live in your own folder or GitHub repo,
-          never on our servers. Argus AI sits beside you to help
-          you think.
+          Caedora is a private workspace for Open Knowledge Format bundles.
+          Concepts combine structured YAML metadata with readable Markdown,
+          living only in your own folder or GitHub repository.
         </p>
 
         <CtaButtons size="xl" className="mt-10" />
@@ -121,9 +120,9 @@ function Hero() {
 
         <Reveal delay={200} className="mt-16 w-full">
           <ScreenshotFrame
-            label="caedora.app — vault overview"
+            label="caedora.app - bundle overview"
             src="/landing/hero.png"
-            alt="Caedora app showing a Paris trip note with Argus AI in the sidebar"
+            alt="Caedora showing an OKF concept with Argus AI in the sidebar"
           />
         </Reveal>
       </div>
@@ -132,7 +131,7 @@ function Hero() {
 }
 
 function LogoStrip() {
-  const items = ['Markdown', 'GitHub', 'File System Access', 'MCP', 'Local-first', 'Privacy-first']
+  const items = ['OKF v0.1', 'Markdown', 'YAML', 'GitHub', 'MCP', 'Local-first']
   return (
     <section className="border-b">
       <div className="text-muted-foreground mx-auto flex w-full max-w-6xl flex-wrap items-center justify-center gap-x-10 gap-y-3 px-4 py-8 text-xs uppercase tracking-widest sm:px-6">
@@ -149,37 +148,37 @@ const FEATURES = [
     icon: Lock,
     title: 'Your storage, always',
     body:
-      'Notes write directly to a folder on your machine or a GitHub repo you own. Nothing routes through our infrastructure.',
+      'Concepts write directly to a folder on your machine or a GitHub repository you own. Nothing routes through our infrastructure.',
   },
   {
     icon: Bot,
     title: 'Argus AI, built-in',
     body:
-      'A desktop assistant that reads your vault, drafts new notes, and answers questions — using the model you pick.',
+      'A desktop assistant that queries your bundle, drafts conformant concepts, and follows its OKF conventions and optional agent rules.',
   },
   {
     icon: FolderTree,
-    title: 'Plain markdown',
+    title: 'Open Knowledge Format',
     body:
-      'Standard .md files, frontmatter, wiki-style links. Open the same files in any editor you already use.',
+      'Portable Markdown concepts with YAML metadata, path-based identity, hierarchical indexes, and an append-only log.',
   },
   {
     icon: Wifi,
     title: 'Works offline',
     body:
-      'Local-first by default. Open and edit your vault on a plane; sync happens when you reconnect.',
+      'Local-first by default. Open and edit your bundle offline; sync happens when you reconnect.',
   },
   {
     icon: Search,
-    title: 'Find anything',
+    title: 'Progressive discovery',
     body:
-      'Full-text search across notes, plus a quick command palette to jump straight to what you need.',
+      'Search metadata and content, browse generated indexes, filter by type or tag, and follow backlinks through the concept graph.',
   },
   {
     icon: Sparkles,
     title: 'MCP-ready',
     body:
-      'Expose your vault to any MCP-aware AI tool through caedora-mcp — bring your own assistant.',
+      'Expose your bundle to MCP-aware tools for query, ingest, validation, graph traversal, and conformant maintenance.',
   },
 ]
 
@@ -192,11 +191,11 @@ function FeatureGrid() {
             Features
           </p>
           <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-            A wiki that respects you.
+            A knowledge system people and agents can share.
           </h2>
           <p className="text-muted-foreground mt-4 text-base">
             Every design choice in Caedora starts from one rule: your content
-            never leaves your control.
+            never leaves your control, while the format remains portable.
           </p>
         </div>
 
@@ -223,12 +222,12 @@ const TEMPLATES = [
   {
     icon: BriefcaseBusiness,
     title: 'Work',
-    desc: 'Meeting notes, project briefs, weekly reviews, and 1:1 logs — ready to fill in.',
+    desc: 'Meeting records, project briefs, weekly reviews, and decision logs, ready to fill in.',
   },
   {
     icon: Folder,
     title: 'Blank',
-    desc: 'A single welcome note and nothing else. Build your own structure from scratch.',
+    desc: 'One welcome concept and one generated root index. Build your own concept graph from there.',
   },
 ]
 
@@ -242,12 +241,12 @@ function TemplatesSection() {
               Templates
             </p>
             <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-              Start with a shape, not a blank page.
+              Start minimal, expand intentionally.
             </h2>
             <p className="text-muted-foreground mt-4 text-base leading-relaxed">
-              Pick a template when you create your vault and Caedora seeds it
-              with example notes you can edit, rename, or delete. Or start
-              blank and grow your own structure.
+              Every new bundle starts with one conformant welcome concept and
+              one generated root index. Import optional domain templates later
+              when they solve a real need.
             </p>
           </div>
         </div>
@@ -266,8 +265,8 @@ function TemplatesSection() {
         </div>
 
         <p className="text-muted-foreground mt-8 mb-10 text-sm">
-          Every template is just markdown files in your vault — rearrange them
-          however you like.
+          Every template is an ordinary OKF bundle. Use the same files in any
+          Markdown editor or compatible agent.
         </p>
 
         <ScreenshotFrame
@@ -285,11 +284,11 @@ function ShowcaseAlternating() {
     {
       label: 'caedora.app — editor',
       src: '/landing/editor.png',
-      alt: 'Welcome vault note showing markdown formatting cheatsheet',
+      alt: 'Welcome concept showing structured metadata and Markdown content',
       eyebrow: 'Editor',
-      title: 'A markdown editor that gets out of the way.',
+      title: 'Structured metadata, readable content.',
       body:
-        'Rich-text feel, plain-markdown source. Frontmatter, slash commands, and wiki links work out of the box.',
+        'Edit title, type, description, tags, resource, and timestamp as first-class fields while the body remains portable Markdown.',
       reverse: false,
     },
     {
@@ -297,19 +296,19 @@ function ShowcaseAlternating() {
       src: '/landing/argus.png',
       alt: 'Argus AI chat in the Caedora sidebar',
       eyebrow: 'Argus AI',
-      title: 'Your second brain, in your sidebar.',
+      title: 'An agent that understands the bundle contract.',
       body:
-        'Ask Argus AI to summarise yesterday, draft a meeting note, or find that idea from last March. It only sees the notes you let it.',
+        'Ask Argus AI to synthesize a topic, ingest a source, or maintain cross-links. It only sees the bundle you connect.',
       reverse: true,
     },
     {
-      label: 'caedora.app — connected notes',
+      label: 'caedora.app - connected concepts',
       src: '/landing/connected.png',
-      alt: 'Caedora showing backlinks and connected notes between pages',
-      eyebrow: 'Connected notes',
-      title: 'Knowledge that compounds.',
+      alt: 'Caedora showing backlinks and connected concepts',
+      eyebrow: 'Connected concepts',
+      title: 'A navigable concept graph.',
       body:
-        'Backlinks and bidirectional references turn loose notes into a living web of context that grows with you.',
+        'Path-based concept IDs, Markdown links, backlinks, hierarchical indexes, and logs preserve context as the bundle grows.',
       reverse: false,
     },
   ]
@@ -353,7 +352,7 @@ function PrivacyCallout() {
             <div>
               <Lock className="text-primary mb-5 size-6" />
               <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-                We literally cannot read your notes.
+                We cannot read your knowledge bundle.
               </h2>
               <p className="text-muted-foreground mt-5 text-base leading-relaxed">
                 Caedora has no backend that touches your content. Files write
@@ -374,8 +373,8 @@ function PrivacyCallout() {
               {[
                 ['Local folder', 'File System Access API writes straight to disk.'],
                 ['GitHub repo', 'Commits land in a repo you own, with a PAT you control.'],
-                ['No telemetry by default', 'Opt-in only, and never includes note contents.'],
-                ['Yours to inspect', 'Run it locally, audit how your notes are handled.'],
+                ['No telemetry by default', 'Opt-in only, and never includes concept contents.'],
+                ['Yours to inspect', 'Run it locally and audit how your bundle is handled.'],
               ].map(([h, b]) => (
                 <li key={h} className="flex gap-4">
                   <span className="bg-primary mt-2 size-1.5 shrink-0 rounded-full" />
@@ -402,10 +401,10 @@ function ArgusSection() {
             Argus AI
           </p>
           <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
-            An AI that knows your notes — and only your notes.
+            An AI that knows your bundle and follows its rules.
           </h2>
           <p className="text-muted-foreground mt-5 text-base leading-relaxed">
-            Argus AI runs inside Caedora and reads from your vault, not the
+            Argus AI runs inside Caedora and reads from your bundle, not the
             internet. Bring your own API key, or use any MCP-compatible
             assistant through caedora-mcp.
           </p>
@@ -428,7 +427,7 @@ function FinalCta() {
     <section>
       <div className="mx-auto flex w-full max-w-4xl flex-col items-center gap-8 px-4 py-24 text-center sm:px-6 sm:py-32">
         <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
-          Start your vault in 30 seconds.
+          Start an open knowledge bundle in 30 seconds.
         </h2>
         <p className="text-muted-foreground max-w-xl text-base">
           Open the web version right now, or grab the desktop app for your platform.

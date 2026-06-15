@@ -61,7 +61,7 @@ export function CtaButtons({ size = 'lg', className, showDownloadOnly }: CtaButt
             className={cn(sizeClasses, 'group w-full sm:w-auto')}
           >
             <FolderOpen className="size-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:scale-110" />
-            Open existing vault
+            Open existing bundle
           </Button>
         </>
       )}

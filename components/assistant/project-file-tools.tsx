@@ -33,17 +33,17 @@ const fileToolSchemas = {
     path: { type: 'string', description: 'Project-relative file path to read.' },
   }, ['path']),
   write_file: objectSchema({
-    path: { type: 'string', description: 'Project-relative markdown file path to overwrite. Must end in .md.' },
-    content: { type: 'string', description: 'Full replacement file content.' },
+    path: { type: 'string', description: 'Bundle-relative OKF concept path to overwrite. Reserved index.md and log.md files are protected.' },
+    content: { type: 'string', description: 'Complete OKF concept including YAML frontmatter with a non-empty type field.' },
   }, ['path', 'content']),
   edit_file: objectSchema({
-    path: { type: 'string', description: 'Project-relative markdown file path to edit. Must end in .md.' },
+    path: { type: 'string', description: 'Bundle-relative OKF concept path to edit. Reserved index.md and log.md files are protected.' },
     old_string: { type: 'string', description: 'Exact string to replace. Must appear exactly once.' },
     new_string: { type: 'string', description: 'Replacement string.' },
   }, ['path', 'old_string', 'new_string']),
   create_file: objectSchema({
-    path: { type: 'string', description: 'Project-relative markdown file path to create. Must end in .md.' },
-    content: { type: 'string', description: 'Initial file content.' },
+    path: { type: 'string', description: 'Bundle-relative OKF concept path to create. Must end in .md.' },
+    content: { type: 'string', description: 'Complete OKF concept including YAML frontmatter with a non-empty type field.' },
   }, ['path', 'content']),
   create_folder: objectSchema({
     path: { type: 'string', description: 'Project-relative folder path to create.' },
@@ -60,9 +60,9 @@ const fileToolSchemas = {
 const toolDescriptions: Record<AiFileToolName, string> = {
   list_files: 'List project files under a path, respecting ignored files.',
   read_file: 'Read a text file from the current project.',
-  write_file: 'Overwrite a markdown file in the current project. Paths must end in .md.',
-  edit_file: 'Replace an exact string in a markdown file. Paths must end in .md.',
-  create_file: 'Create a markdown file in the current project. Paths must end in .md.',
+  write_file: 'Overwrite a conformant OKF concept. Managed index and log files are protected.',
+  edit_file: 'Edit a conformant OKF concept while preserving valid YAML metadata.',
+  create_file: 'Create a conformant OKF concept with required type metadata.',
   create_folder: 'Create a folder in the current project.',
   delete_file: 'Delete a markdown file from the current project. Paths must end in .md.',
   search_files: 'Search project file contents with a ripgrep-style pattern.',
@@ -143,7 +143,7 @@ function useProjectFileTool(
           context?: { toolCallId?: string }
         ) {
           if (!rootPath) {
-            throw new Error('Open a desktop vault before using file tools.')
+            throw new Error('Open a desktop bundle before using file tools.')
           }
           const request: AiFileToolRequest = { rootPath, toolName, args }
           return executeToolRequestOnce(executionKey(request, context?.toolCallId), request)
