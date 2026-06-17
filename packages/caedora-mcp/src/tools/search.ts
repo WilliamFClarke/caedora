@@ -1,95 +1,120 @@
 import { z } from 'zod'
-import { parseFrontmatter, normalizeTag } from '../lib/frontmatter.js'
-import { listFilesRecursive, type VaultProvider } from '../providers/types.js'
+import { normalizeTag, parseFrontmatter } from '../lib/frontmatter.js'
+import { buildConceptCatalog } from '../lib/okf.js'
+import type { VaultProvider } from '../providers/types.js'
 
-export const searchNotesSchema = {
-  query: z.string().describe('Free-text query. Matches are case-insensitive substrings in title or body.'),
-  tag: z.string().optional().describe('Filter to notes with this tag (exact, post-normalisation).'),
-  limit: z.number().int().positive().max(100).optional().describe('Max results to return. Default 20.'),
+export const searchConceptsSchema = {
+  query: z.string().describe('Free-text query across structured metadata and Markdown bodies.'),
+  tag: z.string().optional().describe('Optional normalized tag filter.'),
+  type: z.string().optional().describe('Optional exact concept type filter.'),
+  limit: z.number().int().positive().max(100).optional().describe('Maximum results.'),
 }
 
-export async function searchNotes(
+export async function searchConcepts(
   provider: VaultProvider,
-  { query, tag, limit = 20 }: { query: string; tag?: string; limit?: number }
+  {
+    query,
+    tag,
+    type,
+    limit = 20,
+  }: { query: string; tag?: string; type?: string; limit?: number }
 ) {
   const q = query.trim().toLowerCase()
   const tagFilter = tag ? normalizeTag(tag) : null
-  const all = await listFilesRecursive(provider)
-  const notes = all.filter((e) => e.type === 'file' && e.name.endsWith('.md'))
-  const hits: Array<{ path: string; score: number; title: string; snippet: string; tags: string[] }> = []
-
-  for (const note of notes) {
-    const raw = await provider.readFile(note.path).catch(() => null)
-    if (raw === null) continue
-    const { frontmatter, body } = parseFrontmatter(raw)
-    if (tagFilter && !frontmatter.tags.includes(tagFilter)) continue
-
-    const titleMatch = note.name.slice(0, -3).toLowerCase().includes(q) ? 1 : 0
-    const bodyMatches = q ? (body.toLowerCase().match(new RegExp(escapeRegex(q), 'g')) ?? []).length : 0
-    const score = titleMatch * 5 + bodyMatches
+  const catalog = await buildConceptCatalog(provider)
+  const hits = []
+  for (const concept of catalog) {
+    if (tagFilter && !concept.tags.includes(tagFilter)) continue
+    if (type && concept.type !== type) continue
+    const raw = await provider.readFile(concept.path)
+    const body = parseFrontmatter(raw).body
+    const metadataText = [
+      concept.title,
+      concept.description,
+      concept.type,
+      concept.resource,
+      concept.tags.join(' '),
+    ].join(' ').toLowerCase()
+    const metadataMatches = q ? countMatches(metadataText, q) : 0
+    const bodyMatches = q ? countMatches(body.toLowerCase(), q) : 0
+    const score = metadataMatches * 5 + bodyMatches
     if (q && score === 0) continue
-
-    const title = (body.match(/^\s*#\s+(.+)$/m)?.[1] ?? note.name.replace(/\.md$/, '')).trim()
-    const snippet = snippetAround(body, q)
-    hits.push({ path: note.path, score, title, snippet, tags: frontmatter.tags })
+    hits.push({
+      id: concept.id,
+      path: concept.path,
+      type: concept.type,
+      title: concept.title,
+      description: concept.description,
+      tags: concept.tags,
+      timestamp: concept.timestamp,
+      score,
+      snippet: snippetAround(body, q),
+    })
   }
-  hits.sort((a, b) => b.score - a.score)
-  return hits.slice(0, limit)
+  return hits.sort((a, b) => b.score - a.score).slice(0, limit)
 }
 
 export const listTagsSchema = {}
 
 export async function listTags(provider: VaultProvider) {
   const counts = new Map<string, number>()
-  const all = await listFilesRecursive(provider)
-  const notes = all.filter((e) => e.type === 'file' && e.name.endsWith('.md'))
-  for (const note of notes) {
-    const raw = await provider.readFile(note.path).catch(() => null)
-    if (raw === null) continue
-    const { frontmatter } = parseFrontmatter(raw)
-    for (const tag of frontmatter.tags) {
-      counts.set(tag, (counts.get(tag) ?? 0) + 1)
-    }
+  for (const concept of await buildConceptCatalog(provider)) {
+    for (const tag of concept.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1)
   }
-  return [...counts.entries()]
-    .map(([tag, count]) => ({ tag, count }))
-    .sort((a, b) => b.count - a.count)
+  return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count)
 }
 
-export const notesByTagSchema = {
-  tag: z.string().describe('Tag to filter by (normalised with the same rules as the editor).'),
+export const listTypesSchema = {}
+
+export async function listTypes(provider: VaultProvider) {
+  const counts = new Map<string, number>()
+  for (const concept of await buildConceptCatalog(provider)) {
+    counts.set(concept.type, (counts.get(concept.type) ?? 0) + 1)
+  }
+  return [...counts].map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count)
 }
 
-export async function notesByTag(
-  provider: VaultProvider,
-  { tag }: { tag: string }
-) {
+export const conceptsByTagSchema = {
+  tag: z.string().describe('Tag to filter by.'),
+}
+
+export async function conceptsByTag(provider: VaultProvider, { tag }: { tag: string }) {
   const target = normalizeTag(tag)
-  const all = await listFilesRecursive(provider)
-  const notes = all.filter((e) => e.type === 'file' && e.name.endsWith('.md'))
-  const matches: Array<{ path: string; title: string }> = []
-  for (const note of notes) {
-    const raw = await provider.readFile(note.path).catch(() => null)
-    if (raw === null) continue
-    const { frontmatter, body } = parseFrontmatter(raw)
-    if (!frontmatter.tags.includes(target)) continue
-    const title = (body.match(/^\s*#\s+(.+)$/m)?.[1] ?? note.name.replace(/\.md$/, '')).trim()
-    matches.push({ path: note.path, title })
-  }
-  return matches
+  return (await buildConceptCatalog(provider))
+    .filter((concept) => concept.tags.includes(target))
+    .map(({ id, path, type, title, description }) => ({ id, path, type, title, description }))
 }
 
-function snippetAround(body: string, q: string, radius = 60): string {
-  if (!q) return body.slice(0, 120).trim()
-  const idx = body.toLowerCase().indexOf(q)
-  if (idx < 0) return body.slice(0, 120).trim()
-  const start = Math.max(0, idx - radius)
-  const end = Math.min(body.length, idx + q.length + radius)
-  const prefix = start > 0 ? '… ' : ''
-  const suffix = end < body.length ? ' …' : ''
-  return prefix + body.slice(start, end).replace(/\s+/g, ' ').trim() + suffix
+export const conceptGraphSchema = {
+  path: z.string().optional().describe('Optional concept path to focus on.'),
 }
 
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+export async function conceptGraph(provider: VaultProvider, { path }: { path?: string }) {
+  const concepts = await buildConceptCatalog(provider)
+  const nodes = path ? concepts.filter((concept) => concept.path === path) : concepts
+  return nodes.map((concept) => ({
+    id: concept.id,
+    path: concept.path,
+    title: concept.title,
+    type: concept.type,
+    outgoing: concept.links.filter((link) => !link.external),
+    external: concept.links.filter((link) => link.external),
+    backlinks: concepts
+      .filter((candidate) => candidate.links.some((link) => link.targetPath === concept.path))
+      .map(({ id, path: sourcePath, title }) => ({ id, path: sourcePath, title })),
+  }))
+}
+
+function countMatches(text: string, query: string): number {
+  if (!query) return 0
+  return text.split(query).length - 1
+}
+
+function snippetAround(body: string, query: string, radius = 80): string {
+  if (!query) return body.slice(0, 160).trim()
+  const index = body.toLowerCase().indexOf(query)
+  if (index < 0) return body.slice(0, 160).trim()
+  const start = Math.max(0, index - radius)
+  const end = Math.min(body.length, index + query.length + radius)
+  return `${start > 0 ? '... ' : ''}${body.slice(start, end).replace(/\s+/g, ' ').trim()}${end < body.length ? ' ...' : ''}`
 }

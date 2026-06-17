@@ -1,6 +1,7 @@
 import * as git from 'isomorphic-git'
 import { createFsAdapter } from './fs-adapter'
 import { buildDiffResult } from '../diff'
+import { assertValidOkfDocument, isMarkdownPath } from '../okf'
 import type { VaultProvider, FileEntry, CommitEntry, DiffResult } from '../types'
 
 const GIT_AUTHOR = { name: 'caedora', email: 'local@caedora' }
@@ -42,6 +43,7 @@ export class LocalGitProvider implements VaultProvider {
   }
 
   async writeFile(path: string, content: string): Promise<void> {
+    if (isMarkdownPath(path)) assertValidOkfDocument(path, content)
     await this.fs.promises.writeFile(`/${path}`, content)
   }
 

@@ -1,4 +1,14 @@
 import type { VaultProvider } from './types'
+import {
+  combine,
+  createConceptFrontmatter,
+  parseFrontmatter,
+  uniqueTags,
+} from './frontmatter'
+import { isReservedPath } from './okf'
+import { rebuildBundleIndexes } from './vault-index'
+import { appendBundleLog } from './bundle-log'
+import { listFilesRecursive } from './storage'
 
 export interface TemplateFile {
   path: string
@@ -85,7 +95,6 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     tags: ['projects', 'planning', 'work'],
     files: [
       file('projects/README.md', '# Project hub\n\nTrack active projects, specs, decisions, milestones, and retrospectives here.\n'),
-      file('projects/index.md', '---\ntags: [projects]\n---\n\n# Projects\n\n| Project | Status | Next milestone | Notes |\n| --- | --- | --- | --- |\n'),
       file('projects/templates/project-brief.md', '---\ntags: [projects, brief]\nstatus: proposed\n---\n\n# Project brief\n\n## Outcome\n\n## Scope\n\n## Milestones\n\n## Risks\n'),
       file('projects/templates/retro.md', '---\ntags: [projects, retro]\n---\n\n# Retrospective\n\n## What changed\n\n## What worked\n\n## What to improve\n\n## Follow-ups\n'),
       file('projects/AGENTS.md', '# Project planning guidance\n\nUse briefs, milestones, and retrospectives to keep recommendations grounded in current project state and documented decisions.\n'),
@@ -118,7 +127,6 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     tags: ['crm', 'people', 'relationships'],
     files: [
       file('people/README.md', '# Personal CRM\n\nKeep people notes, conversations, follow-ups, and useful context here.\n'),
-      file('people/index.md', '---\ntags: [people]\n---\n\n# People\n\n| Name | Context | Last contact | Follow-up |\n| --- | --- | --- | --- |\n'),
       file('people/templates/person.md', '---\ntags: [people]\nstatus: active\n---\n\n# Person name\n\n## Context\n\n## Conversations\n\n## Follow-ups\n\n## Notes\n'),
       file('people/follow-ups.md', '---\ntags: [people, follow-up]\n---\n\n# Follow-ups\n\n| Person | Topic | Due | Done |\n| --- | --- | --- | --- |\n'),
       file('people/AGENTS.md', '# Relationship context guidance\n\nUse people notes respectfully, avoid inventing personal details, and surface follow-ups only from documented context.\n'),
@@ -253,7 +261,7 @@ export async function loadGitHubTemplate(repository: string): Promise<VaultTempl
 }
 
 export async function fetchTemplateFiles(template: VaultTemplate): Promise<TemplateFile[]> {
-  if (template.files) return template.files
+  if (template.files) return normalizeCuratedTemplateFiles(template)
 
   const [owner, repo] = template.repository.split('/')
   const ref = template.ref ?? 'main'
@@ -294,13 +302,25 @@ export async function importTemplateFiles(
       skipped.push(file.path)
       continue
     }
-    await provider.writeFile(file.path, file.content)
+    if (isReservedPath(file.path)) {
+      skipped.push(file.path)
+      continue
+    }
+    await provider.writeFile(file.path, normalizeTemplateConcept(file))
     imported.push(file.path)
     existing.add(file.path)
   }
 
   if (imported.length > 0 && !provider.writesAreCommits) {
-    await provider.commit('Import vault template', imported)
+    await provider.commit('Import bundle template', imported)
+  }
+  if (imported.length > 0) {
+    await appendBundleLog(
+      provider,
+      'Ingest',
+      `Imported ${imported.length} concept${imported.length === 1 ? '' : 's'} from a bundle template.`
+    )
+    await rebuildBundleIndexes(provider, await listFilesRecursive(provider))
   }
   return { imported, skipped }
 }
@@ -333,6 +353,131 @@ async function readManifest(repository: string, ref: string) {
 
 function file(path: string, content: string): TemplateFile {
   return { path, content }
+}
+
+function normalizeCuratedTemplateFiles(template: VaultTemplate): TemplateFile[] {
+  const conceptPaths = (template.files ?? [])
+    .map((file) => file.path)
+    .filter((path) => path.endsWith('.md'))
+
+  return (template.files ?? []).map((file) => ({
+    ...file,
+    content: normalizeTemplateConcept(file, {
+      templateId: template.id,
+      templateTags: template.tags,
+      relatedPaths: conceptPaths.filter((path) => path !== file.path),
+    }),
+  }))
+}
+
+function normalizeTemplateConcept(
+  file: TemplateFile,
+  context: {
+    templateId?: string
+    templateTags?: string[]
+    relatedPaths?: string[]
+  } = {}
+): string {
+  const parsed = parseFrontmatter(file.content)
+  const rawBody = parsed.error ? file.content : parsed.body
+  const title =
+    parsed.frontmatter.title ||
+    rawBody.match(/^\s*#\s+(.+)$/m)?.[1]?.trim() ||
+    displayTitle(file.path)
+  const type =
+    parsed.frontmatter.type ||
+    (file.path.endsWith('AGENTS.md')
+      ? 'Agent Instructions'
+      : /(^|\/)templates?\//i.test(file.path)
+        ? 'Template'
+        : /(^|\/)readme\.md$/i.test(file.path)
+          ? 'Overview'
+          : 'Reference')
+  const description =
+    parsed.frontmatter.description ||
+    (context.templateId ? defaultTemplateDescription(file.path, title, type) : firstParagraph(rawBody)) ||
+    `${type} concept imported from a Caedora bundle template.`
+  const resource =
+    parsed.frontmatter.resource ||
+    (context.templateId
+      ? `https://caedora.app/templates/${context.templateId}#${conceptAnchor(file.path)}`
+      : '')
+  const tags = uniqueTags([
+    ...(context.templateTags ?? []),
+    ...parsed.frontmatter.tags,
+    ...pathTags(file.path),
+    type,
+  ])
+  const body = appendRelatedLinks(rawBody, file.path, context.relatedPaths ?? [])
+
+  return combine(
+    createConceptFrontmatter(title, type, {
+      ...parsed.frontmatter,
+      type,
+      title,
+      description,
+      resource,
+      tags,
+      timestamp: new Date().toISOString(),
+    }),
+    body
+  )
+}
+
+function displayTitle(path: string): string {
+  return (path.split('/').pop() ?? path)
+    .replace(/\.md$/i, '')
+    .split(/[-_]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function defaultTemplateDescription(path: string, title: string, type: string): string {
+  const scope = path
+    .split('/')
+    .filter((part) => part && !/^(readme|agents)\.md$/i.test(part))
+    .slice(0, -1)
+    .join(' / ')
+  if (/\/?readme\.md$/i.test(path)) {
+    return `Overview for the ${scope || title} template concepts and how they connect.`
+  }
+  if (/\/?agents\.md$/i.test(path)) {
+    return `Agent guidance for working with the ${scope || title} template concepts.`
+  }
+  return `${title} ${type.toLowerCase()} for the ${scope || 'template'} bundle.`
+}
+
+function conceptAnchor(path: string): string {
+  return path
+    .replace(/\.md$/i, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function pathTags(path: string): string[] {
+  return path
+    .replace(/\.md$/i, '')
+    .split(/[\/_-]+/)
+    .filter((part) => part && !/^(readme|agents|template|templates)$/i.test(part))
+}
+
+function appendRelatedLinks(body: string, sourcePath: string, relatedPaths: string[]): string {
+  if (relatedPaths.length === 0 || /^##\s+Related concepts\b/im.test(body)) return body
+  const links = relatedPaths
+    .slice(0, 6)
+    .map((path) => `- [${displayTitle(path)}](/${path})`)
+    .join('\n')
+  return `${body.replace(/\s+$/, '')}\n\n## Related concepts\n\n${links}\n`
+}
+
+function firstParagraph(body: string): string {
+  return body
+    .split(/\r?\n\r?\n/)
+    .map((paragraph) => paragraph.replace(/^#+\s+.*$/gm, '').trim())
+    .find(Boolean)
+    ?.replace(/\s+/g, ' ')
+    .slice(0, 240) ?? ''
 }
 
 function githubHeaders(): HeadersInit {

@@ -7,6 +7,7 @@ const crypto = require('node:crypto')
 const git = require('isomorphic-git')
 const ignore = require('ignore')
 const { createTwoFilesPatch } = require('diff')
+const { parseDocument, stringify } = require('yaml')
 const { prompt: ARGUS_ASSISTANT_PROMPT } = require('../lib/ai/argus-context.json')
 
 const GIT_AUTHOR = { name: 'caedora', email: 'local@caedora' }
@@ -51,7 +52,6 @@ if (process.env.CAEDORA_DISABLE_GPU === '1') {
   app.disableHardwareAcceleration()
   app.commandLine.appendSwitch('disable-gpu')
   app.commandLine.appendSwitch('disable-gpu-compositing')
-  app.commandLine.appendSwitch('disable-software-rasterizer')
 }
 
 const APP_NAME = 'Caedora'
@@ -547,7 +547,9 @@ function registerIpc() {
   })
 
   ipcMain.handle('ai:previewFileMutation', async (_event, request) => {
-    return previewAiFileMutation(request)
+    const { nextContent: _nextContent, ...preview } = await previewAiFileMutation(request)
+    void _nextContent
+    return preview
   })
 }
 
@@ -1751,8 +1753,11 @@ async function executeAiFileTool(request) {
   if (toolName === 'search_files') return { ok: true, message: 'Search complete.', data: await aiSearchFiles(request.rootPath, args.pattern, args.path || '') }
   if (toolName === 'write_file' || toolName === 'edit_file' || toolName === 'create_file' || toolName === 'create_folder' || toolName === 'delete_file') {
     const preview = await previewAiFileMutation(request)
-    await applyAiMutation(request)
-    return { ok: true, message: preview.summary, preview }
+    await applyAiMutation(request, preview.nextContent)
+    await maintainOkfBundle(request.rootPath, toolName, preview.path)
+    const { nextContent: _nextContent, ...publicPreview } = preview
+    void _nextContent
+    return { ok: true, message: publicPreview.summary, preview: publicPreview }
   }
   throw new Error(`Unknown AI file tool: ${toolName}`)
 }
@@ -1810,17 +1815,24 @@ async function previewAiFileMutation(request) {
     throw new Error(`Tool ${toolName} does not create a mutation preview.`)
   }
 
+  if (toolName !== 'create_folder' && toolName !== 'delete_file') {
+    assertOkfConceptMutation(rel, newContent)
+    newContent = touchOkfTimestamp(newContent)
+  }
+  if (toolName === 'delete_file') assertMutableOkfPath(rel)
+
   return {
     path: rel,
     operation: toolName,
     summary,
+    nextContent: newContent,
     diff: toolName === 'create_folder'
       ? `Create folder: ${rel}`
       : createTwoFilesPatch(rel, rel, oldContent, newContent, '', '', { context: 3 }),
   }
 }
 
-async function applyAiMutation(request) {
+async function applyAiMutation(request, previewContent) {
   const toolName = request?.toolName
   const args = request?.args || {}
   const rel = normalizeRelativePath(args.path)
@@ -1832,16 +1844,23 @@ async function applyAiMutation(request) {
     const stat = await fsp.stat(target)
     if (!stat.isFile()) throw new Error(`File does not exist: ${rel}`)
     await fsp.mkdir(path.dirname(target), { recursive: true })
-    await fsp.writeFile(target, String(args.content ?? ''), 'utf8')
+    const content = previewContent ?? touchOkfTimestamp(String(args.content ?? ''))
+    assertOkfConceptMutation(rel, content)
+    await fsp.writeFile(target, content, 'utf8')
   } else if (toolName === 'edit_file') {
     const oldContent = await fsp.readFile(target, 'utf8')
     const oldString = String(args.old_string ?? '')
     const count = oldContent.split(oldString).length - 1
     if (count !== 1) throw new Error(`Expected exactly one match for old_string, found ${count}.`)
-    await fsp.writeFile(target, oldContent.replace(oldString, String(args.new_string ?? '')), 'utf8')
+    const content = previewContent ?? touchOkfTimestamp(
+      oldContent.replace(oldString, String(args.new_string ?? ''))
+    )
+    assertOkfConceptMutation(rel, content)
+    await fsp.writeFile(target, content, 'utf8')
   } else if (toolName === 'create_file') {
     const existingContent = await fsp.readFile(target, 'utf8').catch(() => null)
-    const nextContent = String(args.content ?? '')
+    const nextContent = previewContent ?? touchOkfTimestamp(String(args.content ?? ''))
+    assertOkfConceptMutation(rel, nextContent)
     if (existingContent !== null) {
       if (existingContent === nextContent) return
       throw new Error(`File already exists with different content: ${rel}`)
@@ -1851,8 +1870,160 @@ async function applyAiMutation(request) {
   } else if (toolName === 'create_folder') {
     await fsp.mkdir(target, { recursive: true })
   } else if (toolName === 'delete_file') {
+    assertMutableOkfPath(rel)
     await fsp.unlink(target)
   }
+}
+
+function assertMutableOkfPath(rel) {
+  const name = path.basename(rel).toLowerCase()
+  if (name === 'index.md' || name === 'log.md') {
+    throw new Error(`${name} is a managed OKF document and cannot be mutated directly.`)
+  }
+}
+
+function assertOkfConceptMutation(rel, content) {
+  assertMutableOkfPath(rel)
+  const match = String(content).match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/)
+  if (!match) {
+    throw new Error('OKF concept files must start with YAML frontmatter.')
+  }
+  const document = parseDocument(match[1], { prettyErrors: false, uniqueKeys: false })
+  if (document.errors.length > 0) {
+    throw new Error(`Invalid OKF YAML frontmatter: ${document.errors[0].message}`)
+  }
+  const metadata = document.toJS()
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new Error('OKF frontmatter must be a YAML mapping.')
+  }
+  if (typeof metadata.type !== 'string' || !metadata.type.trim()) {
+    throw new Error('OKF concept frontmatter requires a non-empty type field.')
+  }
+}
+
+function touchOkfTimestamp(content) {
+  const match = String(content).match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/)
+  if (!match) return content
+  const document = parseDocument(match[1], { prettyErrors: false, uniqueKeys: false })
+  if (document.errors.length > 0) return content
+  document.set('timestamp', new Date().toISOString())
+  const yaml = stringify(document.toJS(), { lineWidth: 0 }).trimEnd()
+  return `---\n${yaml}\n---\n\n${String(content).slice(match[0].length).replace(/^\n+/, '')}`
+}
+
+async function maintainOkfBundle(rootPath, toolName, rel) {
+  const root = resolveRoot(rootPath)
+  assertCurrentAiProjectRoot(root)
+  const action =
+    toolName === 'create_file' || toolName === 'create_folder'
+      ? 'Creation'
+      : toolName === 'delete_file'
+        ? 'Deletion'
+        : 'Update'
+  await appendOkfLog(root, action, `${formatAiToolPath(rel)} via Argus.`)
+  await rebuildOkfIndexes(root)
+}
+
+async function appendOkfLog(root, action, message) {
+  const logPath = path.join(root, 'log.md')
+  const date = new Date().toISOString().slice(0, 10)
+  const heading = `## ${date}`
+  const entry = `* **${action}**: ${message}`
+  const current = await fsp.readFile(logPath, 'utf8').catch(() => '# Bundle Update Log\n')
+  let next
+  if (current.includes(`${heading}\n`)) {
+    const marker = `${heading}\n`
+    const index = current.indexOf(marker) + marker.length
+    next = `${current.slice(0, index)}${entry}\n${current.slice(index).replace(/^\n*/, '')}`
+  } else {
+    const title = current.match(/^#\s+.+$/m)?.[0] ?? '# Bundle Update Log'
+    const rest = current.replace(/^#\s+.+\s*/m, '').trim()
+    next = `${title}\n\n${heading}\n${entry}\n${rest ? `\n${rest}\n` : ''}`
+  }
+  await fsp.writeFile(logPath, next, 'utf8')
+}
+
+async function rebuildOkfIndexes(root) {
+  const concepts = []
+  const directories = new Set([''])
+  await walkOkfDirectory(root, '', directories, concepts)
+
+  for (const directory of directories) {
+    const childDirectories = [...directories]
+      .filter((candidate) => candidate && path.posix.dirname(candidate) === (directory || '.'))
+      .sort()
+    const childConcepts = concepts
+      .filter((concept) => concept.directory === directory)
+      .sort((left, right) => left.title.localeCompare(right.title))
+    const lines = directory
+      ? [`# ${okfTitleFromPath(directory)} Index`, '']
+      : ['---', 'okf_version: "0.1"', '---', '', '# Knowledge Bundle', '', 'Progressive-disclosure map of this OKF bundle.', '']
+
+    if (childDirectories.length > 0) {
+      lines.push('# Directories', '')
+      for (const child of childDirectories) {
+        const name = path.posix.basename(child)
+        lines.push(`* [${okfTitleFromPath(name)}](${encodeURI(`${name}/index.md`)}) - Browse this section.`)
+      }
+      lines.push('')
+    }
+    if (childConcepts.length > 0) {
+      lines.push('# Concepts', '')
+      for (const concept of childConcepts) {
+        lines.push(`* [${concept.title}](${encodeURI(concept.filename)}) - ${concept.description || `${concept.type} concept.`}`)
+      }
+      lines.push('')
+    }
+    if (childDirectories.length === 0 && childConcepts.length === 0) {
+      lines.push('_No concepts in this scope yet._', '')
+    }
+
+    const indexPath = path.join(root, ...directory.split('/').filter(Boolean), 'index.md')
+    await fsp.mkdir(path.dirname(indexPath), { recursive: true })
+    await fsp.writeFile(indexPath, `${lines.join('\n').trimEnd()}\n`, 'utf8')
+  }
+}
+
+async function walkOkfDirectory(root, relative, directories, concepts) {
+  const absolute = path.join(root, ...relative.split('/').filter(Boolean))
+  const entries = await fsp.readdir(absolute, { withFileTypes: true })
+  for (const entry of entries) {
+    if (entry.name === '.git' || entry.name === '.caedora' || entry.name === 'node_modules') continue
+    const child = relative ? `${relative}/${entry.name}` : entry.name
+    if (entry.isDirectory()) {
+      directories.add(child)
+      await walkOkfDirectory(root, child, directories, concepts)
+      continue
+    }
+    const lower = entry.name.toLowerCase()
+    if (!entry.isFile() || !lower.endsWith('.md') || lower === 'index.md' || lower === 'log.md') continue
+    const raw = await fsp.readFile(path.join(absolute, entry.name), 'utf8')
+    const match = raw.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/)
+    if (!match) continue
+    const document = parseDocument(match[1], { prettyErrors: false, uniqueKeys: false })
+    if (document.errors.length > 0) continue
+    const metadata = document.toJS()
+    concepts.push({
+      directory: relative,
+      filename: entry.name,
+      title: typeof metadata?.title === 'string' && metadata.title.trim()
+        ? metadata.title.trim()
+        : okfTitleFromPath(entry.name),
+      description: typeof metadata?.description === 'string' ? metadata.description.trim() : '',
+      type: typeof metadata?.type === 'string' && metadata.type.trim() ? metadata.type.trim() : 'Unknown',
+    })
+  }
+}
+
+function okfTitleFromPath(value) {
+  return path.posix.basename(value).replace(/\.md$/i, '').split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function formatAiToolPath(rel) {
+  return rel.endsWith('.md') ? `[${okfTitleFromPath(rel)}](/${rel})` : `\`${rel}\``
 }
 
 function assertMarkdownFilePath(rel) {

@@ -79,7 +79,7 @@ const sections: Array<{
       { id: 'editor', label: 'Editor', Icon: Type },
       { id: 'appearance', label: 'Appearance', Icon: Palette },
       { id: 'hotkeys', label: 'Hotkeys', Icon: Keyboard },
-      { id: 'vaults', label: 'Vaults', Icon: FolderOpen },
+      { id: 'vaults', label: 'Bundles', Icon: FolderOpen },
     ],
   },
 ]
@@ -206,7 +206,7 @@ function VaultSettings({ onClose }: { onClose: () => void }) {
                 <ItemContent>
                   <ItemTitle>{vaultLabel(vault.state)}</ItemTitle>
                   <ItemDescription>
-                    {vault.id === activeVaultId ? 'Current vault' : vaultKind(vault.state)}
+                    {vault.id === activeVaultId ? 'Current bundle' : vaultKind(vault.state)}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
@@ -220,10 +220,10 @@ function VaultSettings({ onClose }: { onClose: () => void }) {
                           size="sm"
                           variant="outline"
                           onClick={closeCurrentVault}
-                          title="Return to the home screen without removing this vault"
+                          title="Return to the home screen without removing this bundle"
                         >
                           <LogOut className="size-4" />
-                          Close vault
+                          Close bundle
                         </Button>
                       ) : (
                         <Button
@@ -256,27 +256,27 @@ function VaultSettings({ onClose }: { onClose: () => void }) {
         ) : (
           <Item variant="muted">
             <ItemContent>
-              <ItemTitle>No saved vaults</ItemTitle>
-              <ItemDescription>Create or open a vault to add it here.</ItemDescription>
+              <ItemTitle>No saved bundles</ItemTitle>
+              <ItemDescription>Create or open a bundle to add it here.</ItemDescription>
             </ItemContent>
           </Item>
         )}
         <Separator />
         <Item>
           <ItemContent>
-            <ItemTitle>Add a vault</ItemTitle>
+            <ItemTitle>Add a bundle</ItemTitle>
             <ItemDescription>
-              Create a new Caedora vault or reconnect to an existing one.
+              Create a new OKF bundle or reconnect to an existing one.
             </ItemDescription>
           </ItemContent>
           <ItemActions>
             <Button type="button" onClick={() => setConnectMode('create')}>
               <FolderPlus className="size-4" />
-              Create vault
+              Create bundle
             </Button>
             <Button type="button" variant="outline" onClick={() => setConnectMode('open')}>
               <FolderOpen className="size-4" />
-              Open vault
+              Open bundle
             </Button>
           </ItemActions>
         </Item>
@@ -802,7 +802,7 @@ function AiSettings() {
               void updateDesktopAi({ extraSystemPrompt: event.target.value })
             }
             className="border-input bg-background mt-3 min-h-32 w-full resize-y rounded-md border px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
-            placeholder="Example: Prefer short travel notes with packing reminders."
+            placeholder="Example: Prefer concise concepts with explicit source links."
           />
         </ItemContent>
       </Item>
@@ -817,7 +817,7 @@ function EditorSettings() {
         <ItemContent>
           <ItemTitle>Rich text editor</ItemTitle>
           <ItemDescription>
-            Notes open in the TipTap markdown editor with formatting controls enabled.
+            Concepts open in the TipTap Markdown editor with formatting controls enabled.
           </ItemDescription>
         </ItemContent>
       </Item>
@@ -992,7 +992,7 @@ function HotkeySettings() {
 
 function vaultLabel(state: PersistedVaultState): string {
   if (state.type === 'github') return `${state.githubOwner}/${state.githubRepo}`
-  return state.directoryName ?? state.directoryHandle?.name ?? 'Local vault'
+  return state.directoryName ?? state.directoryHandle?.name ?? 'Local bundle'
 }
 
 function isValidHex(value: string): boolean {
@@ -1035,6 +1035,6 @@ function cloudProviderLabel(provider: DesktopAiSettings['cloud']['provider']): s
 }
 
 function vaultKind(state: PersistedVaultState): string {
-  if (state.type === 'github') return 'GitHub vault'
+  if (state.type === 'github') return 'GitHub bundle'
   return state.directoryPath ? 'Desktop folder' : 'Local folder'
 }

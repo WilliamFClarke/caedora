@@ -1,4 +1,5 @@
 import { buildDiffResult } from '../diff'
+import { assertValidOkfDocument, isMarkdownPath } from '../okf'
 import type { VaultProvider, FileEntry, CommitEntry, DiffResult } from '../types'
 
 const API = 'https://api.github.com'
@@ -58,6 +59,7 @@ export class GitHubProvider implements VaultProvider {
   }
 
   async writeFile(path: string, content: string): Promise<void> {
+    if (isMarkdownPath(path)) assertValidOkfDocument(path, content)
     const sha = this.shaCache.get(path)
     const body: Record<string, unknown> = {
       message: `Update ${path}`,

@@ -21,16 +21,12 @@ import {
   seedLocalVault,
   isFolderEmpty,
   WELCOME_PATH,
-  WELCOME_MARKDOWN,
-  SKILL_PATH,
-  SKILL_MARKDOWN,
   pinInitial,
-  templateFilesFor,
+  bundleSeedFiles,
   type VaultTemplate,
 } from '@/lib/vault-create'
 import { slugifyFilename } from '@/lib/frontmatter'
-import { cn } from '@/lib/utils'
-import { BriefcaseBusiness, Folder, Github, Loader2, User } from 'lucide-react'
+import { Folder, Github, Loader2 } from 'lucide-react'
 
 type Mode = 'create' | 'open'
 
@@ -47,13 +43,11 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
       ? 'local'
       : 'github'
 
-  const [vaultTemplate, setVaultTemplate] = useState<VaultTemplate>('default')
+  const vaultTemplate: VaultTemplate = 'default'
   const [preparing, setPreparing] = useState(false)
 
-  // Reset template choice whenever the dialog opens
   useEffect(() => {
     if (open) {
-      setVaultTemplate('default')
       setPreparing(false)
     }
   }, [open])
@@ -75,47 +69,14 @@ export function ConnectDialog({ open, onOpenChange, mode }: ConnectDialogProps) 
       >
         <DialogHeader>
           <DialogTitle>
-            {mode === 'create' ? 'Create a new vault' : 'Open an existing vault'}
+            {mode === 'create' ? 'Create a new bundle' : 'Open an existing bundle'}
           </DialogTitle>
           <DialogDescription>
             {mode === 'create'
-              ? 'Your notes live on your own computer or in your own GitHub account. Nothing is stored by us.'
-              : 'Reconnect to a vault you already have.'}
+              ? 'Your OKF concepts live on your own computer or in your own GitHub account. Nothing is stored by us.'
+              : 'Reconnect to an OKF knowledge bundle you already have.'}
           </DialogDescription>
         </DialogHeader>
-
-        {mode === 'create' && (
-          <div className="flex flex-col gap-2">
-            <p className="text-sm font-medium">What will you use this vault for?</p>
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  { value: 'personal', label: 'Personal', Icon: User, desc: 'Shopping, health, travel, contacts' },
-                  { value: 'work', label: 'Work', Icon: BriefcaseBusiness, desc: 'Meetings, projects, reviews' },
-                  { value: 'default', label: 'Blank', Icon: Folder, desc: 'Start with just a welcome note' },
-                ] as const
-              ).map(({ value, label, Icon, desc }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setVaultTemplate(value)}
-                  disabled={preparing}
-                  className={cn(
-                    'flex flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-center text-xs transition-colors',
-                    vaultTemplate === value
-                      ? 'border-primary bg-primary/5 text-foreground'
-                      : 'border-border text-muted-foreground hover:border-border/80 hover:bg-accent/50',
-                    preparing && 'cursor-not-allowed opacity-50 hover:bg-transparent'
-                  )}
-                >
-                  <Icon className={cn('size-5', vaultTemplate === value && 'text-primary')} />
-                  <span className="font-medium">{label}</span>
-                  <span className="leading-tight opacity-80">{desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <Tabs defaultValue={defaultTab} className="mt-2">
           <TabsList className="grid w-full grid-cols-2">
@@ -167,7 +128,7 @@ function LocalPanel({
 }) {
   const router = useRouter()
   const { connectLocal, connectDesktopLocal } = useVault()
-  const [vaultName, setVaultName] = useState('My Vault')
+  const [vaultName, setVaultName] = useState('My Knowledge Bundle')
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
   const [showChromiumWarning, setShowChromiumWarning] = useState(false)
@@ -191,13 +152,13 @@ function LocalPanel({
         if (mode === 'create') {
           const trimmed = vaultName.trim()
           if (!trimmed) {
-            setError('Give your vault a name.')
+            setError('Give your bundle a name.')
             setPhase('idle')
             return
           }
           const slug = slugifyFilename(trimmed)
           if (!slug || slug === 'untitled') {
-            setError('That vault name needs at least one letter or digit.')
+            setError('That bundle name needs at least one letter or digit.')
             setPhase('idle')
             return
           }
@@ -213,7 +174,7 @@ function LocalPanel({
           await provider.init()
           if (!(await isFolderEmpty(provider))) {
             setError(
-              `A folder called "${slug}" already exists here and isn't empty. Pick a different vault name, or open it from the "Open vault" flow.`
+              `A folder called "${slug}" already exists here and isn't empty. Pick a different bundle name, or open it from the "Open bundle" flow.`
             )
             setPhase('idle')
             return
@@ -229,7 +190,7 @@ function LocalPanel({
           router.push(`/vault/${WELCOME_PATH}`)
         } else {
           const root = await desktop.vault.selectDirectory({
-            title: 'Open vault folder',
+            title: 'Open bundle folder',
           })
           if (!root) {
             setPhase('idle')
@@ -253,13 +214,13 @@ function LocalPanel({
         // to manually create an empty folder first.
         const trimmed = vaultName.trim()
         if (!trimmed) {
-          setError('Give your vault a name.')
+          setError('Give your bundle a name.')
           setPhase('idle')
           return
         }
         const slug = slugifyFilename(trimmed)
         if (!slug || slug === 'untitled') {
-          setError('That vault name needs at least one letter or digit.')
+          setError('That bundle name needs at least one letter or digit.')
           setPhase('idle')
           return
         }
@@ -269,7 +230,7 @@ function LocalPanel({
         await provider.init()
         if (!(await isFolderEmpty(provider))) {
           setError(
-            `A folder called "${slug}" already exists here and isn't empty. Pick a different vault name, or open it from the "Open vault" flow.`
+            `A folder called "${slug}" already exists here and isn't empty. Pick a different bundle name, or open it from the "Open bundle" flow.`
           )
           setPhase('idle')
           return
@@ -278,7 +239,7 @@ function LocalPanel({
         await seedLocalVault(provider, vaultTemplate)
         const connectedHandle = await connectLocal(handle)
         if (!connectedHandle) {
-          setError('Could not open the new vault folder.')
+          setError('Could not open the new bundle folder.')
           setPhase('idle')
           return
         }
@@ -314,32 +275,32 @@ function LocalPanel({
       {mode === 'create' ? (
         <>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="vault-name">Vault name</Label>
+            <Label htmlFor="vault-name">Bundle name</Label>
             <Input
               id="vault-name"
               value={vaultName}
               onChange={(e) => setVaultName(e.target.value)}
-              placeholder="My Vault"
+              placeholder="My Knowledge Bundle"
               autoComplete="off"
               disabled={busy}
             />
             <p className="text-muted-foreground text-xs">
               A folder named{' '}
               <span className="bg-muted text-foreground rounded px-1 py-0.5 font-mono text-[11px]">
-                {folderSlug || 'your-vault'}
+                {folderSlug || 'your-bundle'}
               </span>{' '}
               will be created inside the location you pick next.
             </p>
           </div>
           <p className="text-muted-foreground text-sm">
             {phase === 'preparing'
-              ? 'Preparing your vault — writing your welcome note and setting up git…'
-              : 'Pick the parent folder (e.g. Documents). We\'ll create your vault folder inside it.'}
+              ? 'Preparing your bundle - writing OKF indexes, agent guidance, and git history...'
+              : 'Pick the parent folder (e.g. Documents). We\'ll create your bundle folder inside it.'}
           </p>
         </>
       ) : (
         <p className="text-muted-foreground text-sm">
-          Pick the folder that already contains your vault.
+          Pick the folder that already contains your knowledge bundle.
         </p>
       )}
       <Button onClick={onPick} disabled={busy || !canSubmit} size="lg" className="w-full">
@@ -349,7 +310,7 @@ function LocalPanel({
           <Folder className="size-4" />
         )}
         {phase === 'preparing'
-          ? 'Preparing your vault…'
+          ? 'Preparing your bundle...'
           : mode === 'create'
             ? 'Choose parent folder'
             : 'Open folder'}
@@ -396,6 +357,10 @@ async function waitForGithubListing(
   // Give up silently — the in-app seed-fallback will pick up the slack.
 }
 
+function githubContentsPath(path: string): string {
+  return path.split('/').map(encodeURIComponent).join('/')
+}
+
 function GitHubPanel({
   mode,
   vaultTemplate,
@@ -437,8 +402,8 @@ function GitHubPanel({
           body: JSON.stringify({
             name: repo,
             private: true,
-            description: 'My Caedora vault',
-            auto_init: true,
+            description: 'My Caedora Open Knowledge Format bundle',
+            auto_init: false,
           }),
         })
         if (!resp.ok) {
@@ -450,16 +415,10 @@ function GitHubPanel({
         const created = (await resp.json()) as { owner: { login: string } }
         const actualOwner = created.owner.login
 
-        // Seed welcome.md + AGENTS.md + template files
-        const templateFiles = templateFilesFor(vaultTemplate)
-        const seeds: Array<{ path: string; body: string }> = [
-          { path: WELCOME_PATH, body: WELCOME_MARKDOWN },
-          { path: SKILL_PATH, body: SKILL_MARKDOWN },
-          ...templateFiles.map(([path, body]) => ({ path, body })),
-        ]
+        const seeds = bundleSeedFiles(vaultTemplate).map(([path, body]) => ({ path, body }))
         for (const { path, body } of seeds) {
           await fetch(
-            `https://api.github.com/repos/${actualOwner}/${repo}/contents/${encodeURIComponent(path)}`,
+            `https://api.github.com/repos/${actualOwner}/${repo}/contents/${githubContentsPath(path)}`,
             {
               method: 'PUT',
               headers: {
@@ -468,7 +427,7 @@ function GitHubPanel({
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                message: 'Initial vault setup',
+                message: 'Initialize OKF knowledge bundle',
                 content: btoa(unescape(encodeURIComponent(body))),
               }),
             }
@@ -482,11 +441,10 @@ function GitHubPanel({
         // until the user does something that triggers another refresh.
         await waitForGithubListing(pat, actualOwner, repo, [
           WELCOME_PATH,
-          SKILL_PATH,
         ])
 
         const connected = await connectGitHub(pat, actualOwner, repo)
-        if (!connected) throw new Error('Could not connect to the new GitHub vault.')
+        if (!connected) throw new Error('Could not connect to the new GitHub bundle.')
       } else {
         // Open: verify access
         const verify = await fetch(
@@ -506,7 +464,7 @@ function GitHubPanel({
           )
         }
         const connected = await connectGitHub(pat, owner, repo)
-        if (!connected) throw new Error('Could not connect to that GitHub vault.')
+        if (!connected) throw new Error('Could not connect to that GitHub bundle.')
       }
       if (mode === 'create') {
         router.push(`/vault/${WELCOME_PATH}`)
@@ -569,7 +527,7 @@ function GitHubPanel({
         </Label>
         <Input
           id="repo"
-          placeholder={mode === 'create' ? 'my-vault' : 'my-vault'}
+          placeholder={mode === 'create' ? 'my-knowledge-bundle' : 'my-knowledge-bundle'}
           value={repo}
           onChange={(e) => setRepo(e.target.value)}
           required
@@ -577,17 +535,17 @@ function GitHubPanel({
       </div>
       {phase === 'preparing' && (
         <p className="text-muted-foreground text-sm">
-          Preparing your vault — creating the repo and writing your welcome note…
+          Preparing your bundle - creating the repository and writing the OKF structure...
         </p>
       )}
       {error && <p className="text-destructive text-sm">{error}</p>}
       <Button type="submit" disabled={busy || !pat || !repo} size="lg">
         {busy && <Loader2 className="size-4 animate-spin" />}
         {phase === 'preparing'
-          ? 'Preparing your vault…'
+          ? 'Preparing your bundle...'
           : mode === 'create'
-            ? 'Create vault on GitHub'
-            : 'Open vault'}
+            ? 'Create bundle on GitHub'
+            : 'Open bundle'}
       </Button>
     </form>
   )

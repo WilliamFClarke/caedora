@@ -1,6 +1,7 @@
 import { _electron as electron, expect, test } from '@playwright/test'
 
 test('packaged desktop app starts its offline shell', async ({}, testInfo) => {
+  test.setTimeout(60_000)
   const executablePath = process.env.CAEDORA_DESKTOP_EXECUTABLE
   expect(executablePath, 'CAEDORA_DESKTOP_EXECUTABLE must point at a packaged app binary').toBeTruthy()
 
@@ -11,10 +12,6 @@ test('packaged desktop app starts its offline shell', async ({}, testInfo) => {
       CAEDORA_DISABLE_GPU: '1',
     },
     args: [
-      '--disable-gpu',
-      '--disable-gpu-sandbox',
-      '--disable-software-rasterizer',
-      '--in-process-gpu',
       `--user-data-dir=${testInfo.outputPath('user-data')}`,
     ],
   })

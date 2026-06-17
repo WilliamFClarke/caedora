@@ -77,7 +77,7 @@ export default function DownloadPage() {
           </h1>
           <p className="text-muted-foreground mt-5 text-base leading-relaxed">
             Download the native macOS app for Apple Silicon, or use the full
-            Caedora experience right in your browser. Your notes still write
+            Caedora experience right in your browser. Your concepts still write
             straight to your own folder or GitHub repo.
           </p>
 

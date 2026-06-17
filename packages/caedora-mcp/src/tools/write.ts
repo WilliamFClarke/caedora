@@ -1,141 +1,152 @@
 import { z } from 'zod'
 import {
   combine,
-  normalizeTag,
+  createConceptFrontmatter,
   parseFrontmatter,
+  uniqueTags,
   type Frontmatter,
 } from '../lib/frontmatter.js'
 import {
-  ensureH1,
-  extractH1,
-  filenameFromH1,
-  stemFromPath,
-} from '../lib/conventions.js'
+  appendLog,
+  isConceptPath,
+  isReservedPath,
+  rebuildIndexes,
+} from '../lib/okf.js'
+import { titleFromPath } from '../lib/conventions.js'
 import type { VaultProvider } from '../providers/types.js'
 
-export const createNoteSchema = {
-  path: z.string().describe('Desired path for the new note, relative to vault root. Must end with .md.'),
-  body: z.string().describe('Markdown body. If it lacks a top-level H1, one will be added from the filename.'),
-  tags: z.array(z.string()).optional().describe('Tags to write into YAML frontmatter.'),
+const metadataShape = {
+  type: z.string().min(1).optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  resource: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  timestamp: z.string().optional(),
 }
 
-export async function createNote(
+export const createConceptSchema = {
+  path: z.string().describe('New concept path ending in .md. The path is the concept ID.'),
+  type: z.string().min(1).describe('Required descriptive concept type.'),
+  title: z.string().optional().describe('Display title. Derived from the path when omitted.'),
+  description: z.string().optional().describe('One-sentence summary for indexes and retrieval.'),
+  resource: z.string().optional().describe('Canonical URI for the described asset or source.'),
+  tags: z.array(z.string()).optional(),
+  timestamp: z.string().optional(),
+  body: z.string().describe('Standard Markdown body.'),
+}
+
+export async function createConcept(
   provider: VaultProvider,
-  { path, body, tags }: { path: string; body: string; tags?: string[] }
+  args: {
+    path: string
+    type: string
+    title?: string
+    description?: string
+    resource?: string
+    tags?: string[]
+    timestamp?: string
+    body: string
+  }
 ) {
-  if (!path.endsWith('.md')) {
-    throw new Error('create_note: path must end with .md')
-  }
-  // Fail fast if the file already exists.
-  try {
-    await provider.readFile(path)
-    throw new Error(`create_note: file already exists at ${path}`)
-  } catch (e) {
-    if (e instanceof Error && /already exists/.test(e.message)) throw e
-    // Otherwise the read failure means the file doesn't exist — good.
-  }
-
-  const stem = stemFromPath(path)
-  const ensuredBody = ensureH1(body, stem)
-  const fm: Frontmatter = {
-    tags: [...new Set((tags ?? []).map(normalizeTag).filter(Boolean))],
-    extra: [],
-  }
-  const content = combine(fm, ensuredBody)
-  await provider.writeFile(path, content)
-  if (!provider.writesAreCommits) {
-    await provider.commit(`Create ${path}`, [path])
-  }
-  return { path, created: true }
+  if (!isConceptPath(args.path)) throw new Error('Path must be a non-reserved .md concept path.')
+  if (!args.type.trim()) throw new Error('Concept type cannot be empty.')
+  await assertMissing(provider, args.path)
+  const title = args.title?.trim() || titleFromPath(args.path)
+  const metadata = createConceptFrontmatter(title, args.type, {
+    description: args.description ?? '',
+    resource: args.resource ?? '',
+    tags: args.tags ?? [],
+    timestamp: args.timestamp ?? new Date().toISOString(),
+  })
+  await provider.writeFile(args.path, combine(metadata, args.body))
+  if (!provider.writesAreCommits) await provider.commit(`Create ${args.path}`, [args.path])
+  await appendLog(provider, 'Creation', `Created [${title}](/${args.path}).`)
+  await rebuildIndexes(provider)
+  return { id: args.path.replace(/\.md$/i, ''), path: args.path, created: true, metadata }
 }
 
-export const updateNoteSchema = {
-  path: z.string().describe('Path of the note to update.'),
-  body: z.string().optional().describe('Replacement body. Omit to only touch tags.'),
-  tags: z.array(z.string()).optional().describe('Replacement tag list. Omit to leave tags unchanged.'),
-  mergeTags: z.boolean().optional().describe('When true, merge `tags` into the existing set instead of replacing.'),
+export const updateConceptSchema = {
+  path: z.string().describe('Concept path to update.'),
+  body: z.string().optional().describe('Replacement Markdown body.'),
+  metadata: z.object(metadataShape).optional().describe('Standard OKF fields to merge.'),
+  extra: z.record(z.unknown()).optional().describe('Producer-defined YAML fields to merge.'),
+  mergeTags: z.boolean().optional().describe('Merge metadata.tags rather than replacing them.'),
 }
 
-export async function updateNote(
+export async function updateConcept(
   provider: VaultProvider,
   {
     path,
     body,
-    tags,
+    metadata,
+    extra,
     mergeTags = false,
-  }: { path: string; body?: string; tags?: string[]; mergeTags?: boolean }
+  }: {
+    path: string
+    body?: string
+    metadata?: Partial<Omit<Frontmatter, 'extra'>>
+    extra?: Record<string, unknown>
+    mergeTags?: boolean
+  }
 ) {
+  if (!isConceptPath(path)) throw new Error('Only concept documents can be updated with this tool.')
   const raw = await provider.readFile(path)
-  const { frontmatter, body: oldBody } = parseFrontmatter(raw)
-
-  const nextBody = body ?? oldBody
-  let nextTags = frontmatter.tags
-  if (tags !== undefined) {
-    const normalised = tags.map(normalizeTag).filter(Boolean)
-    nextTags = mergeTags
-      ? [...new Set([...frontmatter.tags, ...normalised])]
-      : normalised
+  const parsed = parseFrontmatter(raw)
+  if (!parsed.hasFrontmatter || parsed.error) throw new Error(`Cannot update invalid OKF frontmatter: ${parsed.error ?? 'missing frontmatter'}`)
+  const next: Frontmatter = {
+    ...parsed.frontmatter,
+    ...metadata,
+    tags: metadata?.tags
+      ? mergeTags
+        ? uniqueTags([...parsed.frontmatter.tags, ...metadata.tags])
+        : uniqueTags(metadata.tags)
+      : parsed.frontmatter.tags,
+    timestamp: metadata?.timestamp ?? new Date().toISOString(),
+    extra: { ...parsed.frontmatter.extra, ...extra },
   }
-  const nextFm: Frontmatter = { tags: nextTags, extra: frontmatter.extra }
-  const content = combine(nextFm, nextBody)
-  await provider.writeFile(path, content)
-  if (!provider.writesAreCommits) {
-    await provider.commit(`Update ${path}`, [path])
-  }
-  return { path, updated: true }
+  if (!next.type.trim()) throw new Error('Concept type cannot be empty.')
+  await provider.writeFile(path, combine(next, body ?? parsed.body))
+  if (!provider.writesAreCommits) await provider.commit(`Update ${path}`, [path])
+  await appendLog(provider, 'Update', `Updated [${next.title || titleFromPath(path)}](/${path}).`)
+  await rebuildIndexes(provider)
+  return { path, updated: true, metadata: next }
 }
 
-export const renameNoteSchema = {
-  from: z.string().describe('Current path.'),
-  to: z.string().describe('New path. Must end with .md.'),
-  syncH1: z
-    .boolean()
-    .optional()
-    .describe(
-      'When true, rewrite the note body so its H1 matches the new filename stem (default false — expects caller has already aligned them).'
-    ),
+export const renameConceptSchema = {
+  from: z.string().describe('Current concept path.'),
+  to: z.string().describe('New non-reserved .md concept path.'),
 }
 
-export async function renameNote(
+export async function renameConcept(
   provider: VaultProvider,
-  { from, to, syncH1 = false }: { from: string; to: string; syncH1?: boolean }
+  { from, to }: { from: string; to: string }
 ) {
-  if (!to.endsWith('.md')) {
-    throw new Error('rename_note: `to` must end with .md')
-  }
-  if (syncH1) {
-    const raw = await provider.readFile(from)
-    const { frontmatter, body } = parseFrontmatter(raw)
-    const desiredH1 = stemFromPath(to)
-    const currentH1 = extractH1(body)
-    if (currentH1 !== desiredH1) {
-      const newBody = currentH1
-        ? body.replace(/^\s*#\s+.+?$/m, `# ${desiredH1}`)
-        : ensureH1(body, desiredH1)
-      const next = combine(frontmatter, newBody)
-      await provider.writeFile(from, next)
-    }
-  }
+  if (!isConceptPath(from) || !isConceptPath(to)) throw new Error('Both paths must be concept paths.')
   await provider.renamePath(from, to)
-  if (!provider.writesAreCommits) {
-    await provider.commit(`Rename ${from} -> ${to}`, [to])
-  }
-  return { from, to, renamed: true, syncedH1: syncH1 }
+  if (!provider.writesAreCommits) await provider.commit(`Move ${from} to ${to}`, [to])
+  await appendLog(provider, 'Move', `Moved \`${from}\` to [${titleFromPath(to)}](/${to}).`)
+  await rebuildIndexes(provider)
+  return { from, to, renamed: true }
 }
 
-export const deleteNoteSchema = {
-  path: z.string().describe('Path of the note (or folder) to delete.'),
+export const deleteConceptSchema = {
+  path: z.string().describe('Concept path or concept directory to delete.'),
 }
 
-export async function deleteNote(
-  provider: VaultProvider,
-  { path }: { path: string }
-) {
+export async function deleteConcept(provider: VaultProvider, { path }: { path: string }) {
+  if (isReservedPath(path)) throw new Error('Reserved OKF documents cannot be deleted.')
   await provider.deletePath(path)
-  if (!provider.writesAreCommits) {
-    await provider.commit(`Delete ${path}`, [])
-  }
+  if (!provider.writesAreCommits) await provider.commit(`Delete ${path}`, [])
+  await appendLog(provider, 'Deletion', `Deleted \`${path}\`.`)
+  await rebuildIndexes(provider)
   return { path, deleted: true }
 }
 
-export { filenameFromH1 }
+async function assertMissing(provider: VaultProvider, path: string) {
+  try {
+    await provider.readFile(path)
+    throw new Error(`Concept already exists at ${path}.`)
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Concept already exists')) throw error
+  }
+}

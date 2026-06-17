@@ -1,172 +1,162 @@
-import { parseFrontmatter } from './frontmatter'
-import type { VaultProvider, FileEntry } from './types'
+import { OKF_VERSION, parseFrontmatter } from './frontmatter'
+import {
+  INDEX_FILENAME,
+  LOG_FILENAME,
+  deriveTitleFromPath,
+  isConceptPath,
+} from './okf'
+import type { FileEntry, VaultProvider } from './types'
 
-export const INDEX_PATH = 'index.md'
-export const AGENTS_PATH = 'AGENTS.md'
+export const INDEX_PATH = INDEX_FILENAME
+export const LOG_PATH = LOG_FILENAME
 
-// Paths that are locked — they can be edited but not renamed, moved, or deleted.
-export const LOCKED_PATHS: ReadonlySet<string> = new Set([INDEX_PATH, AGENTS_PATH])
-
-// Files that document the vault itself — excluded from the index listing.
-const EXCLUDED_FROM_INDEX = new Set([INDEX_PATH, AGENTS_PATH, '.gitignore'])
-
-function shouldIndex(e: FileEntry): boolean {
-  return (
-    e.type === 'file' &&
-    e.name.endsWith('.md') &&
-    !EXCLUDED_FROM_INDEX.has(e.path) &&
-    !e.name.startsWith('.')
-  )
+export function isLockedPath(path: string): boolean {
+  const name = path.split('/').pop()?.toLowerCase()
+  return name === INDEX_FILENAME || name === LOG_FILENAME
 }
 
-interface IndexRow {
+interface ConceptSummary {
   path: string
+  title: string
+  description: string
+  type: string
   tags: string[]
 }
 
-interface TreeNode {
-  name: string
-  path: string
-  children: Map<string, TreeNode>
-  files: IndexRow[]
-}
-
 /**
- * Reads every indexable note's frontmatter and rewrites index.md.
- * Fire-and-forget safe — errors are swallowed so a bad read never blocks the UI.
+ * Rebuild every hierarchical index.md required for progressive disclosure.
+ * Errors are swallowed so indexing never blocks editing.
  */
-export async function rebuildVaultIndex(
+export async function rebuildBundleIndexes(
   provider: VaultProvider,
   entries: FileEntry[]
 ): Promise<void> {
   try {
-    const mdFiles = entries.filter(shouldIndex)
-
-    const rows = await Promise.all(
-      mdFiles.map(async (e): Promise<IndexRow> => {
-        try {
-          const raw = await provider.readFile(e.path)
-          const { frontmatter } = parseFrontmatter(raw)
-          return { path: e.path, tags: frontmatter.tags }
-        } catch {
-          return { path: e.path, tags: [] }
+    const conceptEntries = entries.filter(
+      (entry) => entry.type === 'file' && isConceptPath(entry.path)
+    )
+    const summaries = await Promise.all(
+      conceptEntries.map(async (entry): Promise<ConceptSummary> => {
+        const raw = await provider.readFile(entry.path)
+        const parsed = parseFrontmatter(raw)
+        return {
+          path: entry.path,
+          title: parsed.frontmatter.title || deriveTitleFromPath(entry.path),
+          description: parsed.frontmatter.description,
+          type: parsed.frontmatter.type || 'Unknown',
+          tags: parsed.frontmatter.tags,
         }
       })
     )
 
-    const folderPaths = entries
-      .filter((e) => e.type === 'dir')
-      .map((e) => e.path)
+    const directories = collectDirectories(entries, summaries)
+    const changed: string[] = []
 
-    const content = renderIndex(rows, folderPaths)
-    await provider.writeFile(INDEX_PATH, content)
-    if (!provider.writesAreCommits) {
-      await provider.commit('Update vault index', [INDEX_PATH])
+    for (const directory of directories) {
+      const path = directory ? `${directory}/${INDEX_FILENAME}` : INDEX_FILENAME
+      const content = renderDirectoryIndex(directory, directories, summaries)
+      const current = await provider.readFile(path).catch(() => null)
+      if (current === content) continue
+      await provider.writeFile(path, content)
+      changed.push(path)
+    }
+
+    if (changed.length > 0 && !provider.writesAreCommits) {
+      await provider.commit(
+        changed.length === 1 ? `Update ${changed[0]}` : 'Update bundle indexes',
+        changed
+      )
     }
   } catch {
-    // Never surface index rebuild errors to the user.
+    // A malformed or temporarily unavailable concept must not block the editor.
   }
 }
 
-function buildTree(rows: IndexRow[], folderPaths: string[]): TreeNode {
-  const root: TreeNode = { name: '', path: '', children: new Map(), files: [] }
-  const ensureDir = (path: string): TreeNode => {
-    if (!path) return root
-    const parts = path.split('/')
-    let cur = root
-    let acc = ''
-    for (const part of parts) {
-      acc = acc ? `${acc}/${part}` : part
-      let next = cur.children.get(part)
-      if (!next) {
-        next = { name: part, path: acc, children: new Map(), files: [] }
-        cur.children.set(part, next)
-      }
-      cur = next
-    }
-    return cur
-  }
+/** @deprecated Use rebuildBundleIndexes. */
+export const rebuildVaultIndex = rebuildBundleIndexes
 
-  for (const folder of folderPaths) ensureDir(folder)
-
-  for (const row of rows) {
-    const parts = row.path.split('/')
-    const parentPath = parts.slice(0, -1).join('/')
-    const dir = ensureDir(parentPath)
-    dir.files.push(row)
+function collectDirectories(
+  entries: FileEntry[],
+  concepts: ConceptSummary[]
+): string[] {
+  const directories = new Set<string>([''])
+  for (const entry of entries) {
+    if (entry.type === 'dir') addDirectoryAndParents(directories, entry.path)
   }
-  return root
+  for (const concept of concepts) {
+    const parent = dirname(concept.path)
+    addDirectoryAndParents(directories, parent)
+  }
+  return [...directories].sort((a, b) => {
+    const depth = a.split('/').filter(Boolean).length - b.split('/').filter(Boolean).length
+    return depth || a.localeCompare(b)
+  })
 }
 
-function renderTree(node: TreeNode, depth: number): string {
+function addDirectoryAndParents(target: Set<string>, path: string): void {
+  target.add('')
+  if (!path) return
+  const parts = path.split('/')
+  for (let index = 1; index <= parts.length; index++) {
+    target.add(parts.slice(0, index).join('/'))
+  }
+}
+
+function renderDirectoryIndex(
+  directory: string,
+  directories: string[],
+  concepts: ConceptSummary[]
+): string {
+  const title = 'Index'
+  const childDirectories = directories
+    .filter((candidate) => candidate && dirname(candidate) === directory)
+    .sort()
+  const childConcepts = concepts
+    .filter((concept) => dirname(concept.path) === directory)
+    .sort((a, b) => a.title.localeCompare(b.title))
+
   const lines: string[] = []
-  const indent = '  '.repeat(depth)
-
-  const dirs = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name))
-  const files = [...node.files].sort((a, b) => a.path.localeCompare(b.path))
-
-  for (const dir of dirs) {
-    lines.push(`${indent}- **${dir.name}/**`)
-    const sub = renderTree(dir, depth + 1)
-    if (sub) lines.push(sub)
+  if (!directory) {
+    lines.push('---', `okf_version: "${OKF_VERSION}"`, '---', '')
   }
-  for (const file of files) {
-    const filename = file.path.split('/').pop() ?? file.path
-    const display = filename.replace(/\.md$/, '')
-    const tagSuffix = file.tags.length > 0 ? ` _[${file.tags.join(', ')}]_` : ''
-    lines.push(`${indent}- [${display}](${encodeURI(file.path)})${tagSuffix}`)
+  lines.push(`# ${title}`, '')
+  if (!directory) {
+    lines.push(
+      'Progressive-disclosure map of this Open Knowledge Format bundle.',
+      'Open the most relevant concept rather than loading the entire bundle.',
+      ''
+    )
   }
-  return lines.join('\n')
+
+  if (childDirectories.length > 0) {
+    lines.push('### Directories', '')
+    for (const child of childDirectories) {
+      const name = child.split('/').pop() ?? child
+      lines.push(`* [${deriveTitleFromPath(name)}](${encodeURI(`${name}/${INDEX_FILENAME}`)}) - Browse this section.`)
+    }
+    lines.push('')
+  }
+
+  if (childConcepts.length > 0) {
+    lines.push('### Concepts', '')
+    for (const concept of childConcepts) {
+      const relative = concept.path.slice(directory ? directory.length + 1 : 0)
+      const description = concept.description || `${concept.type} concept.`
+      const tags = concept.tags.length > 0 ? ` Tags: ${concept.tags.join(', ')}.` : ''
+      lines.push(`* [${concept.title}](${encodeURI(relative)}) - ${description}${tags}`)
+    }
+    lines.push('')
+  }
+
+  if (childDirectories.length === 0 && childConcepts.length === 0) {
+    lines.push('_No concepts in this scope yet._', '')
+  }
+
+  return `${lines.join('\n').trimEnd()}\n`
 }
 
-function renderIndex(rows: IndexRow[], folderPaths: string[]): string {
-  const date = new Date().toISOString().slice(0, 10)
-
-  let md = `---
-tags: [index, system]
----
-# Vault Index
-
-Auto-maintained map of every folder and note in this vault. Rebuilt whenever
-notes are added, renamed, moved, or removed. An AI assistant should read this
-file **first** to discover what exists and where, then open specific notes
-for detail.
-
-_Last updated: ${date}_
-
-## Folder structure
-
-`
-
-  if (rows.length === 0 && folderPaths.length === 0) {
-    md += '_No notes yet._\n\n'
-  } else {
-    const tree = buildTree(rows, folderPaths)
-    const rendered = renderTree(tree, 0)
-    md += rendered + '\n\n'
-  }
-
-  md += `## All notes
-
-`
-
-  if (rows.length === 0) {
-    md += '_No notes yet._\n'
-    return md
-  }
-
-  md += `| Note | Path | Folder | Tags |\n`
-  md += `| ---- | ---- | ------ | ---- |\n`
-
-  const sorted = [...rows].sort((a, b) => a.path.localeCompare(b.path))
-  for (const { path, tags } of sorted) {
-    const parts = path.split('/')
-    const filename = parts[parts.length - 1]
-    const name = filename.replace(/\.md$/, '')
-    const folder = parts.length > 1 ? parts.slice(0, -1).join('/') : '/'
-    const tagStr = tags.length > 0 ? tags.join(', ') : '—'
-    md += `| ${name} | \`${path}\` | ${folder} | ${tagStr} |\n`
-  }
-
-  return md
+function dirname(path: string): string {
+  const parts = path.split('/')
+  parts.pop()
+  return parts.join('/')
 }

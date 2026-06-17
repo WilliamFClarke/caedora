@@ -7,7 +7,7 @@ import { GitHubNodeProvider } from './providers/github.js'
 import type { VaultProvider } from './providers/types.js'
 
 interface ParsedArgs {
-  vault?: string
+  bundle?: string
   github?: string
   pat?: string
   readOnly: boolean
@@ -16,17 +16,17 @@ interface ParsedArgs {
 
 function parseArgs(argv: string[]): ParsedArgs {
   const out: ParsedArgs = { readOnly: false, help: false }
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]
-    switch (arg) {
+  for (let index = 0; index < argv.length; index++) {
+    switch (argv[index]) {
+      case '--bundle':
       case '--vault':
-        out.vault = argv[++i]
+        out.bundle = argv[++index]
         break
       case '--github':
-        out.github = argv[++i]
+        out.github = argv[++index]
         break
       case '--pat':
-        out.pat = argv[++i]
+        out.pat = argv[++index]
         break
       case '--read-only':
         out.readOnly = true
@@ -36,8 +36,8 @@ function parseArgs(argv: string[]): ParsedArgs {
         out.help = true
         break
       default:
-        if (arg.startsWith('--')) {
-          console.error(`Unknown flag: ${arg}`)
+        if (argv[index].startsWith('--')) {
+          console.error(`Unknown flag: ${argv[index]}`)
           process.exit(2)
         }
     }
@@ -46,28 +46,28 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 function printHelp(): void {
-  console.error(`caedora-mcp — MCP server for Caedora vaults
+  console.error(`caedora-mcp - MCP server for OKF knowledge bundles
 
 Usage:
-  caedora-mcp --vault <path>
+  caedora-mcp --bundle <path>
   caedora-mcp --github <owner>/<repo> --pat <token>
-  caedora-mcp --vault <path> --read-only
+  caedora-mcp --bundle <path> --read-only
 
 Options:
-  --vault <path>       Serve a local folder (absolute path recommended).
-  --github owner/repo  Serve a GitHub-hosted vault.
-  --pat <token>        GitHub personal access token (required with --github).
-                       Falls back to $GITHUB_TOKEN if omitted.
+  --bundle <path>      Serve a local OKF bundle.
+  --vault <path>       Legacy alias for --bundle.
+  --github owner/repo  Serve a GitHub-hosted OKF bundle.
+  --pat <token>        GitHub personal access token. Falls back to GITHUB_TOKEN.
   --read-only          Disable all write tools.
   -h, --help           Show this help.
 
-The server speaks stdio. Wire it into your AI client's MCP config:
+The server speaks stdio. Example MCP configuration:
 
   {
     "mcpServers": {
       "caedora": {
         "command": "npx",
-        "args": ["-y", "caedora-mcp", "--vault", "/path/to/vault"]
+        "args": ["-y", "caedora-mcp", "--bundle", "/path/to/bundle"]
       }
     }
   }
@@ -82,8 +82,8 @@ async function main(): Promise<void> {
   }
 
   let provider: VaultProvider
-  if (args.vault) {
-    provider = new LocalNodeProvider(path.resolve(args.vault))
+  if (args.bundle) {
+    provider = new LocalNodeProvider(path.resolve(args.bundle))
   } else if (args.github) {
     const [owner, repo] = args.github.split('/')
     if (!owner || !repo) {
@@ -92,24 +92,21 @@ async function main(): Promise<void> {
     }
     const token = args.pat ?? process.env.GITHUB_TOKEN
     if (!token) {
-      console.error('Missing --pat (or $GITHUB_TOKEN) for --github mode')
+      console.error('Missing --pat (or GITHUB_TOKEN) for --github mode')
       process.exit(2)
     }
     provider = new GitHubNodeProvider(token, owner, repo)
   } else {
-    console.error('Must provide either --vault <path> or --github owner/repo')
+    console.error('Must provide either --bundle <path> or --github owner/repo')
     printHelp()
     process.exit(2)
   }
 
   const server = buildServer({ provider, readOnly: args.readOnly })
-  const transport = new StdioServerTransport()
-  await server.connect(transport)
-  // Server runs until transport closes.
+  await server.connect(new StdioServerTransport())
 }
 
-main().catch((err: unknown) => {
-  const message = err instanceof Error ? err.message : String(err)
-  console.error(`caedora-mcp: fatal error — ${message}`)
+main().catch((error: unknown) => {
+  console.error(`caedora-mcp: fatal error - ${error instanceof Error ? error.message : String(error)}`)
   process.exit(1)
 })

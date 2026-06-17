@@ -12,6 +12,7 @@ import {
   type VaultTemplate,
 } from '@/lib/vault-templates'
 import { suggestedFolderAppearance, type FolderAppearance } from '@/lib/folder-appearance'
+import { isReservedPath } from '@/lib/okf'
 import { TemplateBrowserDialog } from './template-browser-dialog'
 import { cn } from '@/lib/utils'
 import type { ButtonProps } from '@/components/ui/button'
@@ -43,7 +44,7 @@ export function TemplateMarketplaceButton({
       const existing = new Set(entries.map((entry) => entry.path))
       const pendingPaths = files
         .map((file) => file.path)
-        .filter((path) => !existing.has(path))
+        .filter((path) => !existing.has(path) && !isReservedPath(path))
       onImportedFiles?.(pendingPaths)
       let result: TemplateImportResult
       try {
@@ -52,7 +53,7 @@ export function TemplateMarketplaceButton({
         onImportFailed?.(pendingPaths)
         throw err
       }
-      onImportSettled?.(result.imported)
+      onImportSettled?.(pendingPaths)
       onApplyFolderAppearances?.(folderAppearancesForFiles(result.imported))
       return result
     },

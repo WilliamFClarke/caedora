@@ -2,106 +2,160 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import type { VaultProvider } from './providers/types.js'
 import {
-  grepNotes,
-  grepNotesSchema,
-  listNotes,
-  listNotesSchema,
-  readNote,
-  readNoteSchema,
+  grepConcepts,
+  grepConceptsSchema,
+  listConcepts,
+  listConceptsSchema,
+  readConcept,
+  readConceptSchema,
 } from './tools/read.js'
 import {
+  conceptGraph,
+  conceptGraphSchema,
+  conceptsByTag,
+  conceptsByTagSchema,
   listTags,
   listTagsSchema,
-  notesByTag,
-  notesByTagSchema,
-  searchNotes,
-  searchNotesSchema,
+  listTypes,
+  listTypesSchema,
+  searchConcepts,
+  searchConceptsSchema,
 } from './tools/search.js'
 import {
-  createNote,
-  createNoteSchema,
-  deleteNote,
-  deleteNoteSchema,
-  renameNote,
-  renameNoteSchema,
-  updateNote,
-  updateNoteSchema,
+  createConcept,
+  createConceptSchema,
+  deleteConcept,
+  deleteConceptSchema,
+  renameConcept,
+  renameConceptSchema,
+  updateConcept,
+  updateConceptSchema,
 } from './tools/write.js'
+import {
+  ingestSource,
+  ingestSourceSchema,
+  lintBundle,
+  rebuildBundleIndexes,
+  rebuildIndexesSchema,
+  recordQuery,
+  recordQuerySchema,
+  validateBundleSchema,
+} from './tools/operations.js'
 
 export interface BuildServerOptions {
   provider: VaultProvider
-  /** Disable all write tools (e.g. for a read-only deployment). */
   readOnly?: boolean
 }
 
 export function buildServer({ provider, readOnly = false }: BuildServerOptions): McpServer {
   const server = new McpServer({
     name: 'caedora-mcp',
-    version: '0.1.0',
+    version: '0.2.0',
   })
 
-  // Read tools
   server.tool(
-    'list_notes',
-    'List every markdown note in the vault (optionally scoped to a folder).',
-    listNotesSchema,
-    async (args) => textResult(await listNotes(provider, args))
+    'list_concepts',
+    'List OKF concepts with structured metadata, optionally filtered by directory or type.',
+    listConceptsSchema,
+    async (args) => textResult(await listConcepts(provider, args))
   )
   server.tool(
-    'read_note',
-    'Read a note and return its parsed frontmatter and body.',
-    readNoteSchema,
-    async (args) => textResult(await readNote(provider, args))
+    'read_concept',
+    'Read one OKF concept and return its concept ID, metadata, body, and conformance state.',
+    readConceptSchema,
+    async (args) => textResult(await readConcept(provider, args))
   )
   server.tool(
-    'search_notes',
-    'Full-text search across notes, with optional tag filter. Returns ranked hits with snippets.',
-    searchNotesSchema,
-    async (args) => textResult(await searchNotes(provider, args))
+    'search_concepts',
+    'Ranked search across concept metadata and Markdown bodies, with type and tag filters.',
+    searchConceptsSchema,
+    async (args) => textResult(await searchConcepts(provider, args))
   )
   server.tool(
-    'grep_notes',
-    'Run a regex against every note body and return matching line numbers.',
-    grepNotesSchema,
-    async (args) => textResult(await grepNotes(provider, args))
+    'grep_concepts',
+    'Run a regular expression across all concept documents.',
+    grepConceptsSchema,
+    async (args) => textResult(await grepConcepts(provider, args))
   )
   server.tool(
     'list_tags',
-    'Return every distinct tag used in the vault and how many notes use it.',
+    'List bundle tags and concept counts.',
     listTagsSchema,
     async () => textResult(await listTags(provider))
   )
   server.tool(
-    'notes_by_tag',
-    'Return every note that carries the given tag (exact, post-normalisation).',
-    notesByTagSchema,
-    async (args) => textResult(await notesByTag(provider, args))
+    'list_types',
+    'List concept types and usage counts.',
+    listTypesSchema,
+    async () => textResult(await listTypes(provider))
+  )
+  server.tool(
+    'concepts_by_tag',
+    'List concepts carrying a normalized tag.',
+    conceptsByTagSchema,
+    async (args) => textResult(await conceptsByTag(provider, args))
+  )
+  server.tool(
+    'concept_graph',
+    'Return outgoing links, external references, and backlinks for one concept or the full bundle.',
+    conceptGraphSchema,
+    async (args) => textResult(await conceptGraph(provider, args))
+  )
+  server.tool(
+    'lint_bundle',
+    'Validate OKF v0.1 conformance and report invalid metadata, reserved files, and broken links.',
+    validateBundleSchema,
+    async (args) =>
+      textResult(
+        await lintBundle(provider, {
+          ...args,
+          recordLint: readOnly ? false : args.recordLint,
+        })
+      )
   )
 
   if (!readOnly) {
     server.tool(
-      'create_note',
-      'Create a new note. Auto-prepends an H1 from the filename if the body lacks one, normalises tags, and writes YAML frontmatter.',
-      createNoteSchema,
-      async (args) => textResult(await createNote(provider, args))
+      'create_concept',
+      'Create a conformant OKF concept and update bundle indexes and log.',
+      createConceptSchema,
+      async (args) => textResult(await createConcept(provider, args))
     )
     server.tool(
-      'update_note',
-      'Update a note body and/or tags. Unknown frontmatter keys are preserved.',
-      updateNoteSchema,
-      async (args) => textResult(await updateNote(provider, args))
+      'update_concept',
+      'Update a concept body or metadata while preserving producer-defined YAML fields.',
+      updateConceptSchema,
+      async (args) => textResult(await updateConcept(provider, args))
     )
     server.tool(
-      'rename_note',
-      'Rename a note, optionally syncing its H1 to the new filename.',
-      renameNoteSchema,
-      async (args) => textResult(await renameNote(provider, args))
+      'rename_concept',
+      'Move a concept to a new path-based concept ID, then rebuild indexes and log the move.',
+      renameConceptSchema,
+      async (args) => textResult(await renameConcept(provider, args))
     )
     server.tool(
-      'delete_note',
-      'Delete a note or folder.',
-      deleteNoteSchema,
-      async (args) => textResult(await deleteNote(provider, args))
+      'delete_concept',
+      'Delete a concept or concept directory while protecting reserved OKF documents.',
+      deleteConceptSchema,
+      async (args) => textResult(await deleteConcept(provider, args))
+    )
+    server.tool(
+      'ingest_source',
+      'Create a source concept with provenance metadata and record an ingest operation.',
+      ingestSourceSchema,
+      async (args) => textResult(await ingestSource(provider, args))
+    )
+    server.tool(
+      'rebuild_indexes',
+      'Regenerate hierarchical index.md files for progressive disclosure.',
+      rebuildIndexesSchema,
+      async () => textResult(await rebuildBundleIndexes(provider))
+    )
+    server.tool(
+      'record_query',
+      'Append a durable query or synthesis operation to the bundle log.',
+      recordQuerySchema,
+      async (args) => textResult(await recordQuery(provider, args))
     )
   }
 
@@ -110,16 +164,10 @@ export function buildServer({ provider, readOnly = false }: BuildServerOptions):
 
 function textResult(payload: unknown) {
   return {
-    content: [
-      {
-        type: 'text' as const,
-        text: JSON.stringify(payload, null, 2),
-      },
-    ],
+    content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
   }
 }
 
-// Re-export for programmatic use.
 export type { VaultProvider } from './providers/types.js'
 export { LocalNodeProvider } from './providers/local-node.js'
 export { GitHubNodeProvider } from './providers/github.js'

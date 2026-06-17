@@ -109,6 +109,10 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+.caedora-editor-content-with-header .ProseMirror {
+  padding-top: 0;
+}
+
 .ProseMirror:focus {
   outline: none;
   box-shadow: none;
