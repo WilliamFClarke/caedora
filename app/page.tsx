@@ -8,9 +8,12 @@ import {
   ArrowRight,
   Bot,
   BriefcaseBusiness,
+  FileCheck2,
   Folder,
   FolderTree,
+  GitBranch,
   Lock,
+  Network,
   Search,
   Sparkles,
   User,
@@ -57,6 +60,9 @@ export default function Home() {
           <FeatureGrid />
         </Reveal>
         <Reveal>
+          <FormatSupportSection />
+        </Reveal>
+        <Reveal>
           <TemplatesSection />
         </Reveal>
         <Reveal>
@@ -98,7 +104,7 @@ function Hero() {
 
         <Badge variant="outline" className="mb-6 gap-1.5 rounded-full px-3 py-1">
           <Sparkles className="text-primary size-3" />
-          <span className="text-xs">Open Knowledge Format workspace</span>
+          <span className="text-xs">OKF v0.1 workspace with visual linking</span>
         </Badge>
 
         <h1 className="max-w-3xl text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
@@ -107,9 +113,9 @@ function Hero() {
         </h1>
 
         <p className="text-muted-foreground mt-6 max-w-2xl text-balance text-base leading-relaxed sm:text-lg">
-          Caedora is a private workspace for Open Knowledge Format bundles.
-          Concepts combine structured YAML metadata with readable Markdown,
-          living only in your own folder or GitHub repository.
+          Caedora turns your notes into Open Knowledge Format bundles: editable
+          YAML metadata, readable Markdown, generated indexes, backlinks, and a
+          visual link map, all stored only in your own folder or GitHub repository.
         </p>
 
         <CtaButtons size="xl" className="mt-10" />
@@ -160,7 +166,19 @@ const FEATURES = [
     icon: FolderTree,
     title: 'Open Knowledge Format',
     body:
-      'Portable Markdown concepts with YAML metadata, path-based identity, hierarchical indexes, and an append-only log.',
+      'Each concept is a Markdown document with YAML frontmatter for type, title, description, resource, tags, and timestamp.',
+  },
+  {
+    icon: FileCheck2,
+    title: 'Format-safe editing',
+    body:
+      'Caedora validates OKF before saving, preserves custom YAML fields, and shows clear compliance status when files are edited outside the app.',
+  },
+  {
+    icon: Network,
+    title: 'Visual link map',
+    body:
+      'See how concepts connect, jump between linked notes, and discover backlinks without loading the whole bundle into your head.',
   },
   {
     icon: Wifi,
@@ -172,10 +190,10 @@ const FEATURES = [
     icon: Search,
     title: 'Progressive discovery',
     body:
-      'Search metadata and content, browse generated indexes, filter by type or tag, and follow backlinks through the concept graph.',
+      'Search metadata and content, browse generated indexes, filter by type or tag, and follow the links that matter.',
   },
   {
-    icon: Sparkles,
+    icon: GitBranch,
     title: 'MCP-ready',
     body:
       'Expose your bundle to MCP-aware tools for query, ingest, validation, graph traversal, and conformant maintenance.',
@@ -194,8 +212,8 @@ function FeatureGrid() {
             A knowledge system people and agents can share.
           </h2>
           <p className="text-muted-foreground mt-4 text-base">
-            Every design choice in Caedora starts from one rule: your content
-            never leaves your control, while the format remains portable.
+            OKF gives every note enough structure for software and AI agents to
+            work reliably, without taking the readability or ownership away from you.
           </p>
         </div>
 
@@ -205,6 +223,59 @@ function FeatureGrid() {
               <Icon className="text-primary size-5" />
               <h3 className="text-base font-medium">{title}</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">{body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+const OKF_SUPPORT = [
+  {
+    title: 'Structured frontmatter',
+    body:
+      'Title, type, description, resource, tags, timestamp, and custom YAML fields are first-class controls, not hidden implementation detail.',
+  },
+  {
+    title: 'Conformant saves',
+    body:
+      'New and edited concepts are checked before writing so bundles stay valid even when agents or templates add content.',
+  },
+  {
+    title: 'Generated indexes',
+    body:
+      'Caedora maintains simple `index.md` maps for folders, keeping large bundles browseable by humans and cheap for agents to inspect.',
+  },
+  {
+    title: 'Linked concepts',
+    body:
+      'Markdown links, backlinks, and the visual link map make relationships visible without forcing you into a proprietary database.',
+  },
+]
+
+function FormatSupportSection() {
+  return (
+    <section id="okf" className="border-b">
+      <div className="mx-auto grid w-full max-w-6xl gap-12 px-4 py-20 sm:px-6 sm:py-28 lg:grid-cols-[0.85fr_1.15fr]">
+        <div>
+          <p className="text-primary mb-3 text-sm font-medium uppercase tracking-widest">
+            OKF support
+          </p>
+          <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+            Useful structure without giving up plain files.
+          </h2>
+          <p className="text-muted-foreground mt-5 text-base leading-relaxed">
+            Open Knowledge Format gives every concept enough metadata to be
+            searched, linked, validated, indexed, and used by AI tools, while
+            the source remains normal Markdown you can open anywhere.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {OKF_SUPPORT.map((item) => (
+            <div key={item.title} className="border-border bg-card rounded-xl border p-5">
+              <h3 className="text-base font-medium">{item.title}</h3>
+              <p className="text-muted-foreground mt-2 text-sm leading-relaxed">{item.body}</p>
             </div>
           ))}
         </div>
@@ -265,8 +336,9 @@ function TemplatesSection() {
         </div>
 
         <p className="text-muted-foreground mt-8 mb-10 text-sm">
-          Every template is an ordinary OKF bundle. Use the same files in any
-          Markdown editor or compatible agent.
+          Every template imports as linked OKF concepts with descriptions,
+          resources, tags, and related-concept links already in the YAML-backed
+          structure.
         </p>
 
         <ScreenshotFrame
@@ -306,9 +378,9 @@ function ShowcaseAlternating() {
       src: '/landing/connected.png',
       alt: 'Caedora showing backlinks and connected concepts',
       eyebrow: 'Connected concepts',
-      title: 'A navigable concept graph.',
+      title: 'A visual link map for your bundle.',
       body:
-        'Path-based concept IDs, Markdown links, backlinks, hierarchical indexes, and logs preserve context as the bundle grows.',
+        'Open the bottom link map to see outgoing links, backlinks, and related concepts in one place. It turns OKF links into a practical map for exploration.',
       reverse: false,
     },
   ]

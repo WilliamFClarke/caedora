@@ -107,7 +107,7 @@ function renderDirectoryIndex(
   directories: string[],
   concepts: ConceptSummary[]
 ): string {
-  const title = directory ? `${deriveTitleFromPath(directory)} Index` : 'Knowledge Bundle'
+  const title = 'Index'
   const childDirectories = directories
     .filter((candidate) => candidate && dirname(candidate) === directory)
     .sort()
@@ -129,7 +129,7 @@ function renderDirectoryIndex(
   }
 
   if (childDirectories.length > 0) {
-    lines.push('# Directories', '')
+    lines.push('### Directories', '')
     for (const child of childDirectories) {
       const name = child.split('/').pop() ?? child
       lines.push(`* [${deriveTitleFromPath(name)}](${encodeURI(`${name}/${INDEX_FILENAME}`)}) - Browse this section.`)
@@ -138,7 +138,7 @@ function renderDirectoryIndex(
   }
 
   if (childConcepts.length > 0) {
-    lines.push('# Concepts', '')
+    lines.push('### Concepts', '')
     for (const concept of childConcepts) {
       const relative = concept.path.slice(directory ? directory.length + 1 : 0)
       const description = concept.description || `${concept.type} concept.`

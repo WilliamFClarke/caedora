@@ -20,6 +20,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "screenshots": "node scripts/generate-product-screenshots.mjs",
     "postinstall": "electron-builder install-app-deps",
     "test:desktop": "playwright test --config=playwright.desktop.config.ts",
     "test:unit": "npm test --workspace packages/caedora-mcp",

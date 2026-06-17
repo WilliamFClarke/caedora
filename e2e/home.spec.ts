@@ -5,7 +5,7 @@ test('home shows the product landing with primary CTAs', async ({ page }) => {
   await expect(
     page.getByRole('heading', { level: 1, name: /Your knowledge, open and entirely yours/i })
   ).toBeVisible()
-  await expect(page.getByText('Open Knowledge Format workspace')).toBeVisible()
+  await expect(page.getByText('OKF v0.1 workspace with visual linking')).toBeVisible()
   await expect(page.getByRole('button', { name: /Try in browser/i }).first()).toBeVisible()
   await expect(page.getByRole('button', { name: /Download for/i }).first()).toBeVisible()
 })

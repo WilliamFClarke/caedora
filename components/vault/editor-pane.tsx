@@ -9,6 +9,7 @@ import {
   CloudOff,
   GitBranch,
   Loader2,
+  Network,
 } from 'lucide-react'
 import { Editor } from './editor'
 import { NoteMeta } from './note-meta'
@@ -26,6 +27,7 @@ import {
 } from '@/lib/frontmatter'
 import {
   backlinksFor,
+  deriveTitleFromPath,
   extractLinks,
   isReservedPath,
   validateDocument,
@@ -47,6 +49,8 @@ interface EditorPaneProps {
   /** Called with a stable saveNow fn so the parent can trigger a flush (e.g. Sync button). */
   onSaveNow?: (fn: () => Promise<void>) => void
   conceptCatalog: Record<string, OkfConceptSummary>
+  linkGraphOpen?: boolean
+  onToggleLinkGraph?: () => void
 }
 
 function countWords(markdown: string): number {
@@ -82,6 +86,8 @@ export function EditorPane({
   onTogglePin,
   onSaveNow,
   conceptCatalog,
+  linkGraphOpen = false,
+  onToggleLinkGraph,
 }: EditorPaneProps) {
   const [loaded, setLoaded] = useState<{
     path: string
@@ -92,6 +98,7 @@ export function EditorPane({
   const [liveBody, setLiveBody] = useState<string | null>(null)
   const [metadata, setMetadata] = useState<Frontmatter>(emptyFrontmatter())
   const [hasLocalChanges, setHasLocalChanges] = useState(false)
+  const [bodyRevision, setBodyRevision] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [branch, setBranch] = useState<string>('')
   const [savedAt, setSavedAt] = useState<number | null>(null)
@@ -114,6 +121,7 @@ export function EditorPane({
       setLiveBody(null)
       setMetadata(emptyFrontmatter())
       setHasLocalChanges(false)
+      setBodyRevision((revision) => revision + 1)
       return
     }
     setLoadError(null)
@@ -128,6 +136,7 @@ export function EditorPane({
         setLiveBody(body)
         setMetadata(parsed.frontmatter)
         setHasLocalChanges(false)
+        setBodyRevision((revision) => revision + 1)
         setSavedAt(lastModified ?? Date.now())
       })
       .catch((e) => {
@@ -199,6 +208,18 @@ export function EditorPane({
     () => (path ? backlinksFor(path, conceptCatalog) : []),
     [conceptCatalog, path]
   )
+  const insertConceptLink = (concept: OkfConceptSummary) => {
+    const current = liveBody ?? ''
+    const link = `[${concept.title}](/${concept.path})`
+    const next = `${current.replace(/\s*$/, '')}\n\n${link}\n`
+    setLiveBody(next)
+    setHasLocalChanges(true)
+    setBodyRevision((revision) => revision + 1)
+    setMetadata((currentMetadata) => ({
+      ...currentMetadata,
+      timestamp: new Date().toISOString(),
+    }))
+  }
 
   if (!path) {
     return (
@@ -228,26 +249,34 @@ export function EditorPane({
 
   const displayPath = path
   const reserved = isReservedPath(path)
+  const fallbackTitle = deriveTitleFromPath(path)
 
   return (
     <div className="flex h-full min-w-0 flex-col">
-      {!reserved && (
-        <NoteMeta
-          metadata={metadata}
-          onMetadataChange={(next) => {
-            setMetadata(next)
-            setHasLocalChanges(true)
-          }}
-          links={links}
-          backlinks={backlinks}
-          isPinned={isPinned}
-          onTogglePin={() => onTogglePin(displayPath)}
-        />
-      )}
       <div className="min-h-0 flex-1 overflow-hidden">
         <Editor
           fileKey={loaded.path}
-          initialMarkdown={loaded.body}
+          contentRevision={bodyRevision}
+          initialMarkdown={liveBody ?? loaded.body}
+          documentHeader={
+            !reserved ? (
+              <NoteMeta
+                metadata={metadata}
+                fallbackTitle={fallbackTitle}
+                onMetadataChange={(next) => {
+                  setMetadata(next)
+                  setHasLocalChanges(true)
+                }}
+                links={links}
+                backlinks={backlinks}
+                currentPath={displayPath}
+                conceptCatalog={conceptCatalog}
+                onInsertConceptLink={insertConceptLink}
+                isPinned={isPinned}
+                onTogglePin={() => onTogglePin(displayPath)}
+              />
+            ) : null
+          }
           onChange={(body) => {
             setLiveBody(body)
             setHasLocalChanges(true)
@@ -268,6 +297,8 @@ export function EditorPane({
         savedAt={savedAt}
         reserved={reserved}
         okfIssues={okfIssues}
+        linkGraphOpen={linkGraphOpen}
+        onToggleLinkGraph={onToggleLinkGraph}
       />
     </div>
   )
@@ -281,6 +312,8 @@ function StatusBar({
   savedAt,
   reserved,
   okfIssues,
+  linkGraphOpen,
+  onToggleLinkGraph,
 }: {
   status: SyncStatus
   path: string
@@ -289,6 +322,8 @@ function StatusBar({
   savedAt: number | null
   reserved: boolean
   okfIssues: OkfIssue[]
+  linkGraphOpen: boolean
+  onToggleLinkGraph?: () => void
 }) {
   const barRef = useRef<HTMLDivElement>(null)
   const compactLevel = useCompactStatusBar(barRef)
@@ -299,7 +334,7 @@ function StatusBar({
   return (
     <div
       ref={barRef}
-      className="border-border bg-sidebar text-muted-foreground flex min-w-0 items-center overflow-hidden border-t px-3 py-1.5 text-[11px] sm:px-4"
+      className="border-border bg-sidebar text-muted-foreground relative z-40 flex min-w-0 items-center overflow-hidden border-t px-3 py-1.5 text-[11px] sm:px-4"
     >
       <div className="flex min-w-0 shrink-0 items-center gap-2 overflow-hidden sm:gap-3">
         <SavedPill status={status} />
@@ -321,6 +356,26 @@ function StatusBar({
           <>
             <span className="text-border">·</span>
             <span className="shrink-0 font-mono text-[10px]">{words} words</span>
+          </>
+        )}
+        {onToggleLinkGraph && (
+          <>
+            <span className="text-border">·</span>
+            <button
+              type="button"
+              onClick={onToggleLinkGraph}
+              aria-pressed={linkGraphOpen}
+              aria-label={linkGraphOpen ? 'Hide concept link map' : 'Open concept link map'}
+              className={cn(
+                'hover:bg-accent inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 font-mono text-[10px] font-medium uppercase transition',
+                linkGraphOpen ? 'text-primary' : 'text-muted-foreground'
+              )}
+            >
+              <Network className="size-3" />
+              <span className={cn(compactLevel >= 2 && 'sr-only')}>
+                {linkGraphOpen ? 'Hide map' : 'Link map'}
+              </span>
+            </button>
           </>
         )}
         <span className="text-border">·</span>

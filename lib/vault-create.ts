@@ -13,6 +13,7 @@ import type { VaultProvider } from './types'
 export { INDEX_PATH, LOG_PATH }
 
 export const WELCOME_PATH = 'welcome.md'
+export const EXAMPLE_CONCEPT_PATH = 'example/customer-orders.md'
 
 export type BundleTemplate = 'personal' | 'work' | 'default'
 /** @deprecated Internal compatibility alias. New UI should say bundle. */
@@ -21,6 +22,7 @@ export type VaultTemplate = BundleTemplate
 export const WELCOME_MARKDOWN = combine(
   createConceptFrontmatter('Welcome to Caedora', 'Guide', {
     description: 'How to use Caedora as an Open Knowledge Format knowledge bundle.',
+    resource: 'https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf',
     tags: ['guide', 'okf'],
   }),
   `Caedora stores your knowledge as ordinary Markdown files in storage you
@@ -47,14 +49,30 @@ timestamp: 2026-06-15T12:00:00Z
 Write the durable knowledge in the Markdown body. Link related concepts with
 normal Markdown links such as \`[Related concept](/concepts/example.md)\`.
 
+# Linking concepts
+
+Links are first-class bundle structure. Use root-relative Markdown links when
+you connect concepts, for example
+\`[Customer Orders](/example/customer-orders.md)\`. Caedora reads those links
+and backlinks to draw the link map from the bottom status bar, so clusters,
+orphans, and important hubs stay visible while the bundle grows.
+
+The example folder includes a linked concept you can inspect, edit, or delete
+when you are ready: [Customer Orders](/example/customer-orders.md). Use it as a
+pattern for short descriptions, focused tags, and links that explain how
+concepts relate to each other.
+
 # How Caedora maintains the bundle
 
 - \`index.md\` is generated as the progressive-disclosure map of the bundle.
+- Folder \`index.md\` files are also generated, so every folder has a small
+  local map.
 - \`log.md\` is created when Caedora records a meaningful operation.
 - New concepts and in-app saves are blocked until they are OKF compliant.
 - Files changed outside Caedora remain readable and show a red OKF indicator
   until their metadata is repaired.
 - Unknown YAML fields are preserved when Caedora rewrites a concept.
+- Generated index files are managed by Caedora and should not be hand-edited.
 
 # Working with agents
 
@@ -70,13 +88,40 @@ surface contradictions instead of hiding them.
 `
 )
 
+export const EXAMPLE_CONCEPT_MARKDOWN = combine(
+  createConceptFrontmatter('Customer Orders', 'Example Concept', {
+    description: 'A small example concept that demonstrates OKF links and link map data.',
+    resource: 'https://caedora.app/templates/default#customer-orders',
+    tags: ['example', 'okf', 'links'],
+  }),
+  `This concept gives the new bundle a second node so the link map has a real
+relationship to show from the start.
+
+### What to notice
+
+- The title, description, tags, and resource live in YAML frontmatter.
+- The body stays ordinary Markdown.
+- The link below points back to another concept and appears in the link map.
+
+### Related concepts
+
+- [Welcome to Caedora](/welcome.md)
+
+Use links like this whenever two concepts depend on each other, explain each
+other, or should be reviewed together.
+`
+)
+
 /**
  * Every new bundle starts from the same minimal OKF structure. The template
  * parameter remains for persisted UI compatibility.
  */
 export function bundleSeedFiles(template: BundleTemplate): Array<[string, string]> {
   void template
-  return [[WELCOME_PATH, WELCOME_MARKDOWN]]
+  return [
+    [WELCOME_PATH, WELCOME_MARKDOWN],
+    [EXAMPLE_CONCEPT_PATH, EXAMPLE_CONCEPT_MARKDOWN],
+  ]
 }
 
 export async function seedLocalBundle(

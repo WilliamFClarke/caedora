@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
+import { LinkGraphPanel } from './link-graph-panel'
 import { AssistantSidebarLoader } from '@/components/assistant/assistant-sidebar-loader'
 import { SettingsDialog } from '@/components/settings-dialog'
 import { useVault } from '@/lib/vault-context'
@@ -19,8 +20,6 @@ import {
 import {
   isConceptPath,
   loadConceptCatalog,
-  validateBundle,
-  type OkfBundleReport,
   type OkfConceptSummary,
 } from '@/lib/okf'
 import { appendBundleLog } from '@/lib/bundle-log'
@@ -50,8 +49,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [syncNonce, setSyncNonce] = useState(0)
   const [activeVaultId, setActiveVaultIdState] = useState<string | null>(null)
   const [assistantSettingsOpen, setAssistantSettingsOpen] = useState(false)
+  const [linkGraphOpen, setLinkGraphOpen] = useState(false)
   const [conceptCatalog, setConceptCatalog] = useState<Record<string, OkfConceptSummary>>({})
-  const [bundleReport, setBundleReport] = useState<OkfBundleReport | null>(null)
   const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
   const {
     folderAppearances,
@@ -175,17 +174,12 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   useEffect(() => {
     if (!provider || entries.length === 0) {
       setConceptCatalog({})
-      setBundleReport(null)
       return
     }
     let cancelled = false
-    void Promise.all([
-      loadConceptCatalog(provider, entries),
-      validateBundle(provider, entries),
-    ]).then(([catalog, report]) => {
+    void loadConceptCatalog(provider, entries).then((catalog) => {
       if (cancelled) return
       setConceptCatalog(catalog)
-      setBundleReport(report)
     })
     return () => {
       cancelled = true
@@ -469,7 +463,6 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         onDeletePath={onDeletePath}
         onSync={onSync}
         conceptCatalog={conceptCatalog}
-        bundleReport={bundleReport}
       />
       <SidebarInset className="min-w-0">
         <div className="caedora-vault-workspace relative flex h-full min-w-0 flex-1 overflow-hidden bg-card">
@@ -492,6 +485,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
                 onTogglePin={togglePin}
                 onSaveNow={(fn) => { editorSaveRef.current = fn }}
                 conceptCatalog={conceptCatalog}
+                linkGraphOpen={linkGraphOpen}
+                onToggleLinkGraph={() => setLinkGraphOpen((open) => !open)}
               />
             )}
           </div>
@@ -499,6 +494,13 @@ export function VaultShell({ initialPath }: VaultShellProps) {
             provider={provider}
             currentFilePath={selected}
             onOpenSettings={() => setAssistantSettingsOpen(true)}
+          />
+          <LinkGraphPanel
+            open={linkGraphOpen}
+            currentPath={selected}
+            conceptCatalog={conceptCatalog}
+            onOpenConcept={onSelect}
+            onClose={() => setLinkGraphOpen(false)}
           />
         </div>
       </SidebarInset>

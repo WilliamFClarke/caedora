@@ -3,6 +3,7 @@ import {
   combine,
   createConceptFrontmatter,
   parseFrontmatter,
+  uniqueTags,
 } from './frontmatter'
 import { isReservedPath } from './okf'
 import { rebuildBundleIndexes } from './vault-index'
@@ -260,7 +261,7 @@ export async function loadGitHubTemplate(repository: string): Promise<VaultTempl
 }
 
 export async function fetchTemplateFiles(template: VaultTemplate): Promise<TemplateFile[]> {
-  if (template.files) return template.files
+  if (template.files) return normalizeCuratedTemplateFiles(template)
 
   const [owner, repo] = template.repository.split('/')
   const ref = template.ref ?? 'main'
@@ -354,12 +355,34 @@ function file(path: string, content: string): TemplateFile {
   return { path, content }
 }
 
-function normalizeTemplateConcept(file: TemplateFile): string {
+function normalizeCuratedTemplateFiles(template: VaultTemplate): TemplateFile[] {
+  const conceptPaths = (template.files ?? [])
+    .map((file) => file.path)
+    .filter((path) => path.endsWith('.md'))
+
+  return (template.files ?? []).map((file) => ({
+    ...file,
+    content: normalizeTemplateConcept(file, {
+      templateId: template.id,
+      templateTags: template.tags,
+      relatedPaths: conceptPaths.filter((path) => path !== file.path),
+    }),
+  }))
+}
+
+function normalizeTemplateConcept(
+  file: TemplateFile,
+  context: {
+    templateId?: string
+    templateTags?: string[]
+    relatedPaths?: string[]
+  } = {}
+): string {
   const parsed = parseFrontmatter(file.content)
-  const body = parsed.error ? file.content : parsed.body
+  const rawBody = parsed.error ? file.content : parsed.body
   const title =
     parsed.frontmatter.title ||
-    body.match(/^\s*#\s+(.+)$/m)?.[1]?.trim() ||
+    rawBody.match(/^\s*#\s+(.+)$/m)?.[1]?.trim() ||
     displayTitle(file.path)
   const type =
     parsed.frontmatter.type ||
@@ -372,14 +395,29 @@ function normalizeTemplateConcept(file: TemplateFile): string {
           : 'Reference')
   const description =
     parsed.frontmatter.description ||
-    firstParagraph(body) ||
+    (context.templateId ? defaultTemplateDescription(file.path, title, type) : firstParagraph(rawBody)) ||
     `${type} concept imported from a Caedora bundle template.`
+  const resource =
+    parsed.frontmatter.resource ||
+    (context.templateId
+      ? `https://caedora.app/templates/${context.templateId}#${conceptAnchor(file.path)}`
+      : '')
+  const tags = uniqueTags([
+    ...(context.templateTags ?? []),
+    ...parsed.frontmatter.tags,
+    ...pathTags(file.path),
+    type,
+  ])
+  const body = appendRelatedLinks(rawBody, file.path, context.relatedPaths ?? [])
+
   return combine(
     createConceptFrontmatter(title, type, {
       ...parsed.frontmatter,
       type,
       title,
       description,
+      resource,
+      tags,
       timestamp: new Date().toISOString(),
     }),
     body
@@ -392,6 +430,45 @@ function displayTitle(path: string): string {
     .split(/[-_]+/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
+}
+
+function defaultTemplateDescription(path: string, title: string, type: string): string {
+  const scope = path
+    .split('/')
+    .filter((part) => part && !/^(readme|agents)\.md$/i.test(part))
+    .slice(0, -1)
+    .join(' / ')
+  if (/\/?readme\.md$/i.test(path)) {
+    return `Overview for the ${scope || title} template concepts and how they connect.`
+  }
+  if (/\/?agents\.md$/i.test(path)) {
+    return `Agent guidance for working with the ${scope || title} template concepts.`
+  }
+  return `${title} ${type.toLowerCase()} for the ${scope || 'template'} bundle.`
+}
+
+function conceptAnchor(path: string): string {
+  return path
+    .replace(/\.md$/i, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function pathTags(path: string): string[] {
+  return path
+    .replace(/\.md$/i, '')
+    .split(/[\/_-]+/)
+    .filter((part) => part && !/^(readme|agents|template|templates)$/i.test(part))
+}
+
+function appendRelatedLinks(body: string, sourcePath: string, relatedPaths: string[]): string {
+  if (relatedPaths.length === 0 || /^##\s+Related concepts\b/im.test(body)) return body
+  const links = relatedPaths
+    .slice(0, 6)
+    .map((path) => `- [${displayTitle(path)}](/${path})`)
+    .join('\n')
+  return `${body.replace(/\s+$/, '')}\n\n## Related concepts\n\n${links}\n`
 }
 
 function firstParagraph(body: string): string {

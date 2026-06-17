@@ -357,6 +357,10 @@ async function waitForGithubListing(
   // Give up silently — the in-app seed-fallback will pick up the slack.
 }
 
+function githubContentsPath(path: string): string {
+  return path.split('/').map(encodeURIComponent).join('/')
+}
+
 function GitHubPanel({
   mode,
   vaultTemplate,
@@ -414,7 +418,7 @@ function GitHubPanel({
         const seeds = bundleSeedFiles(vaultTemplate).map(([path, body]) => ({ path, body }))
         for (const { path, body } of seeds) {
           await fetch(
-            `https://api.github.com/repos/${actualOwner}/${repo}/contents/${encodeURIComponent(path)}`,
+            `https://api.github.com/repos/${actualOwner}/${repo}/contents/${githubContentsPath(path)}`,
             {
               method: 'PUT',
               headers: {

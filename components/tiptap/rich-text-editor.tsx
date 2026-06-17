@@ -110,7 +110,9 @@ export interface RichTextEditorProps {
   content?: unknown;
   onUpdate?: (editor: TiptapEditor) => void;
   contentKey?: string;
+  contentRevision?: number;
   onMetaAnchorChange?: (el: HTMLElement | null) => void;
+  documentHeader?: React.ReactNode;
 }
 
 export function RichTextEditorDemo({
@@ -118,7 +120,9 @@ export function RichTextEditorDemo({
   content: contentProp,
   onUpdate,
   contentKey,
+  contentRevision = 0,
   onMetaAnchorChange,
+  documentHeader,
 }: RichTextEditorProps) {
   const anchorCbRef = React.useRef(onMetaAnchorChange);
   React.useEffect(() => {
@@ -158,9 +162,10 @@ export function RichTextEditorDemo({
   // TipTap DOM, producing a visible one-frame flicker on file switch.
   React.useLayoutEffect(() => {
     if (!editor || contentKey === undefined) return;
-    if (loadedKey.current === contentKey) return;
+    const loadKey = `${contentKey}:${contentRevision}`;
+    if (loadedKey.current === loadKey) return;
     const isFirstLoad = loadedKey.current === null;
-    loadedKey.current = contentKey;
+    loadedKey.current = loadKey;
     editor.commands.setContent(
       (contentProp ?? content) as Parameters<typeof editor.commands.setContent>[0],
       false
@@ -192,7 +197,7 @@ export function RichTextEditorDemo({
         editor.commands.focus("end");
       }
     }
-  }, [editor, contentKey, contentProp]);
+  }, [editor, contentKey, contentProp, contentRevision]);
 
   if (!editor) return null;
 
@@ -216,7 +221,14 @@ export function RichTextEditorDemo({
           editor.commands.focus("end");
         }}
       >
-        <EditorContent editor={editor} className="w-full min-w-full" />
+        {documentHeader}
+        <EditorContent
+          editor={editor}
+          className={cn(
+            "w-full min-w-full",
+            documentHeader && "caedora-editor-content-with-header"
+          )}
+        />
       </div>
     </div>
   );

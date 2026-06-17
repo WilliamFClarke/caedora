@@ -4,8 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Check,
-  CircleAlert,
-  CircleCheck,
   ChevronRight,
   ChevronsUpDown,
   FileText,
@@ -15,6 +13,7 @@ import {
   FolderInput,
   FolderOpen,
   Github,
+  ListTree,
   Loader2,
   RefreshCw,
   Settings,
@@ -37,7 +36,7 @@ import { useVault } from '@/lib/vault-context'
 import { getActiveVaultId, listVaults } from '@/lib/storage'
 import type { FileEntry, PersistedVaultState, VaultProvider } from '@/lib/types'
 import { isLockedPath } from '@/lib/vault-index'
-import type { OkfBundleReport, OkfConceptSummary } from '@/lib/okf'
+import type { OkfConceptSummary } from '@/lib/okf'
 import { cn } from '@/lib/utils'
 import {
   FOLDER_COLORS,
@@ -113,7 +112,6 @@ interface AppSidebarProps {
   onDeletePath: (path: string) => Promise<void>
   onSync?: () => Promise<void>
   conceptCatalog: Record<string, OkfConceptSummary>
-  bundleReport: OkfBundleReport | null
 }
 
 interface TreeNodeT {
@@ -174,6 +172,9 @@ function buildTree(entries: FileEntry[]): TreeNodeT {
   }
   function sortNode(n: TreeNodeT) {
     n.children.sort((a, b) => {
+      const aIndex = isIndexPath(a.path)
+      const bIndex = isIndexPath(b.path)
+      if (aIndex !== bIndex) return aIndex ? -1 : 1
       if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
       return a.name.localeCompare(b.name)
     })
@@ -185,6 +186,10 @@ function buildTree(entries: FileEntry[]): TreeNodeT {
 
 function displayName(name: string): string {
   return name.endsWith('.md') ? name.slice(0, -3) : name
+}
+
+function isIndexPath(path: string): boolean {
+  return path.split('/').pop()?.toLowerCase() === 'index.md'
 }
 
 function nextUntitledFromTree(children: TreeNodeT[], kind: 'file' | 'folder'): string {
@@ -225,7 +230,6 @@ export function AppSidebar({
   onDeletePath,
   onSync,
   conceptCatalog,
-  bundleReport,
 }: AppSidebarProps) {
   const router = useRouter()
   const { connectToVault } = useVault()
@@ -284,6 +288,10 @@ export function AppSidebar({
   const folders = useMemo(() => {
     return entries.filter((e) => e.type === 'dir').map((e) => e.path).sort()
   }, [entries])
+  const conceptTypes = useMemo(() => {
+    return [...new Set(Object.values(conceptCatalog).map((concept) => concept.type).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+  }, [conceptCatalog])
 
   const sharedRow: Omit<TreeRowProps, 'node'> = {
     selected,
@@ -410,24 +418,6 @@ export function AppSidebar({
       <SidebarContent className="group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:flex-1 group-data-[collapsible=icon]:overflow-hidden">
         <div className="hidden flex-1 group-data-[collapsible=icon]:block" />
         <div className="group-data-[collapsible=icon]:hidden">
-        {bundleReport && (
-          <div className="border-sidebar-border mx-2 mt-1 flex items-center gap-2 border-b px-1 pb-3 text-xs">
-            {bundleReport.conformant ? (
-              <CircleCheck className="text-good size-4" />
-            ) : (
-              <CircleAlert className="text-destructive size-4" />
-            )}
-            <div className="min-w-0">
-              <p className="font-medium">
-                {bundleReport.conformant ? 'OKF v0.1 conformant' : 'Bundle needs attention'}
-              </p>
-              <p className="text-muted-foreground truncate">
-                {bundleReport.concepts} concepts · {bundleReport.links} links
-                {bundleReport.brokenLinks > 0 ? ` · ${bundleReport.brokenLinks} unresolved` : ''}
-              </p>
-            </div>
-          </div>
-        )}
         {pinnedFiles.length > 0 && (
           <Collapsible open={pinnedOpen} onOpenChange={setPinnedOpen}>
             <SidebarGroup>
@@ -445,15 +435,21 @@ export function AppSidebar({
                   <SidebarMenu>
                     {pinnedFiles.map((path) => {
                       const name = path.split('/').pop() ?? path
+                      const isIndex = isIndexPath(path)
                       return (
                         <SidebarMenuItem key={`pin-${path}`}>
                           <SidebarMenuButton
                             isActive={selected === path}
+                            className={cn(isIndex && 'h-7 gap-1.5 rounded-sm text-xs text-muted-foreground')}
                             onClick={() => onSelect(path)}
                           >
-                            <Star className="fill-primary text-primary" />
+                            {isIndex ? (
+                              <ListTree className="size-3.5" />
+                            ) : (
+                              <Star className="fill-primary text-primary" />
+                            )}
                             <span className="truncate">
-                              {conceptCatalog[path]?.title ?? displayName(name)}
+                              {isIndex ? 'Index' : conceptCatalog[path]?.title ?? displayName(name)}
                             </span>
                           </SidebarMenuButton>
                         </SidebarMenuItem>
@@ -592,6 +588,7 @@ export function AppSidebar({
       <CreateItemDialog
         creating={creating}
         folders={folders}
+        conceptTypes={conceptTypes}
         onSubmit={async (parent, name, options) => {
           if (!creating) return
           if (creating.kind === 'file') {
@@ -885,7 +882,9 @@ function FileRow(props: TreeRowProps) {
   const isSel = selected === node.path
   const isPinned = pinned.has(node.path)
   const isLocked = isLockedPath(node.path)
+  const isIndex = isIndexPath(node.path)
   const concept = conceptCatalog[node.path]
+  const label = isIndex ? 'Index' : concept?.title ?? displayName(node.name)
 
   return (
     <SidebarMenuItem className="group/file">
@@ -893,12 +892,16 @@ function FileRow(props: TreeRowProps) {
         <ContextMenuTrigger asChild>
           <SidebarMenuButton
             isActive={isSel}
-            className={cn(node.pending && 'opacity-55')}
+            className={cn(
+              'pr-7',
+              isIndex && 'h-7 gap-1.5 rounded-sm text-xs text-muted-foreground',
+              node.pending && 'opacity-55'
+            )}
             onClick={() => {
               if (!isRenaming) onSelect(node.path)
             }}
           >
-            <FileText />
+            {isIndex ? <ListTree className="size-3.5" /> : <FileText />}
             {isRenaming ? (
               <InlineInput
                 initial={displayName(node.name)}
@@ -912,14 +915,14 @@ function FileRow(props: TreeRowProps) {
                 onCancel={() => setRenaming(null)}
               />
             ) : (
-              <span className="min-w-0 truncate">
-                {concept?.title ?? displayName(node.name)}
+              <span className={cn('min-w-0 truncate', isIndex && 'font-normal')}>
+                {label}
               </span>
             )}
             {node.pending && <Loader2 className="ml-auto size-3 animate-spin" />}
-            {concept && (
+            {concept && !isIndex && (
               <span
-                className="text-muted-foreground ml-auto max-w-20 truncate font-mono text-[9px] uppercase"
+                className="text-muted-foreground ml-auto max-w-14 shrink-0 truncate font-mono text-[9px] uppercase"
                 title={concept.type}
               >
                 {concept.type}
@@ -928,7 +931,13 @@ function FileRow(props: TreeRowProps) {
           </SidebarMenuButton>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          {!node.pending && (
+          {isIndex && (
+            <ContextMenuItem disabled>
+              <ListTree />
+              Generated index
+            </ContextMenuItem>
+          )}
+          {!node.pending && !isIndex && (
             <ContextMenuItem onSelect={() => onTogglePin(node.path)}>
               <Star className={cn(isPinned && 'fill-current')} />
               {isPinned ? 'Unpin' : 'Pin'}
@@ -959,7 +968,7 @@ function FileRow(props: TreeRowProps) {
           )}
         </ContextMenuContent>
       </ContextMenu>
-      {!isRenaming && !node.pending && (
+      {!isRenaming && !node.pending && !isIndex && (
         <button
           type="button"
           aria-label={isPinned ? 'Unpin' : 'Pin'}
@@ -1151,11 +1160,13 @@ function appearanceLabel(appearance: FolderAppearance): string {
 function CreateItemDialog({
   creating,
   folders,
+  conceptTypes,
   onSubmit,
   onClose,
 }: {
   creating: CreatingState | null
   folders: string[]
+  conceptTypes: string[]
   onSubmit: (
     parent: string,
     name: string,
@@ -1245,12 +1256,18 @@ function CreateItemDialog({
                 <Label htmlFor="create-concept-type">Type</Label>
                 <Input
                   id="create-concept-type"
+                  list="create-concept-types"
                   value={conceptType}
                   onChange={(event) => setConceptType(event.target.value)}
                   placeholder="Reference"
                   disabled={busy}
                   required
                 />
+                <datalist id="create-concept-types">
+                  {conceptTypes.map((type) => (
+                    <option key={type} value={type} />
+                  ))}
+                </datalist>
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="create-concept-description">Description</Label>

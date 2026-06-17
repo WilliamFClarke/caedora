@@ -23,6 +23,12 @@ export function SiteHeader() {
             Features
           </Link>
           <Link
+            href="/#okf"
+            className="text-muted-foreground hover:text-foreground transition"
+          >
+            OKF
+          </Link>
+          <Link
             href="/#templates"
             className="text-muted-foreground hover:text-foreground transition"
           >
