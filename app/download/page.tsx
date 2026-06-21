@@ -84,7 +84,7 @@ export default function DownloadPage() {
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button size="lg" onClick={() => setConnectOpen(true)}>
               <Globe className="size-4" />
-              Try in browser instead
+              Start now instead
             </Button>
           </div>
         </div>

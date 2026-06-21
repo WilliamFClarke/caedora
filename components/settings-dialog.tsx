@@ -9,11 +9,9 @@ import {
   Cpu,
   Download,
   FolderOpen,
-  FolderPlus,
   Keyboard,
   KeyRound,
   Loader2,
-  LogOut,
   Palette,
   Server,
   SlidersHorizontal,
@@ -58,14 +56,12 @@ import {
   startModelDownload,
   updateAiSettings,
 } from '@/lib/desktop-ai'
-import { getActiveVaultId, listVaults, removeVault } from '@/lib/storage'
-import type { PersistedVaultState } from '@/lib/types'
+import { exportBrowserBundle, getActiveVaultId, listVaults, removeVault } from '@/lib/storage'
 import type { AiProviderKind, AiProviderState, AiSettings as DesktopAiSettings } from '@/lib/ai/types'
 import { cn } from '@/lib/utils'
+import { SavedVaultList, type StoredVault } from '@/components/vault/saved-vault-list'
 
 export type SettingsSection = 'general' | 'ai' | 'editor' | 'appearance' | 'hotkeys' | 'vaults'
-
-type StoredVault = { id: string; state: PersistedVaultState }
 
 const sections: Array<{
   group: string
@@ -79,7 +75,7 @@ const sections: Array<{
       { id: 'editor', label: 'Editor', Icon: Type },
       { id: 'appearance', label: 'Appearance', Icon: Palette },
       { id: 'hotkeys', label: 'Hotkeys', Icon: Keyboard },
-      { id: 'vaults', label: 'Bundles', Icon: FolderOpen },
+      { id: 'vaults', label: 'Vaults', Icon: FolderOpen },
     ],
   },
 ]
@@ -168,8 +164,9 @@ function VaultSettings({ onClose }: { onClose: () => void }) {
   const [switchingVaultId, setSwitchingVaultId] = useState<string | null>(null)
   const [connectMode, setConnectMode] = useState<'create' | 'open' | null>(null)
 
-  function closeCurrentVault() {
+  async function closeAllVaults() {
     disconnect()
+    setActiveVaultIdState(null)
     onClose()
     router.push('/')
   }
@@ -195,95 +192,48 @@ function VaultSettings({ onClose }: { onClose: () => void }) {
     }
   }
 
+  async function exportVault(vault: StoredVault) {
+    if (!vault.state.browserBundleId) return
+    const name = vault.state.browserBundleName ?? 'Browser vault'
+    const blob = await exportBrowserBundle(vault.state.browserBundleId, name)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${slugForDownload(name)}.caedora-vault.json`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <>
-      <ItemGroup>
-        {vaults.length > 0 ? (
-          vaults.map((vault, index) => (
-            <div key={vault.id}>
-              {index > 0 && <Separator />}
-              <Item>
-                <ItemContent>
-                  <ItemTitle>{vaultLabel(vault.state)}</ItemTitle>
-                  <ItemDescription>
-                    {vault.id === activeVaultId ? 'Current bundle' : vaultKind(vault.state)}
-                  </ItemDescription>
-                </ItemContent>
-                <ItemActions>
-                  {switchingVaultId === vault.id ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <>
-                      {vault.id === activeVaultId ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={closeCurrentVault}
-                          title="Return to the home screen without removing this bundle"
-                        >
-                          <LogOut className="size-4" />
-                          Close bundle
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void switchVault(vault.id)}
-                          disabled={!!switchingVaultId}
-                        >
-                          Open
-                        </Button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await removeVault(vault.id)
-                          await refreshVaults()
-                        }}
-                        className="text-muted-foreground hover:text-destructive flex size-8 items-center justify-center rounded-md"
-                        aria-label={`Remove ${vaultLabel(vault.state)}`}
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </>
-                  )}
-                </ItemActions>
-              </Item>
-            </div>
-          ))
-        ) : (
-          <Item variant="muted">
-            <ItemContent>
-              <ItemTitle>No saved bundles</ItemTitle>
-              <ItemDescription>Create or open a bundle to add it here.</ItemDescription>
-            </ItemContent>
-          </Item>
-        )}
-        <Separator />
-        <Item>
-          <ItemContent>
-            <ItemTitle>Add a bundle</ItemTitle>
-            <ItemDescription>
-              Create a new OKF bundle or reconnect to an existing one.
-            </ItemDescription>
-          </ItemContent>
-          <ItemActions>
-            <Button type="button" onClick={() => setConnectMode('create')}>
-              <FolderPlus className="size-4" />
-              Create bundle
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setConnectMode('open')}>
-              <FolderOpen className="size-4" />
-              Open bundle
-            </Button>
-          </ItemActions>
-        </Item>
-      </ItemGroup>
+      <SavedVaultList
+        vaults={vaults}
+        activeVaultId={activeVaultId}
+        switchingVaultId={switchingVaultId}
+        onOpenVault={(id) => void switchVault(id)}
+        onDeleteVault={(id) => {
+          void (async () => {
+            await removeVault(id)
+            if (id === activeVaultId) {
+              disconnect()
+              onClose()
+              router.push('/')
+              return
+            }
+            await refreshVaults()
+          })()
+        }}
+        onExportVault={(vault) => void exportVault(vault)}
+        onCreateVault={() => setConnectMode('create')}
+        onAddExistingVault={() => setConnectMode('open')}
+        onCloseAllVaults={() => void closeAllVaults()}
+      />
       <ConnectDialog
         open={connectMode !== null}
         mode={connectMode ?? 'create'}
+        showSavedVaults={false}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {
             setConnectMode(null)
@@ -990,11 +940,6 @@ function HotkeySettings() {
   )
 }
 
-function vaultLabel(state: PersistedVaultState): string {
-  if (state.type === 'github') return `${state.githubOwner}/${state.githubRepo}`
-  return state.directoryName ?? state.directoryHandle?.name ?? 'Local bundle'
-}
-
 function isValidHex(value: string): boolean {
   return /^#?[0-9a-fA-F]{6}$/.test(value.trim())
 }
@@ -1034,7 +979,10 @@ function cloudProviderLabel(provider: DesktopAiSettings['cloud']['provider']): s
   return 'OpenAI'
 }
 
-function vaultKind(state: PersistedVaultState): string {
-  if (state.type === 'github') return 'GitHub bundle'
-  return state.directoryPath ? 'Desktop folder' : 'Local folder'
+function slugForDownload(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'caedora-vault'
 }

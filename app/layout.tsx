@@ -20,13 +20,13 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://caedora.app'),
   title: 'Caedora - Open knowledge, entirely yours',
   description:
-    'A private, AI-ready workspace for Open Knowledge Format bundles stored on your own device or GitHub repository.',
+    'A private, AI-ready workspace for Open Knowledge Format vaults stored on your own device or GitHub repository.',
   alternates: {
     canonical: 'https://caedora.app',
   },
   openGraph: {
     title: 'Caedora',
-    description: 'Open Knowledge Format bundles. Private by design.',
+    description: 'Open Knowledge Format vaults. Private by design.',
     type: 'website',
     url: 'https://caedora.app',
     siteName: 'Caedora',

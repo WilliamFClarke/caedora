@@ -426,7 +426,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   if (status.state !== 'ready' || !provider) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading your bundle...</p>
+        <p className="text-muted-foreground text-sm">Loading your vault...</p>
       </div>
     )
   }
@@ -436,7 +436,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       <div className="flex h-screen flex-col items-center justify-center gap-3">
         <div className="border-muted-foreground/30 border-t-foreground size-6 animate-spin rounded-full border-2" />
         <p className="text-muted-foreground text-sm">
-          Setting up your bundle: writing the welcome concept and OKF index...
+          Setting up your vault: writing the welcome concept and OKF index...
         </p>
       </div>
     )

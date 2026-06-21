@@ -22,7 +22,7 @@ export async function appendBundleLog(
   const entry = `* **${action}**: ${message}`
   const current = await provider
     .readFile(path)
-    .catch(() => '# Bundle Update Log\n')
+    .catch(() => '# Vault Update Log\n')
   const next = insertNewestEntry(current, date, entry)
   if (next === current) return
   await provider.writeFile(path, next)
@@ -42,7 +42,7 @@ export function insertNewestEntry(log: string, date: string, entry: string): str
 
   const titleMatch = normalized.match(/^#\s+.+$/m)
   if (!titleMatch || titleMatch.index === undefined) {
-    return `# Bundle Update Log\n\n${heading}\n${entry}\n`
+    return `# Vault Update Log\n\n${heading}\n${entry}\n`
   }
   const titleEnd = titleMatch.index + titleMatch[0].length
   return `${normalized.slice(0, titleEnd)}\n\n${heading}\n${entry}\n${normalized.slice(titleEnd).replace(/^\s*/, '')}\n`

@@ -113,7 +113,7 @@ function Hero() {
         </h1>
 
         <p className="text-muted-foreground mt-6 max-w-2xl text-balance text-base leading-relaxed sm:text-lg">
-          Caedora turns your notes into Open Knowledge Format bundles: editable
+          Caedora turns your notes into Open Knowledge Format vaults: editable
           YAML metadata, readable Markdown, generated indexes, backlinks, and a
           visual link map, all stored only in your own folder or GitHub repository.
         </p>
@@ -126,7 +126,7 @@ function Hero() {
 
         <Reveal delay={200} className="mt-16 w-full">
           <ScreenshotFrame
-            label="caedora.app - bundle overview"
+            label="caedora.app - vault overview"
             src="/landing/hero.png"
             alt="Caedora showing an OKF concept with Argus AI in the sidebar"
           />
@@ -160,7 +160,7 @@ const FEATURES = [
     icon: Bot,
     title: 'Argus AI, built-in',
     body:
-      'A desktop assistant that queries your bundle, drafts conformant concepts, and follows its OKF conventions and optional agent rules.',
+      'A desktop assistant that queries your vault, drafts conformant concepts, and follows its OKF conventions and optional agent rules.',
   },
   {
     icon: FolderTree,
@@ -178,13 +178,13 @@ const FEATURES = [
     icon: Network,
     title: 'Visual link map',
     body:
-      'See how concepts connect, jump between linked notes, and discover backlinks without loading the whole bundle into your head.',
+      'See how concepts connect, jump between linked notes, and discover backlinks without loading the whole vault into your head.',
   },
   {
     icon: Wifi,
     title: 'Works offline',
     body:
-      'Local-first by default. Open and edit your bundle offline; sync happens when you reconnect.',
+      'Local-first by default. Open and edit your vault offline; sync happens when you reconnect.',
   },
   {
     icon: Search,
@@ -196,7 +196,7 @@ const FEATURES = [
     icon: GitBranch,
     title: 'MCP-ready',
     body:
-      'Expose your bundle to MCP-aware tools for query, ingest, validation, graph traversal, and conformant maintenance.',
+      'Expose your vault to MCP-aware tools for query, ingest, validation, graph traversal, and conformant maintenance.',
   },
 ]
 
@@ -240,12 +240,12 @@ const OKF_SUPPORT = [
   {
     title: 'Conformant saves',
     body:
-      'New and edited concepts are checked before writing so bundles stay valid even when agents or templates add content.',
+      'New and edited concepts are checked before writing so vaults stay valid even when agents or templates add content.',
   },
   {
     title: 'Generated indexes',
     body:
-      'Caedora maintains simple `index.md` maps for folders, keeping large bundles browseable by humans and cheap for agents to inspect.',
+      'Caedora maintains simple `index.md` maps for folders, keeping large vaults browseable by humans and cheap for agents to inspect.',
   },
   {
     title: 'Linked concepts',
@@ -315,7 +315,7 @@ function TemplatesSection() {
               Start minimal, expand intentionally.
             </h2>
             <p className="text-muted-foreground mt-4 text-base leading-relaxed">
-              Every new bundle starts with one conformant welcome concept and
+              Every new vault starts with one conformant welcome concept and
               one generated root index. Import optional domain templates later
               when they solve a real need.
             </p>
@@ -368,9 +368,9 @@ function ShowcaseAlternating() {
       src: '/landing/argus.png',
       alt: 'Argus AI chat in the Caedora sidebar',
       eyebrow: 'Argus AI',
-      title: 'An agent that understands the bundle contract.',
+      title: 'An agent that understands the vault contract.',
       body:
-        'Ask Argus AI to synthesize a topic, ingest a source, or maintain cross-links. It only sees the bundle you connect.',
+        'Ask Argus AI to synthesize a topic, ingest a source, or maintain cross-links. It only sees the vault you connect.',
       reverse: true,
     },
     {
@@ -378,7 +378,7 @@ function ShowcaseAlternating() {
       src: '/landing/connected.png',
       alt: 'Caedora showing backlinks and connected concepts',
       eyebrow: 'Connected concepts',
-      title: 'A visual link map for your bundle.',
+      title: 'A visual link map for your vault.',
       body:
         'Open the bottom link map to see outgoing links, backlinks, and related concepts in one place. It turns OKF links into a practical map for exploration.',
       reverse: false,
@@ -424,7 +424,7 @@ function PrivacyCallout() {
             <div>
               <Lock className="text-primary mb-5 size-6" />
               <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-                We cannot read your knowledge bundle.
+                We cannot read your knowledge vault.
               </h2>
               <p className="text-muted-foreground mt-5 text-base leading-relaxed">
                 Caedora has no backend that touches your content. Files write
@@ -446,7 +446,7 @@ function PrivacyCallout() {
                 ['Local folder', 'File System Access API writes straight to disk.'],
                 ['GitHub repo', 'Commits land in a repo you own, with a PAT you control.'],
                 ['No telemetry by default', 'Opt-in only, and never includes concept contents.'],
-                ['Yours to inspect', 'Run it locally and audit how your bundle is handled.'],
+                ['Yours to inspect', 'Run it locally and audit how your vault is handled.'],
               ].map(([h, b]) => (
                 <li key={h} className="flex gap-4">
                   <span className="bg-primary mt-2 size-1.5 shrink-0 rounded-full" />
@@ -473,10 +473,10 @@ function ArgusSection() {
             Argus AI
           </p>
           <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
-            An AI that knows your bundle and follows its rules.
+            An AI that knows your vault and follows its rules.
           </h2>
           <p className="text-muted-foreground mt-5 text-base leading-relaxed">
-            Argus AI runs inside Caedora and reads from your bundle, not the
+            Argus AI runs inside Caedora and reads from your vault, not the
             internet. Bring your own API key, or use any MCP-compatible
             assistant through caedora-mcp.
           </p>
@@ -499,7 +499,7 @@ function FinalCta() {
     <section>
       <div className="mx-auto flex w-full max-w-4xl flex-col items-center gap-8 px-4 py-24 text-center sm:px-6 sm:py-32">
         <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
-          Start an open knowledge bundle in 30 seconds.
+          Start an open knowledge vault in 30 seconds.
         </h2>
         <p className="text-muted-foreground max-w-xl text-base">
           Open the web version right now, or grab the desktop app for your platform.

@@ -92,7 +92,7 @@ function AppMockup({
           </div>
           <div>
             <p className="text-sm font-semibold">Caedora</p>
-            <p className="text-xs text-white/45">OKF bundle</p>
+            <p className="text-xs text-white/45">OKF vault</p>
           </div>
         </div>
         <div className="mb-4 flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/55">
@@ -301,7 +301,7 @@ function AssistantPanel({ focus }: { focus?: boolean }) {
         </div>
         <div>
           <p className="text-sm font-medium">Argus AI</p>
-          <p className="text-xs text-white/45">Reads this bundle only</p>
+          <p className="text-xs text-white/45">Reads this vault only</p>
         </div>
       </div>
       <div className="space-y-4 text-sm">
@@ -342,7 +342,7 @@ function TemplateMarketplaceMockup() {
       <div className="mb-8 flex items-end justify-between">
         <div>
           <p className="mb-3 text-sm font-medium uppercase tracking-widest text-indigo-300">Templates</p>
-          <h1 className="text-5xl font-semibold tracking-tight">Linked OKF bundles, ready to import.</h1>
+          <h1 className="text-5xl font-semibold tracking-tight">Linked OKF vaults, ready to import.</h1>
           <p className="mt-4 max-w-2xl text-lg text-white/55">
             Each template imports as concepts with YAML descriptions, resources, tags, and related links already wired.
           </p>

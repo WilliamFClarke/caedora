@@ -166,7 +166,7 @@ export function AssistantSidebar({
               download={providerState?.download ?? null}
               message={
                 !rootPath
-                  ? 'Open a desktop local bundle to let Argus read and maintain its concepts.'
+                  ? 'Open a desktop local vault to let Argus read and maintain its concepts.'
                   : providerState?.message ?? 'Choose an Argus (AI Assistant) provider to enable chat.'
               }
               onOpenSettings={onOpenSettings}

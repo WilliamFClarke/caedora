@@ -37,7 +37,7 @@ export default function SettingsPage() {
         <div className="flex flex-col gap-0.5">
           <h2 className="text-sm font-medium">Sync</h2>
           <p className="text-muted-foreground text-xs">
-            Controls when your edits are written to your bundle.
+            Controls when your edits are written to your vault.
           </p>
         </div>
 
@@ -90,10 +90,10 @@ export default function SettingsPage() {
                 ))}
               </div>
               <p className="text-muted-foreground text-xs">
-                <strong className="text-foreground">GitHub bundles:</strong> each sync creates a
+                <strong className="text-foreground">GitHub vaults:</strong> each sync creates a
                 commit. Lower intervals = more commits in your repo history.
                 <br />
-                <strong className="text-foreground">Local bundles:</strong> the file is saved every
+                <strong className="text-foreground">Local vaults:</strong> the file is saved every
                 ~1 s regardless; this controls how often a git commit is made.
               </p>
             </div>
