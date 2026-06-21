@@ -22,7 +22,6 @@ export async function GET(request: NextRequest) {
   authorize.searchParams.set('client_id', clientId)
   authorize.searchParams.set('redirect_uri', `${url.origin}/api/github/callback`)
   authorize.searchParams.set('state', state.nonce)
-  authorize.searchParams.set('prompt', 'select_account')
 
   return NextResponse.redirect(authorize)
 }

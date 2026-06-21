@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null) as { refreshToken?: string } | null
   if (!body?.refreshToken) {
-    return NextResponse.json({ error: 'Missing refresh token.' }, { status: 400 })
+    return noStoreJson({ error: 'Missing refresh token.' }, { status: 400 })
   }
 
   const response = await fetch('https://github.com/login/oauth/access_token', {
@@ -39,15 +39,21 @@ export async function POST(request: NextRequest) {
 
   const data = await response.json().catch(() => ({})) as GithubRefreshResponse
   if (!response.ok || !data.access_token) {
-    return NextResponse.json(
+    return noStoreJson(
       { error: data.error_description || data.error || 'Could not refresh GitHub token.' },
       { status: response.ok ? 400 : response.status }
     )
   }
 
-  return NextResponse.json({
+  return noStoreJson({
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
   })
+}
+
+function noStoreJson(body: unknown, init?: ResponseInit) {
+  const response = NextResponse.json(body, init)
+  response.headers.set('Cache-Control', 'no-store')
+  return response
 }
