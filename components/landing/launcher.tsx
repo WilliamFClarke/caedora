@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { FolderOpen, FolderPlus, Github, Loader2, Trash2 } from 'lucide-react'
+import { Database, FolderOpen, FolderPlus, Github, Loader2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ModeToggle } from '@/components/mode-toggle'
 import { ConnectDialog } from '@/components/connect-dialog'
@@ -66,7 +66,7 @@ export function Launcher() {
         <div className="flex flex-col items-center gap-4 text-center">
           <Loader2 className="text-primary size-6 animate-spin" />
           <p className="text-muted-foreground text-sm">
-            {status.state === 'checking' ? 'Checking for bundle...' : 'Opening bundle...'}
+            {status.state === 'checking' ? 'Checking for vault...' : 'Opening vault...'}
           </p>
         </div>
       </Shell>
@@ -99,11 +99,11 @@ export function Launcher() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button size="lg" onClick={() => setDialogMode('create')}>
                 <FolderPlus className="size-4" />
-                Create bundle
+                Start now
               </Button>
               <Button size="lg" variant="outline" onClick={() => setDialogMode('open')}>
                 <FolderOpen className="size-4" />
-                Open another bundle
+                Open existing vault
               </Button>
             </div>
           </div>
@@ -112,7 +112,7 @@ export function Launcher() {
             {vaults.length > 0 && (
               <div className="flex w-full flex-col gap-2">
                 <p className="text-muted-foreground self-start text-xs font-medium uppercase tracking-wider">
-                  Recent bundles
+                  Recent vaults
                 </p>
                 <ul className="flex w-full flex-col gap-1.5">
                   {vaults.map((v) => (
@@ -130,11 +130,11 @@ export function Launcher() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button size="lg" onClick={() => setDialogMode('create')}>
                 <FolderPlus className="size-4" />
-                Create bundle
+                Start now
               </Button>
               <Button size="lg" variant="outline" onClick={() => setDialogMode('open')}>
                 <FolderOpen className="size-4" />
-                Open bundle
+                Open existing vault
               </Button>
             </div>
           </>
@@ -182,11 +182,16 @@ function VaultRow({
   onRemove: (e: React.MouseEvent) => void
 }) {
   const isGithub = vault.state.type === 'github'
+  const isBrowser = vault.state.type === 'browser'
   const label = isGithub
     ? `${vault.state.githubOwner}/${vault.state.githubRepo}`
-    : vault.state.directoryName ?? vault.state.directoryHandle?.name ?? 'Local bundle'
+    : isBrowser
+      ? vault.state.browserBundleName ?? 'Browser vault'
+    : vault.state.directoryName ?? vault.state.directoryHandle?.name ?? 'Local vault'
   const subtitle = isGithub
     ? 'GitHub'
+    : isBrowser
+      ? 'Browser storage'
     : vault.state.directoryPath
       ? 'Desktop folder'
       : 'Local folder'
@@ -207,11 +212,22 @@ function VaultRow({
       >
         {isGithub ? (
           <Github className="text-muted-foreground size-4 shrink-0" />
+        ) : isBrowser ? (
+          <Database className="text-muted-foreground size-4 shrink-0" />
         ) : (
           <FolderOpen className="text-muted-foreground size-4 shrink-0" />
         )}
         <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm font-medium">{label}</span>
+          <span className="truncate text-sm font-medium">
+            {label}
+            {isGithub ? (
+              <Github className="ml-1.5 inline size-3.5 align-[-2px] text-muted-foreground" />
+            ) : isBrowser ? (
+              <Database className="ml-1.5 inline size-3.5 align-[-2px] text-muted-foreground" />
+            ) : (
+              <FolderOpen className="ml-1.5 inline size-3.5 align-[-2px] text-muted-foreground" />
+            )}
+          </span>
           <span className="text-muted-foreground font-mono text-[10px]">
             {subtitle} · opened {lastOpened}
           </span>

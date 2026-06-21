@@ -30,6 +30,7 @@ import { openDB, type IDBPDatabase } from 'idb'
 import type { PersistedVaultState } from '../types'
 import { DEFAULT_SETTINGS, type AppSettings } from '../settings'
 import type { FolderAppearance } from '../folder-appearance'
+import { deleteBrowserBundle, listBrowserBundles } from './browser-provider'
 
 const DB_NAME = 'caedora'
 const DB_VERSION = 4
@@ -39,10 +40,19 @@ const META_STORE = 'vault-meta'
 const PINNED_STORE = 'pinned'
 const SETTINGS_STORE = 'app-settings'
 const FOLDER_APPEARANCE_PREFIX = 'folderAppearance:'
+const GITHUB_APP_SESSION_KEY = 'githubAppSession'
+
+export interface StoredGitHubAppSession {
+  accessToken: string
+  refreshToken?: string
+  expiresAt?: number
+  updatedAt: number
+}
 
 /** Stable key for a stored vault. Used as the IDB key in the vaults store. */
 export function vaultId(state: PersistedVaultState): string {
   if (state.type === 'github') return `github:${state.githubOwner}/${state.githubRepo}`
+  if (state.type === 'browser') return `browser:${state.browserBundleId ?? 'unknown'}`
   if (state.directoryPath) return `local-desktop:${state.directoryPath}`
   return `local:${state.directoryHandle?.name ?? 'unknown'}`
 }
@@ -101,8 +111,26 @@ export async function listVaults(): Promise<Array<{ id: string; state: Persisted
     const db = await getDB()
     const keys = (await db.getAllKeys(VAULTS_STORE)) as string[]
     const values = (await db.getAll(VAULTS_STORE)) as PersistedVaultState[]
-    return keys
+    const vaults = keys
       .map((id, i) => ({ id, state: values[i] }))
+
+    const existing = new Set(vaults.map((vault) => vault.id))
+    const browserBundles = await listBrowserBundles().catch(() => [])
+    for (const bundle of browserBundles) {
+      const state: PersistedVaultState = {
+        type: 'browser',
+        browserBundleId: bundle.bundleId,
+        browserBundleName: bundle.name,
+        lastOpenedAt: bundle.updatedAt,
+      }
+      const id = vaultId(state)
+      if (existing.has(id)) continue
+      await db.put(VAULTS_STORE, state, id)
+      existing.add(id)
+      vaults.push({ id, state })
+    }
+
+    return vaults
       .sort((a, b) => (b.state.lastOpenedAt ?? 0) - (a.state.lastOpenedAt ?? 0))
   } catch {
     return []
@@ -121,6 +149,10 @@ export async function getVault(id: string): Promise<PersistedVaultState | null> 
 export async function removeVault(id: string): Promise<void> {
   try {
     const db = await getDB()
+    const state = (await db.get(VAULTS_STORE, id)) as PersistedVaultState | undefined
+    if (state?.type === 'browser' && state.browserBundleId) {
+      await deleteBrowserBundle(state.browserBundleId)
+    }
     await db.delete(VAULTS_STORE, id)
     const activeId = (await db.get(META_STORE, 'activeVaultId')) as string | undefined
     if (activeId === id) await db.delete(META_STORE, 'activeVaultId')
@@ -145,6 +177,26 @@ export async function setActiveVaultId(id: string | null): Promise<void> {
     else await db.put(META_STORE, id, 'activeVaultId')
   } catch {
     // ignore
+  }
+}
+
+export async function saveGitHubAppSession(
+  session: Omit<StoredGitHubAppSession, 'updatedAt'>
+): Promise<void> {
+  try {
+    const db = await getDB()
+    await db.put(META_STORE, { ...session, updatedAt: Date.now() }, GITHUB_APP_SESSION_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+export async function loadGitHubAppSession(): Promise<StoredGitHubAppSession | null> {
+  try {
+    const db = await getDB()
+    return ((await db.get(META_STORE, GITHUB_APP_SESSION_KEY)) as StoredGitHubAppSession | undefined) ?? null
+  } catch {
+    return null
   }
 }
 

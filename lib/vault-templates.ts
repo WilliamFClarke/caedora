@@ -312,13 +312,13 @@ export async function importTemplateFiles(
   }
 
   if (imported.length > 0 && !provider.writesAreCommits) {
-    await provider.commit('Import bundle template', imported)
+    await provider.commit('Import vault template', imported)
   }
   if (imported.length > 0) {
     await appendBundleLog(
       provider,
       'Ingest',
-      `Imported ${imported.length} concept${imported.length === 1 ? '' : 's'} from a bundle template.`
+      `Imported ${imported.length} concept${imported.length === 1 ? '' : 's'} from a vault template.`
     )
     await rebuildBundleIndexes(provider, await listFilesRecursive(provider))
   }
@@ -396,7 +396,7 @@ function normalizeTemplateConcept(
   const description =
     parsed.frontmatter.description ||
     (context.templateId ? defaultTemplateDescription(file.path, title, type) : firstParagraph(rawBody)) ||
-    `${type} concept imported from a Caedora bundle template.`
+    `${type} concept imported from a Caedora vault template.`
   const resource =
     parsed.frontmatter.resource ||
     (context.templateId
@@ -444,7 +444,7 @@ function defaultTemplateDescription(path: string, title: string, type: string): 
   if (/\/?agents\.md$/i.test(path)) {
     return `Agent guidance for working with the ${scope || title} template concepts.`
   }
-  return `${title} ${type.toLowerCase()} for the ${scope || 'template'} bundle.`
+  return `${title} ${type.toLowerCase()} for the ${scope || 'template'} vault.`
 }
 
 function conceptAnchor(path: string): string {

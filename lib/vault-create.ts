@@ -13,15 +13,18 @@ import type { VaultProvider } from './types'
 export { INDEX_PATH, LOG_PATH }
 
 export const WELCOME_PATH = 'welcome.md'
-export const EXAMPLE_CONCEPT_PATH = 'example/customer-orders.md'
+export const PERSONAL_CONCEPT_PATH = 'personal/home-base.md'
+export const WORK_CONCEPT_PATH = 'projects/project-brief.md'
+export const EXAMPLE_CONCEPT_PATH = WORK_CONCEPT_PATH
 
-export type BundleTemplate = 'personal' | 'work' | 'default'
-/** @deprecated Internal compatibility alias. New UI should say bundle. */
+export type BundleTemplate = 'personal' | 'work' | 'blank' | 'default'
+/** @deprecated Internal compatibility alias. New UI should say vault. */
 export type VaultTemplate = BundleTemplate
 
-export const WELCOME_MARKDOWN = combine(
+function welcomeMarkdown(starter?: { title: string; path: string; label: string }) {
+  return combine(
   createConceptFrontmatter('Welcome to Caedora', 'Guide', {
-    description: 'How to use Caedora as an Open Knowledge Format knowledge bundle.',
+    description: 'How to use Caedora as an Open Knowledge Format knowledge vault.',
     resource: 'https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf',
     tags: ['guide', 'okf'],
   }),
@@ -51,20 +54,15 @@ normal Markdown links such as \`[Related concept](/concepts/example.md)\`.
 
 # Linking concepts
 
-Links are first-class bundle structure. Use root-relative Markdown links when
+Links are first-class vault structure. Use root-relative Markdown links when
 you connect concepts, for example
 \`[Customer Orders](/example/customer-orders.md)\`. Caedora reads those links
 and backlinks to draw the link map from the bottom status bar, so clusters,
-orphans, and important hubs stay visible while the bundle grows.
+orphans, and important hubs stay visible while the vault grows.
 
-The example folder includes a linked concept you can inspect, edit, or delete
-when you are ready: [Customer Orders](/example/customer-orders.md). Use it as a
-pattern for short descriptions, focused tags, and links that explain how
-concepts relate to each other.
+# How Caedora maintains the vault
 
-# How Caedora maintains the bundle
-
-- \`index.md\` is generated as the progressive-disclosure map of the bundle.
+- \`index.md\` is generated as the progressive-disclosure map of the vault.
 - Folder \`index.md\` files are also generated, so every folder has a small
   local map.
 - \`log.md\` is created when Caedora records a meaningful operation.
@@ -85,17 +83,60 @@ surface contradictions instead of hiding them.
 [Open Knowledge Format specification](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
 
 [LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+${starter
+  ? `
+# Your starter concept
+
+This vault started from the ${starter.label} preset. Open
+[${starter.title}](/${starter.path}) to see the first editable concept and how
+links appear in the link map.
+`
+  : `
+# Blank vault
+
+This vault starts with only this guide and generated indexes. Create your first
+concept when you are ready.
+`}
+`
+  )
+}
+
+export const WELCOME_MARKDOWN = welcomeMarkdown({
+  title: 'Home Base',
+  path: PERSONAL_CONCEPT_PATH,
+  label: 'personal',
+})
+
+export const PERSONAL_CONCEPT_MARKDOWN = combine(
+  createConceptFrontmatter('Home Base', 'Personal Hub', {
+    description: 'A private starting point for personal priorities, routines, and references.',
+    resource: 'https://caedora.app/templates/personal#home-base',
+    tags: ['personal', 'home', 'priorities'],
+  }),
+  `Use this concept as a calm home base for personal knowledge. Keep it short,
+link outward to the areas that matter, and let the vault grow gradually.
+
+### Starting points
+
+- Current priorities
+- Useful routines
+- People and relationships
+- Health, learning, finance, or travel notes
+
+### Related concepts
+
+- [Welcome to Caedora](/welcome.md)
 `
 )
 
-export const EXAMPLE_CONCEPT_MARKDOWN = combine(
-  createConceptFrontmatter('Customer Orders', 'Example Concept', {
-    description: 'A small example concept that demonstrates OKF links and link map data.',
-    resource: 'https://caedora.app/templates/default#customer-orders',
-    tags: ['example', 'okf', 'links'],
+export const WORK_CONCEPT_MARKDOWN = combine(
+  createConceptFrontmatter('Project Brief', 'Project Hub', {
+    description: 'A lightweight starting point for a project, client, or workstream.',
+    resource: 'https://caedora.app/templates/work#project-brief',
+    tags: ['work', 'project', 'planning'],
   }),
-  `This concept gives the new bundle a second node so the link map has a real
-relationship to show from the start.
+  `Use this concept as the first hub for a project. Keep decisions, links, and
+next actions close to the work they affect.
 
 ### What to notice
 
@@ -103,24 +144,42 @@ relationship to show from the start.
 - The body stays ordinary Markdown.
 - The link below points back to another concept and appears in the link map.
 
+### Project sections
+
+- Outcomes
+- Decisions
+- Risks
+- Key references
+- Next actions
+
 ### Related concepts
 
 - [Welcome to Caedora](/welcome.md)
-
-Use links like this whenever two concepts depend on each other, explain each
-other, or should be reviewed together.
 `
 )
 
 /**
- * Every new bundle starts from the same minimal OKF structure. The template
+ * Every new vault starts from the same minimal OKF structure. The template
  * parameter remains for persisted UI compatibility.
  */
 export function bundleSeedFiles(template: BundleTemplate): Array<[string, string]> {
-  void template
+  const preset = template === 'default' ? 'personal' : template
+  if (preset === 'blank') {
+    return [[WELCOME_PATH, welcomeMarkdown()]]
+  }
+  if (preset === 'work') {
+    return [
+      [WELCOME_PATH, welcomeMarkdown({
+        title: 'Project Brief',
+        path: WORK_CONCEPT_PATH,
+        label: 'work/project',
+      })],
+      [WORK_CONCEPT_PATH, WORK_CONCEPT_MARKDOWN],
+    ]
+  }
   return [
     [WELCOME_PATH, WELCOME_MARKDOWN],
-    [EXAMPLE_CONCEPT_PATH, EXAMPLE_CONCEPT_MARKDOWN],
+    [PERSONAL_CONCEPT_PATH, PERSONAL_CONCEPT_MARKDOWN],
   ]
 }
 
@@ -130,7 +189,7 @@ export async function seedLocalBundle(
 ): Promise<void> {
   const seeded = await seedCore(provider, template)
   if (seeded.length > 0 && !provider.writesAreCommits) {
-    await provider.commit('Initialize OKF knowledge bundle', seeded)
+    await provider.commit('Initialize OKF knowledge vault', seeded)
   }
   if (seeded.includes(WELCOME_PATH)) await pinInitial(WELCOME_PATH)
   const entries = await listFilesRecursive(provider)
@@ -143,7 +202,7 @@ export const seedLocalVault = seedLocalBundle
 export async function seedEmptyBundle(provider: VaultProvider): Promise<string[]> {
   const seeded = await seedCore(provider, 'default')
   if (seeded.length > 0 && !provider.writesAreCommits) {
-    await provider.commit('Initialize OKF knowledge bundle', seeded)
+    await provider.commit('Initialize OKF knowledge vault', seeded)
   }
   if (seeded.includes(WELCOME_PATH)) await pinInitial(WELCOME_PATH)
   if (seeded.length > 0) {
@@ -174,7 +233,7 @@ export async function pinInitial(path: string): Promise<void> {
     const existing = await loadPinned()
     if (existing.length === 0) await savePinned([path])
   } catch {
-    // Pinning is convenience state and must not block bundle creation.
+    // Pinning is convenience state and must not block vault creation.
   }
 }
 
@@ -199,6 +258,9 @@ async function listFilesRecursive(provider: VaultProvider) {
     size?: number
     lastModified?: number
   }> = []
+  if (provider.type === 'local' || provider.type === 'browser') {
+    return provider.listFiles('')
+  }
   const queue = ['']
   while (queue.length > 0) {
     const directory = queue.shift() ?? ''

@@ -6,6 +6,7 @@ import {
 import { LocalGitProvider } from './local-provider'
 import { ElectronLocalProvider } from './electron-provider'
 import { GitHubProvider } from './github-provider'
+import { BrowserBundleProvider } from './browser-provider'
 import { getDesktopApi } from '../desktop'
 import type { VaultProvider, FileEntry, PersistedVaultState } from '../types'
 
@@ -16,6 +17,8 @@ export {
   removeVault,
   getActiveVaultId,
   setActiveVaultId,
+  saveGitHubAppSession,
+  loadGitHubAppSession,
   loadActiveVault,
   vaultId,
   // Back-compat
@@ -26,6 +29,12 @@ export {
 export { LocalGitProvider } from './local-provider'
 export { ElectronLocalProvider } from './electron-provider'
 export { GitHubProvider } from './github-provider'
+export {
+  BrowserBundleProvider,
+  browserStoragePersistence,
+  createBrowserBundleId,
+  exportBrowserBundle,
+} from './browser-provider'
 
 /**
  * Attempts to restore a VaultProvider from the previous session stored in
@@ -77,11 +86,18 @@ export async function createProviderFromPersistedState(): Promise<{
     state.githubOwner &&
     state.githubRepo
   ) {
+    const githubState = await refreshGitHubAppStateIfNeeded(state)
     const provider = new GitHubProvider(
-      state.githubPat,
-      state.githubOwner,
-      state.githubRepo
+      githubState.githubPat!,
+      githubState.githubOwner!,
+      githubState.githubRepo!
     )
+    return { provider, needsPermission: false }
+  }
+
+  if (state.type === 'browser' && state.browserBundleId && state.browserBundleName) {
+    const provider = new BrowserBundleProvider(state.browserBundleId, state.browserBundleName)
+    await provider.init()
     return { provider, needsPermission: false }
   }
 
@@ -163,7 +179,19 @@ export async function createProviderFromStoredVault(id: string): Promise<{
   }
 
   if (state.type === 'github' && state.githubPat && state.githubOwner && state.githubRepo) {
-    const provider = new GitHubProvider(state.githubPat, state.githubOwner, state.githubRepo)
+    const githubState = await refreshGitHubAppStateIfNeeded(state)
+    const provider = new GitHubProvider(
+      githubState.githubPat!,
+      githubState.githubOwner!,
+      githubState.githubRepo!
+    )
+    await upsertVault(githubState)
+    return { provider, needsPermission: false, state: githubState }
+  }
+
+  if (state.type === 'browser' && state.browserBundleId && state.browserBundleName) {
+    const provider = new BrowserBundleProvider(state.browserBundleId, state.browserBundleName)
+    await provider.init()
     await upsertVault(state)
     return { provider, needsPermission: false, state }
   }
@@ -186,7 +214,7 @@ export async function listFilesRecursive(
   provider: VaultProvider,
   dir = ''
 ): Promise<FileEntry[]> {
-  if (provider.type === 'local') {
+  if (provider.type === 'local' || provider.type === 'browser') {
     return provider.listFiles(dir)
   }
   // GitHub: walk
@@ -201,4 +229,37 @@ export async function listFilesRecursive(
     }
   }
   return out
+}
+
+async function refreshGitHubAppStateIfNeeded(
+  state: PersistedVaultState
+): Promise<PersistedVaultState> {
+  if (
+    state.githubAuth !== 'app' ||
+    !state.githubRefreshToken ||
+    !state.githubTokenExpiresAt ||
+    state.githubTokenExpiresAt - Date.now() > 60_000
+  ) {
+    return state
+  }
+
+  const response = await fetch('/api/github/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: state.githubRefreshToken }),
+  })
+  if (!response.ok) return state
+
+  const data = await response.json() as {
+    accessToken: string
+    refreshToken?: string
+    expiresAt?: number
+  }
+
+  return {
+    ...state,
+    githubPat: data.accessToken,
+    githubRefreshToken: data.refreshToken ?? state.githubRefreshToken,
+    githubTokenExpiresAt: data.expiresAt ?? state.githubTokenExpiresAt,
+  }
 }

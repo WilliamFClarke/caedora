@@ -33,16 +33,16 @@ const fileToolSchemas = {
     path: { type: 'string', description: 'Project-relative file path to read.' },
   }, ['path']),
   write_file: objectSchema({
-    path: { type: 'string', description: 'Bundle-relative OKF concept path to overwrite. Reserved index.md and log.md files are protected.' },
+    path: { type: 'string', description: 'Vault-relative OKF concept path to overwrite. Reserved index.md and log.md files are protected.' },
     content: { type: 'string', description: 'Complete OKF concept including YAML frontmatter with a non-empty type field.' },
   }, ['path', 'content']),
   edit_file: objectSchema({
-    path: { type: 'string', description: 'Bundle-relative OKF concept path to edit. Reserved index.md and log.md files are protected.' },
+    path: { type: 'string', description: 'Vault-relative OKF concept path to edit. Reserved index.md and log.md files are protected.' },
     old_string: { type: 'string', description: 'Exact string to replace. Must appear exactly once.' },
     new_string: { type: 'string', description: 'Replacement string.' },
   }, ['path', 'old_string', 'new_string']),
   create_file: objectSchema({
-    path: { type: 'string', description: 'Bundle-relative OKF concept path to create. Must end in .md.' },
+    path: { type: 'string', description: 'Vault-relative OKF concept path to create. Must end in .md.' },
     content: { type: 'string', description: 'Complete OKF concept including YAML frontmatter with a non-empty type field.' },
   }, ['path', 'content']),
   create_folder: objectSchema({
@@ -143,7 +143,7 @@ function useProjectFileTool(
           context?: { toolCallId?: string }
         ) {
           if (!rootPath) {
-            throw new Error('Open a desktop bundle before using file tools.')
+            throw new Error('Open a desktop vault before using file tools.')
           }
           const request: AiFileToolRequest = { rootPath, toolName, args }
           return executeToolRequestOnce(executionKey(request, context?.toolCallId), request)

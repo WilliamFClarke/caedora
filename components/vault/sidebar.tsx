@@ -6,6 +6,7 @@ import {
   Check,
   ChevronRight,
   ChevronsUpDown,
+  Database,
   FileText,
   FilePlus,
   Folder,
@@ -14,6 +15,7 @@ import {
   FolderOpen,
   Github,
   ListTree,
+  LogOut,
   Loader2,
   RefreshCw,
   Settings,
@@ -232,7 +234,7 @@ export function AppSidebar({
   conceptCatalog,
 }: AppSidebarProps) {
   const router = useRouter()
-  const { connectToVault } = useVault()
+  const { connectToVault, disconnect } = useVault()
   const { state: sidebarState, setOpen: setSidebarOpen } = useSidebar()
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -254,6 +256,12 @@ export function AppSidebar({
     const [stored, active] = await Promise.all([listVaults(), getActiveVaultId()])
     setVaults(stored)
     setActiveVaultIdState(active)
+  }
+
+  async function closeAllVaults() {
+    disconnect()
+    setActiveVaultIdState(null)
+    router.push('/')
   }
 
   useEffect(() => {
@@ -524,6 +532,7 @@ export function AppSidebar({
               setSettingsSection('vaults')
               setSettingsOpen(true)
             }}
+            onCloseAll={() => void closeAllVaults()}
             className="group-data-[collapsible=icon]:hidden"
           />
           <div className="hidden">
@@ -552,8 +561,8 @@ export function AppSidebar({
                   }
                 }}
                 className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent flex size-8 items-center justify-center rounded-md disabled:opacity-50"
-                aria-label="Sync bundle"
-                title="Sync bundle"
+                aria-label="Sync vault"
+                title="Sync vault"
                 disabled={syncing}
               >
                 <RefreshCw className={cn('size-4', syncing && 'animate-spin')} />
@@ -670,6 +679,7 @@ function VaultSwitcher({
   switchingVaultId,
   onSwitch,
   onManage,
+  onCloseAll,
   className,
 }: {
   vaults: StoredVault[]
@@ -677,10 +687,11 @@ function VaultSwitcher({
   switchingVaultId: string | null
   onSwitch: (id: string) => Promise<void>
   onManage: () => void
+  onCloseAll: () => void
   className?: string
 }) {
   const activeVault = vaults.find((vault) => vault.id === activeVaultId) ?? vaults[0]
-  const label = activeVault ? vaultLabel(activeVault.state) : 'Bundle'
+  const label = activeVault ? vaultLabel(activeVault.state) : 'Vault'
 
   return (
     <DropdownMenu>
@@ -691,9 +702,12 @@ function VaultSwitcher({
             'hover:bg-sidebar-accent flex h-8 min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 text-left text-sm',
             className
           )}
-          aria-label="Switch bundle"
+          aria-label="Switch vault"
         >
-          <span className="truncate font-medium">{label}</span>
+          <span className="truncate font-medium">
+            {label}
+            {activeVault && <VaultKindInlineIcon state={activeVault.state} />}
+          </span>
           <ChevronsUpDown className="text-muted-foreground size-3.5 shrink-0" />
         </button>
       </DropdownMenuTrigger>
@@ -714,16 +728,21 @@ function VaultSwitcher({
               >
                 {vault.state.type === 'github' ? (
                   <Github className="text-muted-foreground size-4" />
+                ) : vault.state.type === 'browser' ? (
+                  <Database className="text-muted-foreground size-4" />
                 ) : (
                   <FolderOpen className="text-muted-foreground size-4" />
                 )}
-                <span className="min-w-0 flex-1 truncate">{vaultLabel(vault.state)}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  {vaultLabel(vault.state)}
+                  <VaultKindInlineIcon state={vault.state} />
+                </span>
                 {isSwitching && <Loader2 className="size-3.5 animate-spin" />}
               </DropdownMenuItem>
             )
           })
         ) : (
-          <DropdownMenuItem disabled>No saved bundles</DropdownMenuItem>
+          <DropdownMenuItem disabled>No saved vaults</DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
@@ -733,7 +752,16 @@ function VaultSwitcher({
           }}
         >
           <Wrench className="text-muted-foreground size-4" />
-          Manage bundles
+          Manage vaults
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            onCloseAll()
+          }}
+        >
+          <LogOut className="text-muted-foreground size-4" />
+          Close all vaults
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -742,7 +770,17 @@ function VaultSwitcher({
 
 function vaultLabel(state: PersistedVaultState): string {
   if (state.type === 'github') return `${state.githubOwner}/${state.githubRepo}`
-  return state.directoryHandle?.name ?? 'Local bundle'
+  if (state.type === 'browser') return state.browserBundleName ?? 'Browser vault'
+  return state.directoryHandle?.name ?? 'Local vault'
+}
+
+function VaultKindInlineIcon({ state }: { state: PersistedVaultState }) {
+  const Icon = state.type === 'github'
+    ? Github
+    : state.type === 'browser'
+      ? Database
+      : FolderOpen
+  return <Icon className="text-muted-foreground ml-1.5 inline size-3.5 align-[-2px]" />
 }
 
 function TreeRow(props: TreeRowProps) {
@@ -920,14 +958,6 @@ function FileRow(props: TreeRowProps) {
               </span>
             )}
             {node.pending && <Loader2 className="ml-auto size-3 animate-spin" />}
-            {concept && !isIndex && (
-              <span
-                className="text-muted-foreground ml-auto max-w-14 shrink-0 truncate font-mono text-[9px] uppercase"
-                title={concept.type}
-              >
-                {concept.type}
-              </span>
-            )}
           </SidebarMenuButton>
         </ContextMenuTrigger>
         <ContextMenuContent>

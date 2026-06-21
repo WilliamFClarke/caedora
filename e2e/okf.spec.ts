@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
 import {
-  EXAMPLE_CONCEPT_PATH,
+  PERSONAL_CONCEPT_PATH,
   WELCOME_PATH,
+  WORK_CONCEPT_PATH,
   bundleSeedFiles,
   seedLocalBundle,
 } from '@/lib/vault-create'
@@ -69,39 +70,54 @@ class MemoryProvider implements VaultProvider {
   }
 }
 
-test('new bundles seed conformant linked starter concepts and generated indexes', async () => {
-  for (const template of ['default', 'personal', 'work'] as const) {
+test('new vault presets seed conformant starter concepts and generated indexes', async () => {
+  const expectedPaths = {
+    default: [WELCOME_PATH, PERSONAL_CONCEPT_PATH],
+    personal: [WELCOME_PATH, PERSONAL_CONCEPT_PATH],
+    work: [WELCOME_PATH, WORK_CONCEPT_PATH],
+    blank: [WELCOME_PATH],
+  } as const
+
+  for (const template of ['default', 'personal', 'work', 'blank'] as const) {
     const files = bundleSeedFiles(template)
-    expect(files.map(([path]) => path)).toEqual([WELCOME_PATH, EXAMPLE_CONCEPT_PATH])
+    expect(files.map(([path]) => path)).toEqual(expectedPaths[template])
     for (const [path, content] of files) {
       expect(validateDocument(path, content)).toEqual([])
     }
 
     const welcome = files.find(([path]) => path === WELCOME_PATH)?.[1] ?? ''
-    const example = files.find(([path]) => path === EXAMPLE_CONCEPT_PATH)?.[1] ?? ''
-    expect(extractLinks(parseFrontmatter(welcome).body, WELCOME_PATH)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ targetPath: EXAMPLE_CONCEPT_PATH }),
-      ])
-    )
-    expect(extractLinks(parseFrontmatter(example).body, EXAMPLE_CONCEPT_PATH)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ targetPath: WELCOME_PATH }),
-      ])
-    )
+    const starterPath = expectedPaths[template].find((path) => path !== WELCOME_PATH)
+    if (starterPath) {
+      const starter = files.find(([path]) => path === starterPath)?.[1] ?? ''
+      expect(extractLinks(parseFrontmatter(welcome).body, WELCOME_PATH)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ targetPath: starterPath }),
+        ])
+      )
+      expect(extractLinks(parseFrontmatter(starter).body, starterPath)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ targetPath: WELCOME_PATH }),
+        ])
+      )
+    } else {
+      expect(
+        extractLinks(parseFrontmatter(welcome).body, WELCOME_PATH)
+          .some((link) => Boolean(link.targetPath))
+      ).toBe(false)
+    }
   }
 
   const provider = new MemoryProvider()
   await seedLocalBundle(provider)
   expect([...provider.files.keys()].sort()).toEqual([
-    EXAMPLE_CONCEPT_PATH,
-    'example/index.md',
     'index.md',
+    PERSONAL_CONCEPT_PATH,
+    'personal/index.md',
     WELCOME_PATH,
   ])
 
   const rootIndex = provider.files.get('index.md') ?? ''
-  const folderIndex = provider.files.get('example/index.md') ?? ''
+  const folderIndex = provider.files.get('personal/index.md') ?? ''
   expect(validateDocument('index.md', rootIndex)).toEqual([])
   expect(validateDocument('example/index.md', folderIndex)).toEqual([])
   expect(rootIndex).toMatch(/^# Index$/m)
@@ -134,7 +150,7 @@ test('OKF validation enforces reserved index frontmatter rules', () => {
     expect.objectContaining({
       severity: 'error',
       code: 'invalid-index',
-      message: 'Only the bundle-root index.md may contain frontmatter.',
+      message: 'Only the vault-root index.md may contain frontmatter.',
     }),
   ])
 

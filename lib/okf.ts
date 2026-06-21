@@ -331,7 +331,7 @@ function validateIndex(path: string, raw: string): OkfIssue[] {
         path,
         severity: 'error',
         code: 'invalid-index',
-        message: 'Only the bundle-root index.md may contain frontmatter.',
+        message: 'Only the vault-root index.md may contain frontmatter.',
       }]
     }
     const standardFieldsPresent =

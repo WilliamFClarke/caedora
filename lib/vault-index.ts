@@ -63,7 +63,7 @@ export async function rebuildBundleIndexes(
 
     if (changed.length > 0 && !provider.writesAreCommits) {
       await provider.commit(
-        changed.length === 1 ? `Update ${changed[0]}` : 'Update bundle indexes',
+        changed.length === 1 ? `Update ${changed[0]}` : 'Update vault indexes',
         changed
       )
     }
@@ -122,8 +122,8 @@ function renderDirectoryIndex(
   lines.push(`# ${title}`, '')
   if (!directory) {
     lines.push(
-      'Progressive-disclosure map of this Open Knowledge Format bundle.',
-      'Open the most relevant concept rather than loading the entire bundle.',
+      'Progressive-disclosure map of this Open Knowledge Format vault.',
+      'Open the most relevant concept rather than loading the entire vault.',
       ''
     )
   }

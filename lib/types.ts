@@ -41,7 +41,7 @@ export interface DiffResult {
 // The UI never needs to know which backend is active.
 
 export interface VaultProvider {
-  readonly type: 'local' | 'github'
+  readonly type: 'local' | 'github' | 'browser'
   /** True when writeFile is already a commit (e.g. GitHub contents API). */
   readonly writesAreCommits: boolean
   isReady(): boolean
@@ -70,20 +70,25 @@ export type VaultStatus =
   | { state: 'checking' }
   | { state: 'connecting' }
   | { state: 'permission-required'; folderName: string }  // handle in IDB, permission revoked
-  | { state: 'ready'; providerType: 'local' | 'github' }
+  | { state: 'ready'; providerType: 'local' | 'github' | 'browser' }
   | { state: 'error'; error: string }
 
 // ─── Persisted State (IndexedDB) ──────────────────────────────────────────────
 
 export interface PersistedVaultState {
-  type: 'local' | 'github'
+  type: 'local' | 'github' | 'browser'
   directoryHandle?: FileSystemDirectoryHandle  // browser local vault
   directoryPath?: string  // desktop local vault
   directoryName?: string
   /** GitHub PAT — stored in IndexedDB only, never on our servers. */
   githubPat?: string
+  githubAuth?: 'pat' | 'app'
+  githubRefreshToken?: string
+  githubTokenExpiresAt?: number
   githubOwner?: string
   githubRepo?: string
+  browserBundleId?: string
+  browserBundleName?: string
   lastOpenedAt: number
 }
 
@@ -95,6 +100,14 @@ export interface VaultContextValue {
   connectLocal: (preselected?: FileSystemDirectoryHandle) => Promise<FileSystemDirectoryHandle | null>
   connectDesktopLocal: (root: { path: string; name: string }) => Promise<boolean>
   connectGitHub: (pat: string, owner: string, repo: string) => Promise<boolean>
+  connectGitHubApp: (connection: {
+    accessToken: string
+    refreshToken?: string
+    expiresAt?: number
+    owner: string
+    repo: string
+  }) => Promise<boolean>
+  connectBrowserBundle: (bundle: { id: string; name: string }) => Promise<boolean>
   connectToVault: (id: string) => Promise<void>
   grantPermission: () => Promise<void>
   disconnect: () => void

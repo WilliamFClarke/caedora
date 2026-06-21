@@ -16,6 +16,7 @@ import {
   setActiveVaultId,
   LocalGitProvider,
   GitHubProvider,
+  BrowserBundleProvider,
 } from './storage'
 import { ElectronLocalProvider } from './storage/electron-provider'
 import type { VaultContextValue, VaultProvider, VaultStatus } from './types'
@@ -26,6 +27,8 @@ const defaultContext: VaultContextValue = {
   connectLocal: async () => null,
   connectDesktopLocal: async () => false,
   connectGitHub: async () => false,
+  connectGitHubApp: async () => false,
+  connectBrowserBundle: async () => false,
   connectToVault: async () => {},
   grantPermission: async () => {},
   disconnect: () => {},
@@ -124,6 +127,7 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
       try {
         await saveVaultState({
           type: 'github',
+          githubAuth: 'pat',
           githubPat: pat,
           githubOwner: owner,
           githubRepo: repo,
@@ -143,6 +147,64 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
   },
     []
   )
+
+  const connectGitHubApp = useCallback(
+    async (connection: {
+      accessToken: string
+      refreshToken?: string
+      expiresAt?: number
+      owner: string
+      repo: string
+    }) => {
+      setStatus({ state: 'connecting' })
+      try {
+        await saveVaultState({
+          type: 'github',
+          githubAuth: 'app',
+          githubPat: connection.accessToken,
+          githubRefreshToken: connection.refreshToken,
+          githubTokenExpiresAt: connection.expiresAt,
+          githubOwner: connection.owner,
+          githubRepo: connection.repo,
+          lastOpenedAt: Date.now(),
+        })
+        const p = new GitHubProvider(connection.accessToken, connection.owner, connection.repo)
+        setProvider(p)
+        setStatus({ state: 'ready', providerType: 'github' })
+        return true
+      } catch (e) {
+        setStatus({
+          state: 'error',
+          error: e instanceof Error ? e.message : 'Failed to connect GitHub',
+        })
+        return false
+      }
+    },
+    []
+  )
+
+  const connectBrowserBundle = useCallback(async (bundle: { id: string; name: string }) => {
+    setStatus({ state: 'connecting' })
+    try {
+      const p = new BrowserBundleProvider(bundle.id, bundle.name)
+      await p.init()
+      await saveVaultState({
+        type: 'browser',
+        browserBundleId: bundle.id,
+        browserBundleName: bundle.name,
+        lastOpenedAt: Date.now(),
+      })
+      setProvider(p)
+      setStatus({ state: 'ready', providerType: 'browser' })
+      return true
+    } catch (e) {
+      setStatus({
+        state: 'error',
+        error: e instanceof Error ? e.message : 'Failed to create browser vault',
+      })
+      return false
+    }
+  }, [])
 
   /**
    * Reconnect to a previously-stored vault by id. Instant for GitHub
@@ -208,6 +270,8 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
         connectLocal,
         connectDesktopLocal,
         connectGitHub,
+        connectGitHubApp,
+        connectBrowserBundle,
         connectToVault,
         grantPermission,
         disconnect,
