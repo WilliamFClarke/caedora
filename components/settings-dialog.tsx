@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   Bot,
   Cloud,
@@ -36,14 +35,12 @@ import {
 } from '@/components/ui/item'
 import { Separator } from '@/components/ui/separator'
 import { ModeToggle } from '@/components/mode-toggle'
-import { ConnectDialog } from '@/components/connect-dialog'
 import { Input } from '@/components/ui/input'
 import {
   APPEARANCE_PALETTES,
   SYNC_INTERVAL_OPTIONS,
 } from '@/lib/settings'
 import { useSettings } from '@/lib/settings-context'
-import { useVault } from '@/lib/vault-context'
 import { getDesktopApi } from '@/lib/desktop'
 import { ARGUS_ASSISTANT_PROMPT } from '@/lib/ai/argus-context'
 import {
@@ -56,12 +53,11 @@ import {
   startModelDownload,
   updateAiSettings,
 } from '@/lib/desktop-ai'
-import { exportBrowserBundle, getActiveVaultId, listVaults, removeVault } from '@/lib/storage'
 import type { AiProviderKind, AiProviderState, AiSettings as DesktopAiSettings } from '@/lib/ai/types'
 import { cn } from '@/lib/utils'
-import { SavedVaultList, type StoredVault } from '@/components/vault/saved-vault-list'
+import { VaultManagerDialog } from '@/components/vault/vault-manager-dialog'
 
-export type SettingsSection = 'general' | 'ai' | 'editor' | 'appearance' | 'hotkeys' | 'vaults'
+export type SettingsSection = 'general' | 'ai' | 'editor' | 'appearance' | 'hotkeys'
 
 const sections: Array<{
   group: string
@@ -75,7 +71,6 @@ const sections: Array<{
       { id: 'editor', label: 'Editor', Icon: Type },
       { id: 'appearance', label: 'Appearance', Icon: Palette },
       { id: 'hotkeys', label: 'Hotkeys', Icon: Keyboard },
-      { id: 'vaults', label: 'Vaults', Icon: FolderOpen },
     ],
   },
 ]
@@ -110,13 +105,13 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[86vh] max-h-none w-[96vw] max-w-[1120px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1120px]">
+      <DialogContent className="flex h-[calc(100dvh-1rem)] max-h-none w-[calc(100vw-1rem)] max-w-[1120px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1120px] md:h-[86vh] md:w-[96vw]">
         <DialogTitle className="sr-only">Settings</DialogTitle>
-        <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[180px_1fr]">
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] md:grid-cols-[180px_1fr] md:grid-rows-none">
           <aside className="border-b p-2 md:border-r md:border-b-0">
             {visibleSections.map((group) => (
-              <div key={group.group} className="flex flex-col gap-1">
-                <div className="text-muted-foreground px-2 py-1 text-[10px] font-medium uppercase tracking-wide">
+              <div key={group.group} className="flex flex-row flex-wrap items-center gap-1 md:flex-col md:flex-nowrap md:items-stretch">
+                <div className="text-muted-foreground hidden px-2 py-1 text-[10px] font-medium uppercase tracking-wide md:block">
                   {group.group}
                 </div>
                 {group.items.map(({ id, label, Icon }) => (
@@ -125,7 +120,7 @@ export function SettingsDialog({
                     type="button"
                     onClick={() => setSection(id)}
                     className={cn(
-                      'flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition-colors',
+                      'flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs transition-colors md:h-7',
                       section === id
                         ? 'bg-accent text-foreground'
                         : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
@@ -139,8 +134,8 @@ export function SettingsDialog({
             ))}
           </aside>
 
-          <main className="min-h-0 overflow-y-auto p-5">
-            <div className="mb-5">
+          <main className="min-h-0 overflow-y-auto p-3 sm:p-5">
+            <div className="mb-3 sm:mb-5">
               <h2 className="text-lg font-semibold">{title}</h2>
             </div>
             {section === 'general' && <GeneralSettings />}
@@ -148,7 +143,6 @@ export function SettingsDialog({
             {section === 'editor' && <EditorSettings />}
             {section === 'appearance' && <AppearanceSettings />}
             {section === 'hotkeys' && <HotkeySettings />}
-            {section === 'vaults' && <VaultSettings onClose={() => onOpenChange(false)} />}
           </main>
         </div>
       </DialogContent>
@@ -156,163 +150,93 @@ export function SettingsDialog({
   )
 }
 
-function VaultSettings({ onClose }: { onClose: () => void }) {
-  const router = useRouter()
-  const { connectToVault, disconnect } = useVault()
-  const [vaults, setVaults] = useState<StoredVault[]>([])
-  const [activeVaultId, setActiveVaultIdState] = useState<string | null>(null)
-  const [switchingVaultId, setSwitchingVaultId] = useState<string | null>(null)
-  const [connectMode, setConnectMode] = useState<'create' | 'open' | null>(null)
-
-  async function closeAllVaults() {
-    disconnect()
-    setActiveVaultIdState(null)
-    onClose()
-    router.push('/')
-  }
-
-  async function refreshVaults() {
-    const [stored, active] = await Promise.all([listVaults(), getActiveVaultId()])
-    setVaults(stored)
-    setActiveVaultIdState(active)
-  }
-
-  useEffect(() => {
-    void refreshVaults()
-  }, [])
-
-  async function switchVault(id: string) {
-    if (id === activeVaultId || switchingVaultId) return
-    setSwitchingVaultId(id)
-    try {
-      await connectToVault(id)
-      await refreshVaults()
-    } finally {
-      setSwitchingVaultId(null)
-    }
-  }
-
-  async function exportVault(vault: StoredVault) {
-    if (!vault.state.browserBundleId) return
-    const name = vault.state.browserBundleName ?? 'Browser vault'
-    const blob = await exportBrowserBundle(vault.state.browserBundleId, name)
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${slugForDownload(name)}.caedora-vault.json`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
-  }
+function GeneralSettings() {
+  const { settings, updateSettings } = useSettings()
+  const [vaultManagerOpen, setVaultManagerOpen] = useState(false)
 
   return (
     <>
-      <SavedVaultList
-        vaults={vaults}
-        activeVaultId={activeVaultId}
-        switchingVaultId={switchingVaultId}
-        onOpenVault={(id) => void switchVault(id)}
-        onDeleteVault={(id) => {
-          void (async () => {
-            await removeVault(id)
-            if (id === activeVaultId) {
-              disconnect()
-              onClose()
-              router.push('/')
-              return
-            }
-            await refreshVaults()
-          })()
-        }}
-        onExportVault={(vault) => void exportVault(vault)}
-        onCreateVault={() => setConnectMode('create')}
-        onAddExistingVault={() => setConnectMode('open')}
-        onCloseAllVaults={() => void closeAllVaults()}
-      />
-      <ConnectDialog
-        open={connectMode !== null}
-        mode={connectMode ?? 'create'}
-        showSavedVaults={false}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) {
-            setConnectMode(null)
-            void refreshVaults()
-          }
-        }}
-      />
-    </>
-  )
-}
-
-function GeneralSettings() {
-  const { settings, updateSettings } = useSettings()
-
-  return (
-    <ItemGroup>
-      <Item>
-        <ItemContent>
-          <ItemTitle>Auto-sync</ItemTitle>
-          <ItemDescription>
-            Automatically save and commit changes while you type.
-          </ItemDescription>
-        </ItemContent>
-        <ItemActions>
-          <button
-            type="button"
-            onClick={() =>
-              updateSettings({
-                syncMode: settings.syncMode === 'auto' ? 'manual' : 'auto',
-              })
-            }
-            className="text-muted-foreground hover:text-foreground"
-            aria-label="Toggle auto-sync"
-          >
-            {settings.syncMode === 'auto' ? (
-              <ToggleRight className="text-primary size-7" />
-            ) : (
-              <ToggleLeft className="size-7" />
-            )}
-          </button>
-        </ItemActions>
-      </Item>
-      <Separator />
-      <Item>
-        <ItemContent>
-          <ItemTitle>Sync interval</ItemTitle>
-          <ItemDescription>
-            Controls how often changes are committed when auto-sync is enabled.
-          </ItemDescription>
-        </ItemContent>
-        <ItemActions className="flex-wrap justify-end">
-          {SYNC_INTERVAL_OPTIONS.map(({ label, ms }) => (
-            <Button
-              key={ms}
-              type="button"
-              size="sm"
-              variant={settings.syncIntervalMs === ms ? 'default' : 'outline'}
-              onClick={() => updateSettings({ syncIntervalMs: ms })}
-              disabled={settings.syncMode !== 'auto'}
-            >
-              {label}
+      <ItemGroup>
+        <Item>
+          <ItemContent>
+            <ItemTitle>Vaults</ItemTitle>
+            <ItemDescription>
+              Manage saved vaults, exports, and vault switching.
+            </ItemDescription>
+          </ItemContent>
+          <ItemActions>
+            <Button type="button" size="sm" variant="outline" onClick={() => setVaultManagerOpen(true)}>
+              <FolderOpen className="size-4" />
+              Manage vaults
             </Button>
-          ))}
-        </ItemActions>
-      </Item>
-      {settings.syncMode === 'manual' && (
-        <>
-          <Separator />
-          <Item variant="muted" size="sm">
-            <ItemContent>
-              <ItemTitle>Manual sync is enabled</ItemTitle>
-              <ItemDescription>
-                Use the sidebar sync icon to manually save and commit your changes.
-              </ItemDescription>
-            </ItemContent>
-          </Item>
-        </>
-      )}
-    </ItemGroup>
+          </ItemActions>
+        </Item>
+        <Separator />
+        <Item>
+          <ItemContent>
+            <ItemTitle>Auto-sync</ItemTitle>
+            <ItemDescription>
+              Automatically save and commit changes while you type.
+            </ItemDescription>
+          </ItemContent>
+          <ItemActions>
+            <button
+              type="button"
+              onClick={() =>
+                updateSettings({
+                  syncMode: settings.syncMode === 'auto' ? 'manual' : 'auto',
+                })
+              }
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Toggle auto-sync"
+            >
+              {settings.syncMode === 'auto' ? (
+                <ToggleRight className="text-primary size-7" />
+              ) : (
+                <ToggleLeft className="size-7" />
+              )}
+            </button>
+          </ItemActions>
+        </Item>
+        <Separator />
+        <Item>
+          <ItemContent>
+            <ItemTitle>Sync interval</ItemTitle>
+            <ItemDescription>
+              Controls how often changes are committed when auto-sync is enabled.
+            </ItemDescription>
+          </ItemContent>
+          <ItemActions className="flex-wrap justify-end">
+            {SYNC_INTERVAL_OPTIONS.map(({ label, ms }) => (
+              <Button
+                key={ms}
+                type="button"
+                size="sm"
+                variant={settings.syncIntervalMs === ms ? 'default' : 'outline'}
+                onClick={() => updateSettings({ syncIntervalMs: ms })}
+                disabled={settings.syncMode !== 'auto'}
+              >
+                {label}
+              </Button>
+            ))}
+          </ItemActions>
+        </Item>
+        {settings.syncMode === 'manual' && (
+          <>
+            <Separator />
+            <Item variant="muted" size="sm">
+              <ItemContent>
+                <ItemTitle>Manual sync is enabled</ItemTitle>
+                <ItemDescription>
+                  Use the sidebar sync icon to manually save and commit your changes.
+                </ItemDescription>
+              </ItemContent>
+            </Item>
+          </>
+        )}
+      </ItemGroup>
+      <VaultManagerDialog open={vaultManagerOpen} onOpenChange={setVaultManagerOpen} />
+    </>
   )
 }
 
@@ -979,10 +903,3 @@ function cloudProviderLabel(provider: DesktopAiSettings['cloud']['provider']): s
   return 'OpenAI'
 }
 
-function slugForDownload(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'caedora-vault'
-}

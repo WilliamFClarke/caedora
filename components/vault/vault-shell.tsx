@@ -6,7 +6,8 @@ import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
 import { LinkGraphPanel } from './link-graph-panel'
 import { AssistantSidebarLoader } from '@/components/assistant/assistant-sidebar-loader'
-import { SettingsDialog } from '@/components/settings-dialog'
+import { SettingsDialog, type SettingsSection } from '@/components/settings-dialog'
+import { VaultManagerDialog } from '@/components/vault/vault-manager-dialog'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
 import { getActiveVaultId } from '@/lib/storage/idb'
@@ -48,7 +49,9 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [seeding, setSeeding] = useState(false)
   const [syncNonce, setSyncNonce] = useState(0)
   const [activeVaultId, setActiveVaultIdState] = useState<string | null>(null)
-  const [assistantSettingsOpen, setAssistantSettingsOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
+  const [vaultManagerOpen, setVaultManagerOpen] = useState(false)
   const [linkGraphOpen, setLinkGraphOpen] = useState(false)
   const [conceptCatalog, setConceptCatalog] = useState<Record<string, OkfConceptSummary>>({})
   const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
@@ -487,13 +490,17 @@ export function VaultShell({ initialPath }: VaultShellProps) {
                 conceptCatalog={conceptCatalog}
                 linkGraphOpen={linkGraphOpen}
                 onToggleLinkGraph={() => setLinkGraphOpen((open) => !open)}
+                onOpenVaultSettings={() => setVaultManagerOpen(true)}
               />
             )}
           </div>
           <AssistantSidebarLoader
             provider={provider}
             currentFilePath={selected}
-            onOpenSettings={() => setAssistantSettingsOpen(true)}
+            onOpenSettings={() => {
+              setSettingsSection('ai')
+              setSettingsOpen(true)
+            }}
           />
           <LinkGraphPanel
             open={linkGraphOpen}
@@ -505,10 +512,11 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         </div>
       </SidebarInset>
       <SettingsDialog
-        open={assistantSettingsOpen}
-        onOpenChange={setAssistantSettingsOpen}
-        initialSection="ai"
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        initialSection={settingsSection}
       />
+      <VaultManagerDialog open={vaultManagerOpen} onOpenChange={setVaultManagerOpen} />
     </SidebarProvider>
   )
 }

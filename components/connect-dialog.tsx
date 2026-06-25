@@ -146,22 +146,30 @@ export function ConnectDialog({ open, onOpenChange, mode, showSavedVaults = true
   }
 
   const effectiveMode: Mode = mode === 'create' || openFlow === 'create' ? 'create' : 'open'
+  const showVaultLauncher = effectiveMode === 'open' && openFlow === 'saved'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="w-[calc(100vw-2rem)] overflow-hidden sm:max-w-xl"
+        className={cn(
+          'w-[calc(100vw-1rem)] overflow-hidden',
+          showVaultLauncher
+            ? 'max-h-[calc(100dvh-1rem)] gap-0 p-0 sm:max-w-5xl [&>button]:top-3 [&>button]:right-3'
+            : 'max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl'
+        )}
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
       >
-        <DialogHeader>
-          <DialogTitle>{effectiveMode === 'create' ? 'Start a new vault' : 'Open an existing vault'}</DialogTitle>
-          <DialogDescription>
-            {effectiveMode === 'create'
-              ? 'Caedora starts in this browser so you can begin immediately. Nothing is stored by us.'
-              : 'Reconnect to an OKF knowledge vault you already have.'}
-          </DialogDescription>
-        </DialogHeader>
+        {!showVaultLauncher && (
+          <DialogHeader>
+            <DialogTitle>{effectiveMode === 'create' ? 'Start a new vault' : 'Open an existing vault'}</DialogTitle>
+            <DialogDescription>
+              {effectiveMode === 'create'
+                ? 'Caedora starts in this browser so you can begin immediately. Nothing is stored by us.'
+                : 'Reconnect to an OKF knowledge vault you already have.'}
+            </DialogDescription>
+          </DialogHeader>
+        )}
 
         {effectiveMode === 'create' ? (
           <BrowserPanel
@@ -170,9 +178,10 @@ export function ConnectDialog({ open, onOpenChange, mode, showSavedVaults = true
             onDone={() => onOpenChange(false)}
           />
         ) : (
-          <div className="mt-2 flex min-w-0 flex-col gap-4">
+          <div className={cn('flex min-w-0 flex-col gap-4', !showVaultLauncher && 'mt-2')}>
             {openFlow === 'saved' && (
               <SavedVaultList
+                className="rounded-none border-0"
                 vaults={vaults}
                 activeVaultId={activeVaultId}
                 switchingVaultId={switchingVaultId}
@@ -466,6 +475,7 @@ function BrowserPanel({
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
   const [persistence, setPersistence] = useState<'unknown' | 'granted' | 'best-effort'>('unknown')
+  const [showGitHubGuide, setShowGitHubGuide] = useState(false)
 
   useEffect(() => {
     onPreparingChange(phase === 'preparing')
@@ -552,18 +562,44 @@ function BrowserPanel({
               })}
             </div>
           </div>
-          <div className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
-            <p className="text-foreground font-medium">Moving to GitHub later</p>
-            <p className="mt-1">
-              Open Settings, go to Vaults, and export a browser backup before
-              moving devices. The current export is a Caedora JSON backup. A
-              proper OKF folder export for dropping directly into a GitHub repo
-              is planned next.
-            </p>
-            <p className="mt-2">
-              To start GitHub sync today, create an empty private repository on
-              GitHub, then use the GitHub tab here and select only that repo.
-            </p>
+          <div className="rounded-md border border-dashed">
+            <button
+              type="button"
+              onClick={() => setShowGitHubGuide((open) => !open)}
+              className="hover:bg-accent/60 flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left transition-colors"
+              aria-expanded={showGitHubGuide}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <Github className="text-muted-foreground size-4 shrink-0" />
+                <span className="text-sm font-medium">Moving to GitHub later</span>
+              </span>
+              <span className="text-muted-foreground text-xs">
+                {showGitHubGuide ? 'Hide' : 'Show'}
+              </span>
+            </button>
+            <div
+              className={cn(
+                'grid transition-[grid-template-rows,opacity] duration-200 ease-out',
+                showGitHubGuide ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+              )}
+            >
+              <div className="min-h-0 overflow-hidden">
+                {showGitHubGuide && (
+                  <div className="text-muted-foreground px-3 pb-3 text-xs">
+                    <p>
+                      Open Settings, use Manage vaults, and export a browser backup before
+                      moving devices. The current export is a Caedora JSON backup. A
+                      proper OKF folder export for dropping directly into a GitHub repo
+                      is planned next.
+                    </p>
+                    <p className="mt-2">
+                      To start GitHub sync today, create an empty private repository on
+                      GitHub, then use the GitHub tab and select only that repo.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </>
       ) : (

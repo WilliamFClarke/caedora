@@ -113,6 +113,7 @@ export interface RichTextEditorProps {
   contentRevision?: number;
   onMetaAnchorChange?: (el: HTMLElement | null) => void;
   documentHeader?: React.ReactNode;
+  onOpenVaultSettings?: () => void;
 }
 
 export function RichTextEditorDemo({
@@ -123,6 +124,7 @@ export function RichTextEditorDemo({
   contentRevision = 0,
   onMetaAnchorChange,
   documentHeader,
+  onOpenVaultSettings,
 }: RichTextEditorProps) {
   const anchorCbRef = React.useRef(onMetaAnchorChange);
   React.useEffect(() => {
@@ -208,7 +210,7 @@ export function RichTextEditorDemo({
         className
       )}
     >
-      <EditorToolbar editor={editor} />
+      <EditorToolbar editor={editor} onOpenVaultSettings={onOpenVaultSettings} />
       <FloatingToolbar editor={editor} />
       <TipTapFloatingMenu editor={editor} />
       {/* Clicks in the empty space below the document content land on this

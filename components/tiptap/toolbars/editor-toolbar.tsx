@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Editor } from "@tiptap/core";
-import { ChevronsRight, MoreVertical, PanelRightOpen } from "lucide-react";
+import { ChevronsRight, Database, MoreVertical, PanelRightOpen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -40,7 +40,13 @@ import { ToolbarProvider } from "./toolbar-provider";
 import { UnderlineToolbar } from "./underline";
 import { UndoToolbar } from "./undo";
 
-export const EditorToolbar = ({ editor }: { editor: Editor }) => {
+export const EditorToolbar = ({
+  editor,
+  onOpenVaultSettings,
+}: {
+  editor: Editor;
+  onOpenVaultSettings?: () => void;
+}) => {
   const toolsRowRef = React.useRef<HTMLDivElement>(null);
   const collapseLevel = useToolbarCollapseLevel(toolsRowRef);
 
@@ -121,6 +127,7 @@ export const EditorToolbar = ({ editor }: { editor: Editor }) => {
             </div>
 
             <div className="caedora-editor-toolbar-actions ml-auto flex shrink-0 items-center gap-0.5">
+              <MobileVaultToolbarButton onOpenVaultSettings={onOpenVaultSettings} />
               <ResponsiveOverflowToolbar collapseLevel={collapseLevel} />
               <DesktopAssistantToolbarToggle />
             </div>
@@ -130,6 +137,27 @@ export const EditorToolbar = ({ editor }: { editor: Editor }) => {
     </div>
   );
 };
+
+function MobileVaultToolbarButton({
+  onOpenVaultSettings,
+}: {
+  onOpenVaultSettings?: () => void;
+}) {
+  if (!onOpenVaultSettings) return null;
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label="Manage vaults"
+      title="Manage vaults"
+      className="h-8 w-8 shrink-0 p-0 sm:hidden"
+      onClick={onOpenVaultSettings}
+    >
+      <Database className="h-4 w-4" />
+    </Button>
+  );
+}
 
 function DesktopAssistantToolbarToggle() {
   const { settings, updateSettings } = useSettings();
