@@ -34,6 +34,7 @@ import { ModeToggle } from '@/components/mode-toggle'
 import { ConnectAiDialog } from './connect-ai-dialog'
 import { TemplateMarketplaceButton } from './template-marketplace-button'
 import { SettingsDialog, type SettingsSection } from '@/components/settings-dialog'
+import { VaultManagerDialog } from '@/components/vault/vault-manager-dialog'
 import { useVault } from '@/lib/vault-context'
 import { getActiveVaultId, listVaults } from '@/lib/storage'
 import type { FileEntry, PersistedVaultState, VaultProvider } from '@/lib/types'
@@ -248,6 +249,7 @@ export function AppSidebar({
   const [switchingVaultId, setSwitchingVaultId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
+  const [vaultManagerOpen, setVaultManagerOpen] = useState(false)
   const [customizingFolder, setCustomizingFolder] = useState<TreeNodeT | null>(null)
   const [pinnedOpen, setPinnedOpen] = useState(true)
   const [filesOpen, setFilesOpen] = useState(true)
@@ -529,8 +531,7 @@ export function AppSidebar({
               }
             }}
             onManage={() => {
-              setSettingsSection('vaults')
-              setSettingsOpen(true)
+              setVaultManagerOpen(true)
             }}
             onCloseAll={() => void closeAllVaults()}
             className="group-data-[collapsible=icon]:hidden"
@@ -592,6 +593,13 @@ export function AppSidebar({
           if (!open) void refreshVaults()
         }}
         initialSection={settingsSection}
+      />
+      <VaultManagerDialog
+        open={vaultManagerOpen}
+        onOpenChange={(open) => {
+          setVaultManagerOpen(open)
+          if (!open) void refreshVaults()
+        }}
       />
 
       <CreateItemDialog
