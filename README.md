@@ -50,6 +50,18 @@ For the Electron desktop shell:
 npm run desktop:dev
 ```
 
+## MCP server
+
+The [`caedora-mcp`](./packages/caedora-mcp) workspace shares the root install — run
+`npm install` at the repo root first, or both its build and the Next build fail with
+`Cannot find module 'yaml'`.
+
+```bash
+npm run build --workspace packages/caedora-mcp   # compile to dist/
+npm run test:unit                                # workspace unit tests
+npm publish --workspace packages/caedora-mcp     # publish to npm (maintainers)
+```
+
 ## Checks
 
 ```bash

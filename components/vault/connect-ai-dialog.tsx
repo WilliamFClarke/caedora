@@ -25,6 +25,12 @@ interface ConnectAiDialogProps {
 export function ConnectAiDialog({ open, onOpenChange, provider }: ConnectAiDialogProps) {
   const isLocal = provider.type === 'local'
   const folderName = isLocal ? (provider as LocalGitProvider).folderName : null
+  // Desktop (Electron) local vaults expose a real filesystem path; browser
+  // File System Access vaults only expose a name (see ElectronLocalProvider).
+  const localPath =
+    isLocal && 'directoryPath' in provider
+      ? (provider as { directoryPath: string }).directoryPath
+      : null
   const gh = !isLocal ? (provider as GitHubProvider) : null
   const defaultTab = isLocal ? 'claude-code' : 'claude-web'
 
@@ -45,17 +51,17 @@ export function ConnectAiDialog({ open, onOpenChange, provider }: ConnectAiDialo
         <Tabs defaultValue={defaultTab} className="mt-2">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="claude-code">Claude Code</TabsTrigger>
-            <TabsTrigger value="claude-desktop">Desktop / Cursor</TabsTrigger>
+            <TabsTrigger value="claude-desktop">Desktop / CLI</TabsTrigger>
             <TabsTrigger value="claude-web" disabled={isLocal}>
               claude.ai
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="claude-code" className="mt-4">
-            <ClaudeCodeTab folderName={folderName} gh={gh} />
+            <ClaudeCodeTab localPath={localPath} folderName={folderName} gh={gh} />
           </TabsContent>
           <TabsContent value="claude-desktop" className="mt-4">
-            <DesktopTab folderName={folderName} gh={gh} />
+            <DesktopTab localPath={localPath} folderName={folderName} gh={gh} />
           </TabsContent>
           <TabsContent value="claude-web" className="mt-4">
             <WebTab gh={gh} />
@@ -67,48 +73,63 @@ export function ConnectAiDialog({ open, onOpenChange, provider }: ConnectAiDialo
 }
 
 function ClaudeCodeTab({
+  localPath,
   folderName,
   gh,
 }: {
+  localPath: string | null
   folderName: string | null
   gh: GitHubProvider | null
 }) {
-  const cdCommand = folderName
-    ? `cd "${folderName}" && claude`
-    : gh
-      ? `gh repo clone ${gh.owner}/${gh.repo} && cd ${gh.repo} && claude`
-      : 'claude'
+  const vaultPath = localPath ?? `/absolute/path/to/${folderName ?? 'your-vault'}`
+  const addCommand = gh
+    ? `claude mcp add caedora -- npx -y caedora-mcp --github ${gh.owner}/${gh.repo} --pat <your-github-pat>`
+    : `claude mcp add caedora -- npx -y caedora-mcp --bundle "${vaultPath}"`
 
   return (
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-muted-foreground">
-        Claude Code already has file tools. Open your vault folder and start a
-        session. The welcome concept explains the OKF structure, and an optional{' '}
-        <code className="bg-muted rounded px-1">AGENTS.md</code> can add
-        vault-specific operating rules.
+        Register the OKF tools — indexed search, graph traversal, validation, and
+        conformant writes — with Claude Code, then start a session and run{' '}
+        <code className="bg-muted rounded px-1">/mcp</code> to confirm{' '}
+        <code className="bg-muted rounded px-1">caedora</code> is connected.
       </p>
-      <Snippet label="Terminal" value={cdCommand} />
+      <Snippet label="Terminal" value={addCommand} />
+      {!gh && !localPath && (
+        <p className="text-muted-foreground text-xs">
+          The browser doesn&apos;t expose your folder&apos;s full path — replace{' '}
+          <code className="bg-muted rounded px-1">{vaultPath}</code> with the real
+          path from your file manager. The Caedora desktop app fills this in
+          automatically.
+        </p>
+      )}
       <p className="text-muted-foreground text-xs">
-        For indexed search, graph traversal, validation, and conformant writes,
-        also wire up <code className="bg-muted rounded px-1">caedora-mcp</code>.
-        See the <em>Desktop / Cursor</em> tab for the config.
+        Append <code className="bg-muted rounded px-1">--read-only</code> to let
+        Claude read but not edit. Claude Code also has built-in file tools, so you
+        can just run <code className="bg-muted rounded px-1">claude</code> inside
+        the vault folder — the welcome concept and an optional{' '}
+        <code className="bg-muted rounded px-1">AGENTS.md</code> explain the OKF
+        structure.
       </p>
     </div>
   )
 }
 
 function DesktopTab({
+  localPath,
   folderName,
   gh,
 }: {
+  localPath: string | null
   folderName: string | null
   gh: GitHubProvider | null
 }) {
+  const vaultPath = localPath ?? `/absolute/path/to/${folderName ?? 'your-vault'}`
   const localConfig = `{
   "mcpServers": {
     "caedora": {
       "command": "npx",
-      "args": ["-y", "caedora-mcp", "--bundle", "/path/to/${folderName ?? 'your-vault'}"]
+      "args": ["-y", "caedora-mcp", "--bundle", "${vaultPath}"]
     }
   }
 }`
@@ -130,23 +151,52 @@ function DesktopTab({
   return (
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-muted-foreground">
-        Add this block to your Claude Desktop or Cursor MCP config. The server
-        exposes OKF concept search, graph, validation, ingest, and write tools
-        while preserving producer-defined YAML fields.
+        Caedora speaks the Model Context Protocol, so any MCP-aware client uses
+        the same config block. It exposes OKF concept search, graph, validation,
+        ingest, and write tools while preserving producer-defined YAML fields.
       </p>
       {folderName && <Snippet label="Local vault" value={localConfig} multiline />}
       {githubConfig && <Snippet label="GitHub vault" value={githubConfig} multiline />}
+      {folderName && !localPath && (
+        <p className="text-muted-foreground text-xs">
+          Replace <code className="bg-muted rounded px-1">{vaultPath}</code> with
+          your vault folder&apos;s absolute path (the desktop app knows it
+          automatically).
+        </p>
+      )}
       <p className="text-muted-foreground text-xs">
-        Config location:{' '}
-        <code className="bg-muted rounded px-1">
-          ~/Library/Application Support/Claude/claude_desktop_config.json
-        </code>{' '}
-        (macOS) or{' '}
-        <code className="bg-muted rounded px-1">
-          %APPDATA%\Claude\claude_desktop_config.json
-        </code>{' '}
-        (Windows).
+        Add <code className="bg-muted rounded px-1">--read-only</code> to the{' '}
+        <code className="bg-muted rounded px-1">args</code> array to let the AI
+        read but not write.
       </p>
+      <div className="text-muted-foreground space-y-1 text-xs">
+        <p className="font-medium">Config location by client:</p>
+        <ul className="list-inside list-disc space-y-0.5">
+          <li>
+            Claude Desktop —{' '}
+            <code className="bg-muted rounded px-1">
+              ~/Library/Application Support/Claude/claude_desktop_config.json
+            </code>{' '}
+            (macOS),{' '}
+            <code className="bg-muted rounded px-1">
+              %APPDATA%\Claude\claude_desktop_config.json
+            </code>{' '}
+            (Windows)
+          </li>
+          <li>
+            Cursor —{' '}
+            <code className="bg-muted rounded px-1">~/.cursor/mcp.json</code>
+          </li>
+          <li>
+            Gemini CLI —{' '}
+            <code className="bg-muted rounded px-1">~/.gemini/settings.json</code>
+          </li>
+          <li>
+            Other MCP clients — use the same{' '}
+            <code className="bg-muted rounded px-1">mcpServers</code> block.
+          </li>
+        </ul>
+      </div>
     </div>
   )
 }

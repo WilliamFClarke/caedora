@@ -18,6 +18,32 @@ For GitHub-hosted bundles:
 GITHUB_TOKEN=github_pat_xxx npx caedora-mcp --github owner/repository
 ```
 
+Add `--read-only` to disable all write tools.
+
+## Connect an MCP client
+
+The server speaks stdio, so any MCP-aware client uses the same config block:
+
+```json
+{
+  "mcpServers": {
+    "caedora": {
+      "command": "npx",
+      "args": ["-y", "caedora-mcp", "--bundle", "/absolute/path/to/your-vault"]
+    }
+  }
+}
+```
+
+Config file locations:
+
+- **Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json`
+  (macOS) / `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
+- **Cursor** — `~/.cursor/mcp.json`
+- **Gemini CLI** — `~/.gemini/settings.json`
+- **Claude Code** — already has file tools; run `claude` from the vault folder, and
+  optionally add this server for indexed search, graph traversal, and conformant writes.
+
 ## Read tools
 
 - `list_concepts(folder?, type?)`

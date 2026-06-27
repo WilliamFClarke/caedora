@@ -4,9 +4,20 @@
   "description": "Model Context Protocol server for reading and maintaining Open Knowledge Format bundles.",
   "license": "MPL-2.0",
   "homepage": "https://caedora.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WilliamFClarke/caedora.git",
+    "directory": "packages/caedora-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/WilliamFClarke/caedora/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "bin": {
-    "caedora-mcp": "./dist/cli.js"
+    "caedora-mcp": "dist/cli.js"
   },
   "main": "./dist/server.js",
   "types": "./dist/server.d.ts",
@@ -17,6 +28,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
+    "prepublishOnly": "npm run build",
     "test": "tsc -p tsconfig.test.json && node --test dist-test/tools/write.test.js",
     "typecheck": "tsc --noEmit"
   },
