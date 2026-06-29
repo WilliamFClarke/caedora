@@ -1,38 +1,51 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
-test('home shows the product landing with primary CTAs', async ({ page }) => {
+test('landing page renders the main product shell', async ({ page }) => {
   await page.goto('/')
+
   await expect(
-    page.getByRole('heading', { level: 1, name: /Your knowledge, open and entirely yours/i })
+    page.getByRole('heading', { level: 1, name: /Your knowledge,\s*open and entirely yours\./i })
   ).toBeVisible()
-  await expect(page.getByText('OKF v0.1 workspace with visual linking')).toBeVisible()
-  await expect(page.getByRole('button', { name: /Try in browser/i }).first()).toBeVisible()
-  await expect(page.getByRole('button', { name: /Download for/i }).first()).toBeVisible()
+  await expect(page.getByRole('link', { name: /^Caedora$/ })).toBeVisible()
+  const nav = page.getByRole('navigation')
+  await expect(nav.getByRole('link', { name: 'Download' })).toBeVisible()
+  await expect(nav.getByRole('link', { name: 'Pricing' })).toBeVisible()
 })
 
-test('Try in browser opens the connect dialog with Local and GitHub options', async ({ page }) => {
+test('start now opens the browser vault dialog', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: /Try in browser/i }).first().click()
+
+  await page.getByRole('button', { name: /Start now/i }).first().click()
+
   await expect(page.getByRole('dialog')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Create a new bundle' })).toBeVisible()
-  await expect(page.getByText(/Your OKF concepts live on your own computer/i)).toBeVisible()
-  await expect(page.getByRole('tab', { name: /On this computer/i })).toBeVisible()
-  await expect(page.getByRole('tab', { name: /GitHub/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Start a new vault' })).toBeVisible()
+  await expect(page.getByLabel('Vault name')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Create browser vault/i })).toBeVisible()
 })
 
-test('Download page lists all platforms', async ({ page }) => {
+test('account route opens account settings as a modal', async ({ page }) => {
+  await page.goto('/account')
+
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('main').getByRole('heading', { level: 2, name: 'Account' })).toBeVisible()
+  await expect(dialog.getByRole('tab', { name: 'GitHub' })).toBeVisible()
+  await expect(dialog.getByRole('tab', { name: 'Pricing' })).toBeVisible()
+})
+
+test('download page links to GitHub Release assets', async ({ page }) => {
   await page.goto('/download')
-  await expect(page.getByText('macOS', { exact: true }).first()).toBeVisible()
+
   await expect(page.getByRole('link', { name: /Apple Silicon/i })).toHaveAttribute(
     'href',
     'https://github.com/WilliamFClarke/caedora/releases/latest/download/Caedora-macOS-arm64.dmg'
   )
-  await expect(page.getByText('Windows', { exact: true }).first()).toBeVisible()
-  await expect(page.getByText('Linux', { exact: true }).first()).toBeVisible()
-})
-
-test('vault page redirects home when no vault connected', async ({ page }) => {
-  await page.goto('/vault')
-  await page.waitForURL('**/')
-  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('link', { name: /Windows installer/i })).toHaveAttribute(
+    'href',
+    'https://github.com/WilliamFClarke/caedora/releases/latest/download/Caedora-Windows-x64-Setup.exe'
+  )
+  await expect(page.getByRole('link', { name: /AppImage/i })).toHaveAttribute(
+    'href',
+    'https://github.com/WilliamFClarke/caedora/releases/latest/download/Caedora-Linux-x64.AppImage'
+  )
 })

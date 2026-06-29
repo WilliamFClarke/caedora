@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Bot,
   BriefcaseBusiness,
+  Check,
   FileCheck2,
   Folder,
   FolderTree,
@@ -73,6 +74,9 @@ export default function Home() {
         </Reveal>
         <Reveal>
           <ArgusSection />
+        </Reveal>
+        <Reveal>
+          <PricingSection />
         </Reveal>
         <Reveal>
           <FinalCta />
@@ -491,6 +495,91 @@ function ArgusSection() {
         </div>
       </div>
     </section>
+  )
+}
+
+function PricingSection() {
+  return (
+    <section id="pricing" className="border-b">
+      <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
+        <div className="mb-10 max-w-2xl">
+          <p className="text-primary mb-3 text-sm font-medium uppercase tracking-widest">
+            Pricing
+          </p>
+          <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
+            Start free. Stay local-first.
+          </h2>
+          <p className="text-muted-foreground mt-4 text-base leading-relaxed">
+            Caedora&apos;s core vault workflow is free and does not require an account.
+            Paid plans will only add optional account-linked features later.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <LandingPricingCard
+            title="Free"
+            price="$0"
+            badge="Available now"
+            features={[
+              'Local, browser, and GitHub vaults',
+              'No account required',
+              'Open Knowledge Format editing',
+              'Desktop app support',
+            ]}
+          />
+          <LandingPricingCard
+            title="Paid"
+            price="Coming soon"
+            badge="Planned"
+            muted
+            features={[
+              'Future subscription features',
+              'Account-linked entitlements',
+              'Optional paid services',
+              'Basic vault access stays free',
+            ]}
+          />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function LandingPricingCard({
+  title,
+  price,
+  badge,
+  features,
+  muted,
+}: {
+  title: string
+  price: string
+  badge: string
+  features: string[]
+  muted?: boolean
+}) {
+  return (
+    <div className="border-border bg-card rounded-xl border p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-base font-medium">{title}</p>
+          <p className={muted ? 'text-muted-foreground mt-2 text-2xl font-semibold' : 'mt-2 text-4xl font-semibold'}>
+            {price}
+          </p>
+        </div>
+        <span className="border-border text-muted-foreground rounded-full border px-3 py-1 text-xs">
+          {badge}
+        </span>
+      </div>
+      <ul className="mt-6 grid gap-3 text-sm">
+        {features.map((feature) => (
+          <li key={feature} className="flex gap-2">
+            <Check className="text-primary mt-0.5 size-4 shrink-0" />
+            <span className="text-muted-foreground">{feature}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 

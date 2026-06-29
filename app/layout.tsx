@@ -1,10 +1,13 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
+import { ClerkProvider } from '@clerk/nextjs'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { VaultProviderWrapper } from '@/components/vault-provider-wrapper'
+import { isClerkConfigured } from '@/lib/accounts'
+import { caedoraClerkAppearance } from '@/components/account/clerk-appearance'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -38,17 +41,25 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const app = (
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+    >
+      <VaultProviderWrapper>{children}</VaultProviderWrapper>
+    </ThemeProvider>
+  )
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <VaultProviderWrapper>{children}</VaultProviderWrapper>
-        </ThemeProvider>
+        {isClerkConfigured() ? (
+          <ClerkProvider appearance={caedoraClerkAppearance}>{app}</ClerkProvider>
+        ) : (
+          app
+        )}
         <Analytics />
         <SpeedInsights />
       </body>

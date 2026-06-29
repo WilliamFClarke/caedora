@@ -356,32 +356,60 @@ function useToolbarCollapseLevel(toolbarRef: React.RefObject<HTMLDivElement | nu
 }
 
 type ToolbarMeasurements = {
-  fullWidth: number;
-  widthsByThreshold: number[];
+  widthsByLevel: number[];
 };
 
 function measureToolbar(toolbar: HTMLDivElement): ToolbarMeasurements {
-  const widthsByThreshold = Array.from({ length: MAX_TOOLBAR_COLLAPSE_LEVEL + 1 }, () => 0);
+  const styles = window.getComputedStyle(toolbar);
+  const gap = cssPixels(styles.columnGap || styles.gap);
+  const children = Array.from(toolbar.children).filter(
+    (child): child is HTMLElement => child instanceof HTMLElement
+  ).map((item) => ({
+    width: outerWidth(item),
+    threshold: collapseThreshold(item),
+  }));
+  const widthsByLevel = Array.from({ length: MAX_TOOLBAR_COLLAPSE_LEVEL + 1 }, (_, level) => {
+    let width = 0;
+    let visibleCount = 0;
 
-  for (const item of toolbar.querySelectorAll<HTMLElement>("[data-collapse-threshold]")) {
-    const threshold = Number.parseInt(item.dataset.collapseThreshold ?? "", 10);
-    if (!Number.isFinite(threshold)) continue;
-    widthsByThreshold[threshold] += item.getBoundingClientRect().width;
-  }
+    for (const child of children) {
+      if (child.threshold !== null && level >= child.threshold) continue;
+      if (visibleCount > 0) width += gap;
+      width += child.width;
+      visibleCount += 1;
+    }
+
+    return width;
+  });
 
   return {
-    fullWidth: toolbar.scrollWidth,
-    widthsByThreshold,
+    widthsByLevel,
   };
 }
 
-function collapseLevelForWidth(measurements: ToolbarMeasurements, availableWidth: number) {
-  let hiddenWidth = 0;
+function collapseThreshold(element: HTMLElement) {
+  const threshold = Number.parseInt(element.dataset.collapseThreshold ?? "", 10);
+  return Number.isFinite(threshold) ? threshold : null;
+}
 
+function outerWidth(element: HTMLElement) {
+  const styles = window.getComputedStyle(element);
+  return (
+    element.getBoundingClientRect().width +
+    cssPixels(styles.marginLeft) +
+    cssPixels(styles.marginRight)
+  );
+}
+
+function cssPixels(value: string) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function collapseLevelForWidth(measurements: ToolbarMeasurements, availableWidth: number) {
   for (let level = 0; level <= MAX_TOOLBAR_COLLAPSE_LEVEL; level++) {
-    if (level > 0) hiddenWidth += measurements.widthsByThreshold[level] ?? 0;
     const overflowReserve = level > 0 ? OVERFLOW_BUTTON_WIDTH : 0;
-    if (measurements.fullWidth - hiddenWidth <= availableWidth - overflowReserve) {
+    if ((measurements.widthsByLevel[level] ?? 0) <= availableWidth - overflowReserve) {
       return level;
     }
   }

@@ -35,9 +35,9 @@ const PLATFORMS: {
     id: 'windows',
     icon: Monitor,
     title: 'Windows',
-    subtitle: 'Windows 10 / 11 · 64-bit',
+    subtitle: 'Windows 10 / 11, 64-bit',
     variants: [
-      { label: 'Installer (.exe)', note: 'Recommended for most users' },
+      DESKTOP_DOWNLOADS.windows.installer,
       { label: 'Portable (.zip)', note: 'No installation required' },
     ],
   },
@@ -47,7 +47,7 @@ const PLATFORMS: {
     title: 'Linux',
     subtitle: 'Ubuntu, Fedora, Arch, and other modern distros',
     variants: [
-      { label: 'AppImage', note: 'Works on most distros' },
+      DESKTOP_DOWNLOADS.linux.appImage,
       { label: 'Deb (.deb)', note: 'Debian / Ubuntu' },
     ],
   },
@@ -76,9 +76,9 @@ export default function DownloadPage() {
             .
           </h1>
           <p className="text-muted-foreground mt-5 text-base leading-relaxed">
-            Download the native macOS app for Apple Silicon, or use the full
-            Caedora experience right in your browser. Your concepts still write
-            straight to your own folder or GitHub repo.
+            Download the native desktop app, or use the full Caedora experience
+            right in your browser. Your concepts still write straight to your own
+            folder or GitHub repo.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -94,7 +94,6 @@ export default function DownloadPage() {
             <PlatformCard key={p.id} platform={p} highlighted={detected === p.id} />
           ))}
         </div>
-
       </main>
 
       <SiteFooter />
@@ -162,13 +161,16 @@ function PlatformCard({
           </Button>
         ))}
         <p className="text-muted-foreground mt-2 text-xs">
-          {platform.id === 'macos' ? (
+          {platform.id === 'macos' || platform.id === 'windows' || platform.id === 'linux' ? (
             <>
               Downloads are served from{' '}
               <a className="underline underline-offset-4" href={RELEASES_URL}>
                 GitHub Releases
               </a>
-              .
+              .{' '}
+              {platform.id === 'windows'
+                ? 'The Windows build is currently unsigned, so Windows may ask you to confirm before opening it.'
+                : null}
             </>
           ) : (
             'Coming soon.'

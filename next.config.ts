@@ -26,7 +26,8 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://github.com",
+            value:
+              "frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://github.com https://*.clerk.accounts.dev https://*.clerk.com",
           },
         ],
       },

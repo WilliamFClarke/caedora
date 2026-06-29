@@ -10,7 +10,27 @@ const compat = new FlatCompat({
 })
 
 const eslintConfig = [
+  {
+    ignores: [
+      '.next/**',
+      '.desktop-app/**',
+      'dist/**',
+      'node_modules/**',
+      'playwright-report/**',
+      'test-results/**',
+      'coverage/**',
+      'next-env.d.ts',
+      'packages/*/dist/**',
+      'packages/caedora-mcp/dist-test/**',
+    ],
+  },
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
+  {
+    files: ['electron/**/*.cjs'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
 ]
 
 export default eslintConfig

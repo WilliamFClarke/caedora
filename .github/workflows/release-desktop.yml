@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Playwright browser
+        run: npx playwright install chromium
+
       - name: Type check
         run: npx tsc --noEmit
 
@@ -88,6 +91,9 @@ jobs:
 
       - name: Build desktop artifacts
         run: npm run desktop:dist
+        env:
+          ELECTRON_CACHE: ${{ github.workspace }}/.electron-cache
+          ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.electron-cache/builder
 
       - name: Install Linux runtime dependencies
         if: runner.os == 'Linux'
@@ -133,10 +139,36 @@ jobs:
           cd release-assets
           sha256sum * > checksums.txt
 
+      - name: Prepare release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v version="$version" '
+            $0 == "## [" version "]" { capture = 1; next }
+            capture && /^## \[/ { capture = 0 }
+            capture { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            {
+              echo "Desktop release ${GITHUB_REF_NAME}."
+              echo
+              echo "No matching CHANGELOG.md section was found for ${version}."
+            } > release-notes.md
+          fi
+
+          {
+            echo
+            echo "## Checksums"
+            echo
+            echo '```text'
+            cat release-assets/checksums.txt
+            echo '```'
+          } >> release-notes.md
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" release-assets/* \
             --title "${GITHUB_REF_NAME}" \
-            --generate-notes
+            --notes-file release-notes.md
