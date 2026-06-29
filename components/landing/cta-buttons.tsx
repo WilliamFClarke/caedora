@@ -36,8 +36,7 @@ export function CtaButtons({ size = 'lg', className, showDownloadOnly }: CtaButt
   const chosen: Os = override ?? (detected === 'mobile' || detected === 'unknown' ? 'macos' : detected)
   const downloadLabel = `Download for ${OS_LABELS[chosen]}`
   const isMobile = detected === 'mobile'
-  const downloadHref =
-    chosen === 'macos' ? DESKTOP_DOWNLOADS.macos.appleSilicon.href : undefined
+  const downloadHref = desktopDownloadHref(chosen)
 
   const sizeClasses = size === 'xl' ? 'h-12 px-6 text-base' : 'h-11 px-5 text-sm'
 
@@ -73,7 +72,7 @@ export function CtaButtons({ size = 'lg', className, showDownloadOnly }: CtaButt
           asChild={Boolean(downloadHref)}
           disabled={!downloadHref}
           aria-disabled={!downloadHref}
-          title={downloadHref ? 'Download Apple Silicon macOS app' : 'Coming soon'}
+          title={downloadHref ? downloadLabel : 'Coming soon'}
           className={cn(
             sizeClasses,
             'flex-1 rounded-none border-0 bg-transparent shadow-none hover:bg-accent disabled:opacity-100 disabled:cursor-not-allowed sm:flex-none'
@@ -128,4 +127,11 @@ export function CtaButtons({ size = 'lg', className, showDownloadOnly }: CtaButt
       />
     </div>
   )
+}
+
+function desktopDownloadHref(os: Os) {
+  if (os === 'macos') return DESKTOP_DOWNLOADS.macos.appleSilicon.href
+  if (os === 'windows') return DESKTOP_DOWNLOADS.windows.installer.href
+  if (os === 'linux') return DESKTOP_DOWNLOADS.linux.appImage.href
+  return undefined
 }

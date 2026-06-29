@@ -8,6 +8,7 @@ Caedora will publish a public core application under the Mozilla Public License 
 - Desktop app: fully offline-capable
 - Release hosting: public GitHub Releases from the main repository
 - Release trigger: semantic version tags such as `v0.1.0`
+- Release instructions: `docs/releasing.md`
 - Release gate: no desktop release is published unless all required automated tests pass
 - Initial unsigned builds:
   - Windows x64 installer

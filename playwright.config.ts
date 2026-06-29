@@ -23,14 +23,16 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'npm run web:standalone && node .next/standalone/server.js',
-    env: {
-      HOSTNAME: '127.0.0.1',
-      PORT: port,
-    },
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER
+    ? undefined
+    : {
+        command: 'node scripts/run-e2e-server.mjs',
+        env: {
+          HOSTNAME: '127.0.0.1',
+          PORT: port,
+        },
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120 * 1000,
+      },
 })

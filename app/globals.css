@@ -460,6 +460,7 @@
 @layer base {
   :root {
     --desktop-window-controls-width: 144px;
+    --desktop-toolbar-actions-width: 4.75rem;
     --desktop-titlebar-height: 44px;
   }
 
@@ -476,7 +477,7 @@
   }
 
   html.caedora-desktop:not(.caedora-platform-darwin) .caedora-editor-toolbar {
-    padding-right: calc(var(--desktop-window-controls-width) + 5.5rem);
+    padding-right: calc(var(--desktop-window-controls-width) + var(--desktop-toolbar-actions-width));
   }
 
   html.caedora-desktop:not(.caedora-platform-darwin) .caedora-vault-workspace:has(.caedora-ai-sidebar[aria-hidden="false"]) .caedora-editor-toolbar {
@@ -820,6 +821,28 @@
     width: 100%;
   }
 
+  .caedora-clerk-modal-backdrop {
+    background: color-mix(in oklch, var(--background) 42%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .caedora-clerk-modal-content {
+    border-radius: var(--radius);
+  }
+
+  .caedora-clerk-modal-close-button,
+  .caedora-clerk-icon-button {
+    color: var(--muted-foreground);
+    border-radius: calc(var(--radius) - 2px);
+  }
+
+  .caedora-clerk-modal-close-button:hover,
+  .caedora-clerk-icon-button:hover {
+    background: var(--accent);
+    color: var(--foreground);
+  }
+
   .caedora-clerk-card-box,
   .caedora-clerk-card {
     border: 1px solid var(--border);
@@ -895,6 +918,31 @@
   .caedora-clerk-link {
     color: var(--primary);
     font-weight: 500;
+  }
+
+  .caedora-clerk-avatar-box {
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+  }
+
+  .caedora-clerk-user-card {
+    min-width: 18rem;
+    padding: 0.25rem;
+  }
+
+  .caedora-clerk-popover-action {
+    border-radius: calc(var(--radius) - 2px);
+    color: var(--foreground);
+  }
+
+  .caedora-clerk-popover-action:hover {
+    background: var(--accent);
+  }
+
+  .caedora-clerk-popover-footer {
+    display: none;
   }
 
   .mono,

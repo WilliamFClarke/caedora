@@ -19,12 +19,12 @@
     "desktop:dist": "npm run desktop:build:web && electron-builder --publish never",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "screenshots": "node scripts/generate-product-screenshots.mjs",
     "postinstall": "electron-builder install-app-deps",
     "test:desktop": "playwright test --config=playwright.desktop.config.ts",
     "test:unit": "npm test --workspace packages/caedora-mcp",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/run-e2e.mjs",
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
@@ -93,7 +93,7 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@playwright/test": "^1.51.1",
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4.1.4",
     "@types/diff": "^5.2.3",
     "@types/node": "^20",
@@ -179,6 +179,7 @@
           ]
         }
       ],
+      "artifactName": "Caedora-Linux-${arch}.${ext}",
       "icon": "electron/icon.png",
       "category": "Utility"
     },

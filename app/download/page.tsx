@@ -47,7 +47,7 @@ const PLATFORMS: {
     title: 'Linux',
     subtitle: 'Ubuntu, Fedora, Arch, and other modern distros',
     variants: [
-      { label: 'AppImage', note: 'Works on most distros' },
+      DESKTOP_DOWNLOADS.linux.appImage,
       { label: 'Deb (.deb)', note: 'Debian / Ubuntu' },
     ],
   },
@@ -161,7 +161,7 @@ function PlatformCard({
           </Button>
         ))}
         <p className="text-muted-foreground mt-2 text-xs">
-          {platform.id === 'macos' || platform.id === 'windows' ? (
+          {platform.id === 'macos' || platform.id === 'windows' || platform.id === 'linux' ? (
             <>
               Downloads are served from{' '}
               <a className="underline underline-offset-4" href={RELEASES_URL}>

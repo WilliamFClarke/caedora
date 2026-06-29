@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Bot,
   Check,
@@ -50,6 +51,10 @@ import { useSettings } from '@/lib/settings-context'
 import { getDesktopApi } from '@/lib/desktop'
 import { ACCOUNT_URL } from '@/lib/accounts'
 import { ConnectDialog } from '@/components/connect-dialog'
+import { caedoraClerkAppearance } from '@/components/account/clerk-appearance'
+import { getActiveVaultId, listVaults, removeVault } from '@/lib/storage'
+import { useVault } from '@/lib/vault-context'
+import { type StoredVault, vaultLabel } from '@/components/vault/saved-vault-list'
 import { ARGUS_ASSISTANT_PROMPT } from '@/lib/ai/argus-context'
 import {
   cancelModelDownload,
@@ -176,56 +181,6 @@ function AccountSettings() {
     setIsDesktop(Boolean(getDesktopApi()))
   }, [])
 
-  if (isDesktop) {
-    return (
-      <SettingsSectionBlock title="Account">
-        <ItemGroup className="overflow-hidden rounded-lg border bg-card">
-        <Item className="rounded-none">
-          <ItemContent>
-            <ItemTitle>Account</ItemTitle>
-            <ItemDescription>
-              Desktop account management opens in your browser. The desktop app
-              remains fully usable without signing in.
-            </ItemDescription>
-          </ItemContent>
-          <ItemActions>
-            <Button asChild size="sm" variant="outline">
-              <a href={ACCOUNT_URL} target="_blank" rel="noreferrer">
-                <ExternalLink className="size-4" />
-                Manage account
-              </a>
-            </Button>
-          </ItemActions>
-        </Item>
-        </ItemGroup>
-      </SettingsSectionBlock>
-    )
-  }
-
-  if (!clerkConfigured) {
-    return (
-      <SettingsSectionBlock title="Account">
-        <ItemGroup className="overflow-hidden rounded-lg border bg-card">
-        <Item className="rounded-none">
-          <ItemContent>
-            <ItemTitle>Accounts are not configured yet</ItemTitle>
-            <ItemDescription>
-              Add Clerk through Vercel Marketplace to enable optional email,
-              GitHub, and Google accounts. Caedora can still be used without an
-              account.
-            </ItemDescription>
-          </ItemContent>
-          <ItemActions>
-            <Button asChild size="sm" variant="outline">
-              <a href="/account">Setup details</a>
-            </Button>
-          </ItemActions>
-        </Item>
-        </ItemGroup>
-      </SettingsSectionBlock>
-    )
-  }
-
   return (
     <>
       <Tabs defaultValue="account" className="gap-5">
@@ -235,7 +190,11 @@ function AccountSettings() {
           <TabsTrigger value="pricing">Pricing</TabsTrigger>
         </TabsList>
         <TabsContent value="account">
-          <ConfiguredAccountSettings />
+          {clerkConfigured ? (
+            <ConfiguredAccountSettings isDesktop={isDesktop} />
+          ) : (
+            <UnconfiguredAccountSettings />
+          )}
         </TabsContent>
         <TabsContent value="github">
           <GitHubAccountSettings onOpenGitHub={() => setConnectGitHubOpen(true)} />
@@ -255,7 +214,31 @@ function AccountSettings() {
   )
 }
 
-function ConfiguredAccountSettings() {
+function UnconfiguredAccountSettings() {
+  return (
+    <SettingsSectionBlock title="Account">
+      <ItemGroup className="overflow-hidden rounded-lg border bg-card">
+        <Item className="rounded-none">
+          <ItemContent>
+            <ItemTitle>Accounts are not configured yet</ItemTitle>
+            <ItemDescription>
+              Add Clerk through Vercel Marketplace to enable optional email,
+              GitHub, and Google accounts. Caedora can still be used without an
+              account, and GitHub vault access remains available separately.
+            </ItemDescription>
+          </ItemContent>
+          <ItemActions>
+            <Button asChild size="sm" variant="outline">
+              <a href="/account">Setup details</a>
+            </Button>
+          </ItemActions>
+        </Item>
+      </ItemGroup>
+    </SettingsSectionBlock>
+  )
+}
+
+function ConfiguredAccountSettings({ isDesktop }: { isDesktop: boolean }) {
   const { isLoaded, isSignedIn, user } = useUser()
 
   if (!isLoaded) {
@@ -277,6 +260,28 @@ function ConfiguredAccountSettings() {
   return (
     <SettingsSectionBlock title="Account">
       <ItemGroup className="overflow-hidden rounded-lg border bg-card">
+      {isDesktop && (
+        <>
+          <Item variant="muted" size="sm" className="rounded-none">
+            <ItemContent>
+              <ItemTitle>Web account page</ItemTitle>
+              <ItemDescription>
+                Open the hosted account page in your browser for account
+                management outside the desktop app.
+              </ItemDescription>
+            </ItemContent>
+            <ItemActions>
+              <Button asChild size="sm" variant="outline">
+                <a href={ACCOUNT_URL} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-4" />
+                  Open account page
+                </a>
+              </Button>
+            </ItemActions>
+          </Item>
+          <Separator />
+        </>
+      )}
       <Item className="rounded-none">
         <ItemContent>
           <ItemTitle>{isSignedIn ? 'Signed in' : 'Not signed in'}</ItemTitle>
@@ -289,7 +294,7 @@ function ConfiguredAccountSettings() {
         <ItemActions className="flex-wrap justify-end">
           {isSignedIn ? (
             <>
-              <UserButton />
+              <UserButton appearance={caedoraClerkAppearance} />
               <SignOutButton>
                 <Button type="button" size="sm" variant="outline">
                   Sign out
@@ -300,7 +305,7 @@ function ConfiguredAccountSettings() {
               </Button>
             </>
           ) : (
-            <SignInButton mode="modal">
+            <SignInButton mode="modal" appearance={caedoraClerkAppearance}>
               <Button type="button" size="sm">
                 Sign in
               </Button>
@@ -324,6 +329,39 @@ function ConfiguredAccountSettings() {
 }
 
 function GitHubAccountSettings({ onOpenGitHub }: { onOpenGitHub: () => void }) {
+  const router = useRouter()
+  const { connectToVault } = useVault()
+  const [githubVaults, setGithubVaults] = useState<StoredVault[]>([])
+  const [activeVaultId, setActiveVaultIdState] = useState<string | null>(null)
+  const [busyVaultId, setBusyVaultId] = useState<string | null>(null)
+
+  async function refreshGithubVaults() {
+    const [stored, active] = await Promise.all([listVaults(), getActiveVaultId()])
+    setGithubVaults(stored.filter((vault) => vault.state.type === 'github'))
+    setActiveVaultIdState(active)
+  }
+
+  useEffect(() => {
+    void refreshGithubVaults()
+  }, [])
+
+  async function openVault(id: string) {
+    if (busyVaultId) return
+    setBusyVaultId(id)
+    try {
+      await connectToVault(id)
+      router.push('/vault')
+      await refreshGithubVaults()
+    } finally {
+      setBusyVaultId(null)
+    }
+  }
+
+  async function deleteVault(id: string) {
+    await removeVault(id)
+    await refreshGithubVaults()
+  }
+
   return (
     <SettingsSectionBlock title="GitHub">
       <ItemGroup className="overflow-hidden rounded-lg border bg-card">
@@ -342,6 +380,66 @@ function GitHubAccountSettings({ onOpenGitHub }: { onOpenGitHub: () => void }) {
               Connect GitHub vault
             </Button>
           </ItemActions>
+        </Item>
+        <Separator />
+        <Item className="rounded-none">
+          <ItemContent>
+            <ItemTitle>Previously connected repositories</ItemTitle>
+            <ItemDescription>
+              These GitHub vault connections are saved on this device. They are
+              not tied to a Caedora account and can be reopened after signing out
+              and back in on the same device.
+            </ItemDescription>
+            <div className="mt-3 grid gap-2">
+              {githubVaults.length > 0 ? (
+                githubVaults.map((vault) => {
+                  const active = vault.id === activeVaultId
+                  const busy = vault.id === busyVaultId
+                  return (
+                    <div
+                      key={vault.id}
+                      className="border-border bg-background flex min-w-0 flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {vaultLabel(vault.state)}
+                        </p>
+                        <p className="text-muted-foreground text-xs">
+                          {active ? 'Currently open' : 'Saved GitHub vault'}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={active ? 'secondary' : 'outline'}
+                          onClick={() => void openVault(vault.id)}
+                          disabled={active || Boolean(busyVaultId)}
+                        >
+                          {busy ? <Loader2 className="size-4 animate-spin" /> : <Github className="size-4" />}
+                          {active ? 'Open' : 'Open'}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void deleteVault(vault.id)}
+                          disabled={Boolean(busyVaultId)}
+                          aria-label={`Remove ${vaultLabel(vault.state)} connection`}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })
+              ) : (
+                <p className="text-muted-foreground rounded-md border border-dashed p-3 text-sm">
+                  No GitHub repositories are saved on this device yet.
+                </p>
+              )}
+            </div>
+          </ItemContent>
         </Item>
         <Separator />
         <Item variant="muted" size="sm" className="rounded-none">
