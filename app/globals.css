@@ -815,6 +815,88 @@
     font-feature-settings: "ss01", "cv11";
     letter-spacing: -0.005em;
   }
+
+  .caedora-clerk-root {
+    width: 100%;
+  }
+
+  .caedora-clerk-card-box,
+  .caedora-clerk-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--popover);
+    box-shadow: 0 18px 60px color-mix(in oklch, var(--foreground) 10%, transparent);
+  }
+
+  .caedora-clerk-title {
+    color: var(--foreground);
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  .caedora-clerk-subtitle,
+  .caedora-clerk-divider-text {
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+  }
+
+  .caedora-clerk-label {
+    color: var(--foreground);
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .caedora-clerk-input {
+    min-height: 2.5rem;
+    border: 1px solid var(--input);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--background);
+    color: var(--foreground);
+    box-shadow: none;
+  }
+
+  .caedora-clerk-input:focus {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 18%, transparent);
+  }
+
+  .caedora-clerk-primary-button {
+    min-height: 2.5rem;
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-weight: 500;
+    letter-spacing: 0;
+    box-shadow: none;
+  }
+
+  .caedora-clerk-primary-button:hover {
+    background: color-mix(in oklch, var(--primary) 92%, var(--foreground));
+  }
+
+  .caedora-clerk-social-button {
+    min-height: 2.5rem;
+    border-color: var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--background);
+    color: var(--foreground);
+    box-shadow: none;
+  }
+
+  .caedora-clerk-social-button:hover {
+    background: var(--accent);
+  }
+
+  .caedora-clerk-divider-line {
+    background: var(--border);
+  }
+
+  .caedora-clerk-link {
+    color: var(--primary);
+    font-weight: 500;
+  }
+
   .mono,
   code,
   kbd,

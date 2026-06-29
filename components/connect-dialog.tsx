@@ -69,16 +69,24 @@ interface ConnectDialogProps {
   onOpenChange: (open: boolean) => void
   mode: Mode
   showSavedVaults?: boolean
+  initialSource?: 'local' | 'github'
 }
 
-export function ConnectDialog({ open, onOpenChange, mode, showSavedVaults = true }: ConnectDialogProps) {
+export function ConnectDialog({
+  open,
+  onOpenChange,
+  mode,
+  showSavedVaults = true,
+  initialSource,
+}: ConnectDialogProps) {
   const router = useRouter()
   const { connectToVault, disconnect } = useVault()
   const openDefaultTab =
-    typeof window !== 'undefined' &&
+    initialSource ??
+    (typeof window !== 'undefined' &&
     (window.caedoraDesktop || 'showDirectoryPicker' in window)
       ? 'local'
-      : 'github'
+      : 'github')
 
   const vaultTemplate: VaultTemplate = 'default'
   const [preparing, setPreparing] = useState(false)
@@ -160,7 +168,14 @@ export function ConnectDialog({ open, onOpenChange, mode, showSavedVaults = true
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
       >
-        {!showVaultLauncher && (
+        {showVaultLauncher ? (
+          <>
+            <DialogTitle className="sr-only">Open an existing vault</DialogTitle>
+            <DialogDescription className="sr-only">
+              Reconnect to a saved vault, create a vault, or add an existing vault.
+            </DialogDescription>
+          </>
+        ) : (
           <DialogHeader>
             <DialogTitle>{effectiveMode === 'create' ? 'Start a new vault' : 'Open an existing vault'}</DialogTitle>
             <DialogDescription>

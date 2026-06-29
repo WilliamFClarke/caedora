@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Github } from 'lucide-react'
+import { AccountLink } from '@/components/account/account-link'
 import { ModeToggle } from '@/components/mode-toggle'
 import { REPOSITORY_URL } from '@/lib/downloads'
 
@@ -47,6 +48,12 @@ export function SiteHeader() {
             Argus AI
           </Link>
           <Link
+            href="/#pricing"
+            className="text-muted-foreground hover:text-foreground transition"
+          >
+            Pricing
+          </Link>
+          <Link
             href="/download"
             className="text-muted-foreground hover:text-foreground transition"
           >
@@ -55,6 +62,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-1">
+          <AccountLink />
           <a
             href={REPOSITORY_URL}
             target="_blank"

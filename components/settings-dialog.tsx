@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Bot,
+  Check,
   Cloud,
   CircleCheck,
   Cpu,
   Download,
+  ExternalLink,
   FolderOpen,
+  Github,
   Keyboard,
   KeyRound,
   Loader2,
@@ -18,8 +21,11 @@ import {
   ToggleRight,
   Trash2,
   Type,
+  UserRound,
 } from 'lucide-react'
+import { SignInButton, SignOutButton, UserButton, useUser } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
   DialogContent,
@@ -42,6 +48,8 @@ import {
 } from '@/lib/settings'
 import { useSettings } from '@/lib/settings-context'
 import { getDesktopApi } from '@/lib/desktop'
+import { ACCOUNT_URL } from '@/lib/accounts'
+import { ConnectDialog } from '@/components/connect-dialog'
 import { ARGUS_ASSISTANT_PROMPT } from '@/lib/ai/argus-context'
 import {
   cancelModelDownload,
@@ -57,7 +65,7 @@ import type { AiProviderKind, AiProviderState, AiSettings as DesktopAiSettings }
 import { cn } from '@/lib/utils'
 import { VaultManagerDialog } from '@/components/vault/vault-manager-dialog'
 
-export type SettingsSection = 'general' | 'ai' | 'editor' | 'appearance' | 'hotkeys'
+export type SettingsSection = 'general' | 'account' | 'ai' | 'editor' | 'appearance' | 'hotkeys'
 
 const sections: Array<{
   group: string
@@ -67,10 +75,16 @@ const sections: Array<{
     group: 'Options',
     items: [
       { id: 'general', label: 'General', Icon: SlidersHorizontal },
-      { id: 'ai', label: 'Argus (AI Assistant)', Icon: Bot },
       { id: 'editor', label: 'Editor', Icon: Type },
       { id: 'appearance', label: 'Appearance', Icon: Palette },
       { id: 'hotkeys', label: 'Hotkeys', Icon: Keyboard },
+      { id: 'account', label: 'Account', Icon: UserRound },
+    ],
+  },
+  {
+    group: 'Integrations',
+    items: [
+      { id: 'ai', label: 'Argus (AI Assistant)', Icon: Bot },
     ],
   },
 ]
@@ -105,13 +119,13 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[calc(100dvh-1rem)] max-h-none w-[calc(100vw-1rem)] max-w-[1120px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1120px] md:h-[86vh] md:w-[96vw]">
+      <DialogContent className="flex h-[calc(100dvh-1rem)] max-h-none w-[calc(100vw-1rem)] max-w-[1320px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1320px] md:h-[88vh] md:w-[96vw]">
         <DialogTitle className="sr-only">Settings</DialogTitle>
-        <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] md:grid-cols-[180px_1fr] md:grid-rows-none">
-          <aside className="border-b p-2 md:border-r md:border-b-0">
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] md:grid-cols-[300px_1fr] md:grid-rows-none">
+          <aside className="bg-muted/20 border-b p-4 md:border-r md:border-b-0">
             {visibleSections.map((group) => (
-              <div key={group.group} className="flex flex-row flex-wrap items-center gap-1 md:flex-col md:flex-nowrap md:items-stretch">
-                <div className="text-muted-foreground hidden px-2 py-1 text-[10px] font-medium uppercase tracking-wide md:block">
+              <div key={group.group} className="mb-8 flex flex-row flex-wrap items-center gap-1 last:mb-0 md:flex-col md:flex-nowrap md:items-stretch">
+                <div className="text-muted-foreground hidden px-2 pb-2 text-[11px] font-medium md:block">
                   {group.group}
                 </div>
                 {group.items.map(({ id, label, Icon }) => (
@@ -120,7 +134,7 @@ export function SettingsDialog({
                     type="button"
                     onClick={() => setSection(id)}
                     className={cn(
-                      'flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs transition-colors md:h-7',
+                      'flex h-9 shrink-0 items-center gap-2 rounded-md px-2.5 text-sm transition-colors md:h-8',
                       section === id
                         ? 'bg-accent text-foreground'
                         : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
@@ -134,19 +148,298 @@ export function SettingsDialog({
             ))}
           </aside>
 
-          <main className="min-h-0 overflow-y-auto p-3 sm:p-5">
-            <div className="mb-3 sm:mb-5">
-              <h2 className="text-lg font-semibold">{title}</h2>
+          <main className="min-h-0 overflow-y-auto p-5 sm:p-8">
+            <div className="mx-auto max-w-4xl">
+            <div className="mb-5">
+              <h2 className="text-xl font-semibold">{title}</h2>
             </div>
             {section === 'general' && <GeneralSettings />}
+            {section === 'account' && <AccountSettings />}
             {section === 'ai' && <AiSettings />}
             {section === 'editor' && <EditorSettings />}
             {section === 'appearance' && <AppearanceSettings />}
             {section === 'hotkeys' && <HotkeySettings />}
+            </div>
           </main>
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function AccountSettings() {
+  const [connectGitHubOpen, setConnectGitHubOpen] = useState(false)
+  const [isDesktop, setIsDesktop] = useState(false)
+  const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
+
+  useEffect(() => {
+    setIsDesktop(Boolean(getDesktopApi()))
+  }, [])
+
+  if (isDesktop) {
+    return (
+      <SettingsSectionBlock title="Account">
+        <ItemGroup className="overflow-hidden rounded-lg border bg-card">
+        <Item className="rounded-none">
+          <ItemContent>
+            <ItemTitle>Account</ItemTitle>
+            <ItemDescription>
+              Desktop account management opens in your browser. The desktop app
+              remains fully usable without signing in.
+            </ItemDescription>
+          </ItemContent>
+          <ItemActions>
+            <Button asChild size="sm" variant="outline">
+              <a href={ACCOUNT_URL} target="_blank" rel="noreferrer">
+                <ExternalLink className="size-4" />
+                Manage account
+              </a>
+            </Button>
+          </ItemActions>
+        </Item>
+        </ItemGroup>
+      </SettingsSectionBlock>
+    )
+  }
+
+  if (!clerkConfigured) {
+    return (
+      <SettingsSectionBlock title="Account">
+        <ItemGroup className="overflow-hidden rounded-lg border bg-card">
+        <Item className="rounded-none">
+          <ItemContent>
+            <ItemTitle>Accounts are not configured yet</ItemTitle>
+            <ItemDescription>
+              Add Clerk through Vercel Marketplace to enable optional email,
+              GitHub, and Google accounts. Caedora can still be used without an
+              account.
+            </ItemDescription>
+          </ItemContent>
+          <ItemActions>
+            <Button asChild size="sm" variant="outline">
+              <a href="/account">Setup details</a>
+            </Button>
+          </ItemActions>
+        </Item>
+        </ItemGroup>
+      </SettingsSectionBlock>
+    )
+  }
+
+  return (
+    <>
+      <Tabs defaultValue="account" className="gap-5">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="account">Account</TabsTrigger>
+          <TabsTrigger value="github">GitHub</TabsTrigger>
+          <TabsTrigger value="pricing">Pricing</TabsTrigger>
+        </TabsList>
+        <TabsContent value="account">
+          <ConfiguredAccountSettings />
+        </TabsContent>
+        <TabsContent value="github">
+          <GitHubAccountSettings onOpenGitHub={() => setConnectGitHubOpen(true)} />
+        </TabsContent>
+        <TabsContent value="pricing">
+          <PricingSettings />
+        </TabsContent>
+      </Tabs>
+      <ConnectDialog
+        open={connectGitHubOpen}
+        onOpenChange={setConnectGitHubOpen}
+        mode="open"
+        showSavedVaults={false}
+        initialSource="github"
+      />
+    </>
+  )
+}
+
+function ConfiguredAccountSettings() {
+  const { isLoaded, isSignedIn, user } = useUser()
+
+  if (!isLoaded) {
+    return (
+      <ItemGroup>
+        <Item>
+          <ItemContent>
+            <ItemTitle>Account</ItemTitle>
+            <ItemDescription>Loading account state...</ItemDescription>
+          </ItemContent>
+          <ItemActions>
+            <Loader2 className="text-muted-foreground size-4 animate-spin" />
+          </ItemActions>
+        </Item>
+      </ItemGroup>
+    )
+  }
+
+  return (
+    <SettingsSectionBlock title="Account">
+      <ItemGroup className="overflow-hidden rounded-lg border bg-card">
+      <Item className="rounded-none">
+        <ItemContent>
+          <ItemTitle>{isSignedIn ? 'Signed in' : 'Not signed in'}</ItemTitle>
+          <ItemDescription>
+            {isSignedIn
+              ? user.primaryEmailAddress?.emailAddress ?? user.fullName ?? 'Account connected.'
+              : 'Use Caedora without an account, or sign in for future account-linked features.'}
+          </ItemDescription>
+        </ItemContent>
+        <ItemActions className="flex-wrap justify-end">
+          {isSignedIn ? (
+            <>
+              <UserButton />
+              <SignOutButton>
+                <Button type="button" size="sm" variant="outline">
+                  Sign out
+                </Button>
+              </SignOutButton>
+              <Button asChild size="sm" variant="secondary">
+                <a href="/account">Account page</a>
+              </Button>
+            </>
+          ) : (
+            <SignInButton mode="modal">
+              <Button type="button" size="sm">
+                Sign in
+              </Button>
+            </SignInButton>
+          )}
+        </ItemActions>
+      </Item>
+      <Separator />
+      <Item variant="muted" size="sm" className="rounded-none">
+        <ItemContent>
+          <ItemTitle>Privacy boundary</ItemTitle>
+          <ItemDescription>
+            Accounts do not store vault content, note paths, note titles, GitHub
+            tokens, or vault indexes on Caedora servers.
+          </ItemDescription>
+        </ItemContent>
+      </Item>
+      </ItemGroup>
+    </SettingsSectionBlock>
+  )
+}
+
+function GitHubAccountSettings({ onOpenGitHub }: { onOpenGitHub: () => void }) {
+  return (
+    <SettingsSectionBlock title="GitHub">
+      <ItemGroup className="overflow-hidden rounded-lg border bg-card">
+        <Item className="rounded-none">
+          <ItemContent>
+            <ItemTitle>GitHub vault access</ItemTitle>
+            <ItemDescription>
+              Connect a GitHub repository as a Caedora vault. This works with or
+              without a Caedora account; repository permission is granted separately
+              through GitHub.
+            </ItemDescription>
+          </ItemContent>
+          <ItemActions>
+            <Button type="button" onClick={onOpenGitHub}>
+              <Github className="size-4" />
+              Connect GitHub vault
+            </Button>
+          </ItemActions>
+        </Item>
+        <Separator />
+        <Item variant="muted" size="sm" className="rounded-none">
+          <ItemContent>
+            <ItemTitle>Separate permission</ItemTitle>
+            <ItemDescription>
+              Signing in with GitHub identifies you. It does not silently grant
+              repository access or store repository content on Caedora servers.
+            </ItemDescription>
+          </ItemContent>
+        </Item>
+      </ItemGroup>
+    </SettingsSectionBlock>
+  )
+}
+
+function PricingSettings() {
+  return (
+    <SettingsSectionBlock title="Pricing">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <PricingCard
+          title="Free"
+          price="$0"
+          badge="Current"
+          features={[
+            'Local, browser, and GitHub vaults',
+            'No account required',
+            'Open Knowledge Format editing',
+            'Desktop app support',
+          ]}
+        />
+        <PricingCard
+          title="Paid"
+          price="Coming soon"
+          badge="Planned"
+          muted
+          features={[
+            'Future subscription features',
+            'Account-linked entitlements',
+            'Optional paid services',
+            'Basic vault access stays free',
+          ]}
+        />
+      </div>
+    </SettingsSectionBlock>
+  )
+}
+
+function PricingCard({
+  title,
+  price,
+  badge,
+  features,
+  muted,
+}: {
+  title: string
+  price: string
+  badge: string
+  features: string[]
+  muted?: boolean
+}) {
+  return (
+    <div className="border-border bg-card rounded-lg border p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">{title}</p>
+          <p className={cn('mt-1 font-semibold', muted ? 'text-muted-foreground text-xl' : 'text-2xl')}>
+            {price}
+          </p>
+        </div>
+        <span className="border-border text-muted-foreground rounded-full border px-2 py-0.5 text-xs">
+          {badge}
+        </span>
+      </div>
+      <ul className="mt-4 grid gap-2 text-sm">
+        {features.map((feature) => (
+          <li key={feature} className="flex gap-2">
+            <Check className="text-primary mt-0.5 size-3.5 shrink-0" />
+            <span className="text-muted-foreground">{feature}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function SettingsSectionBlock({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="mb-8 last:mb-0">
+      <h3 className="mb-4 text-base font-semibold">{title}</h3>
+      {children}
+    </section>
   )
 }
 

@@ -25,6 +25,7 @@ import {
   Search,
   Star,
   Trash2,
+  UserRound,
   Wrench,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -569,6 +570,18 @@ export function AppSidebar({
                 <RefreshCw className={cn('size-4', syncing && 'animate-spin')} />
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsSection('account')
+                setSettingsOpen(true)
+              }}
+              className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent flex size-8 items-center justify-center rounded-md"
+              aria-label="Account"
+              title="Account"
+            >
+              <UserRound className="size-4" />
+            </button>
             <button
               type="button"
               onClick={() => {

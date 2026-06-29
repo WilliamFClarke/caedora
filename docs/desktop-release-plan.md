@@ -13,6 +13,9 @@ Caedora will publish a public core application under the Mozilla Public License 
   - Windows x64 installer
   - macOS Apple Silicon `.dmg`
   - Linux x64 `.AppImage`
+- Windows signing: no paid code-signing certificate for now. The installer will be
+  unsigned, so Windows SmartScreen may warn users until a future signed release
+  builds reputation.
 
 ## Workstreams
 
@@ -40,6 +43,8 @@ Caedora will publish a public core application under the Mozilla Public License 
    - Replace the placeholder download state with live platform links.
    - Link to the latest GitHub Release assets for Windows, macOS Apple Silicon, and Linux AppImage.
    - Keep the browser fallback available.
+   - Label unsigned Windows builds clearly so users know they may need to confirm
+     the installer prompt.
 
 ## Suggested delivery order
 

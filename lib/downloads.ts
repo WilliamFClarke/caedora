@@ -11,4 +11,11 @@ export const DESKTOP_DOWNLOADS = {
       href: `${RELEASES_URL}/latest/download/Caedora-macOS-arm64.dmg`,
     },
   },
+  windows: {
+    installer: {
+      label: 'Windows installer (.exe)',
+      note: 'Windows 10 / 11, 64-bit',
+      href: `${RELEASES_URL}/latest/download/Caedora-Windows-x64-Setup.exe`,
+    },
+  },
 } as const
