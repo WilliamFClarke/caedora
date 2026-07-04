@@ -51,7 +51,6 @@ interface EditorPaneProps {
   conceptCatalog: Record<string, OkfConceptSummary>
   linkGraphOpen?: boolean
   onToggleLinkGraph?: () => void
-  onOpenVaultSettings?: () => void
 }
 
 function countWords(markdown: string): number {
@@ -89,7 +88,6 @@ export function EditorPane({
   conceptCatalog,
   linkGraphOpen = false,
   onToggleLinkGraph,
-  onOpenVaultSettings,
 }: EditorPaneProps) {
   const [loaded, setLoaded] = useState<{
     path: string
@@ -279,7 +277,6 @@ export function EditorPane({
               />
             ) : null
           }
-          onOpenVaultSettings={onOpenVaultSettings}
           onChange={(body) => {
             setLiveBody(body)
             setHasLocalChanges(true)

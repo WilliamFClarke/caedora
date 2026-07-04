@@ -62,7 +62,7 @@ export function NoteMeta({
 
   return (
     <section
-      className="mx-auto w-full max-w-[90ch] px-8 pt-16 pb-0"
+      className="mx-auto w-full max-w-[90ch] px-4 pt-8 pb-0 sm:px-8 sm:pt-16"
       onClick={(event) => event.stopPropagation()}
     >
       <div className="flex items-start gap-4">
@@ -72,7 +72,7 @@ export function NoteMeta({
             value={metadata.title}
             onChange={(event) => update({ title: event.target.value })}
             placeholder={fallbackTitle || 'Untitled'}
-            className="text-foreground placeholder:text-muted-foreground/55 m-0 h-auto w-full border-0 bg-transparent p-0 font-sans text-[2.5rem] leading-[1.2] font-bold tracking-normal outline-none"
+            className="caedora-title-input text-foreground placeholder:text-muted-foreground/55 m-0 h-auto w-full border-0 bg-transparent p-0 font-sans text-3xl leading-[1.2] font-bold tracking-normal outline-none sm:text-[2.5rem]"
           />
           <textarea
             aria-label="Concept description"

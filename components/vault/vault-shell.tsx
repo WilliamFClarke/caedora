@@ -7,7 +7,6 @@ import { EditorPane } from './editor-pane'
 import { LinkGraphPanel } from './link-graph-panel'
 import { AssistantSidebarLoader } from '@/components/assistant/assistant-sidebar-loader'
 import { SettingsDialog, type SettingsSection } from '@/components/settings-dialog'
-import { VaultManagerDialog } from '@/components/vault/vault-manager-dialog'
 import { useVault } from '@/lib/vault-context'
 import { listFilesRecursive } from '@/lib/storage'
 import { getActiveVaultId } from '@/lib/storage/idb'
@@ -51,7 +50,6 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [activeVaultId, setActiveVaultIdState] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
-  const [vaultManagerOpen, setVaultManagerOpen] = useState(false)
   const [linkGraphOpen, setLinkGraphOpen] = useState(false)
   const [conceptCatalog, setConceptCatalog] = useState<Record<string, OkfConceptSummary>>({})
   const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
@@ -490,7 +488,6 @@ export function VaultShell({ initialPath }: VaultShellProps) {
                 conceptCatalog={conceptCatalog}
                 linkGraphOpen={linkGraphOpen}
                 onToggleLinkGraph={() => setLinkGraphOpen((open) => !open)}
-                onOpenVaultSettings={() => setVaultManagerOpen(true)}
               />
             )}
           </div>
@@ -516,7 +513,6 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         onOpenChange={setSettingsOpen}
         initialSection={settingsSection}
       />
-      <VaultManagerDialog open={vaultManagerOpen} onOpenChange={setVaultManagerOpen} />
     </SidebarProvider>
   )
 }

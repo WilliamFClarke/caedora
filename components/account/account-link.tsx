@@ -1,15 +1,14 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import { useUser } from '@clerk/nextjs'
-import { LogIn, UserRound } from 'lucide-react'
-import { SettingsDialog } from '@/components/settings-dialog'
+import { CircleUserRound, UserRoundPlus } from 'lucide-react'
 import { isDesktopApp } from '@/lib/desktop'
 import { cn } from '@/lib/utils'
 
 export function AccountLink({ className }: { className?: string }) {
   const [isDesktop, setIsDesktop] = useState(false)
-  const [open, setOpen] = useState(false)
   const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
 
   useEffect(() => {
@@ -18,43 +17,31 @@ export function AccountLink({ className }: { className?: string }) {
 
   if (isDesktop) {
     return (
-      <>
-        <AccountButton
-          className={className}
-          icon={<UserRound className="size-4" />}
-          label="Manage account"
-          onClick={() => setOpen(true)}
-        />
-        <SettingsDialog open={open} onOpenChange={setOpen} initialSection="account" />
-      </>
+      <AccountButton
+        className={className}
+        icon={<CircleUserRound className="size-4" />}
+        label="Manage account"
+      />
     )
   }
 
   if (!clerkConfigured) {
     return (
-      <>
-        <AccountButton
-          className={className}
-          icon={<UserRound className="size-4" />}
-          label="Account setup"
-          onClick={() => setOpen(true)}
-        />
-        <SettingsDialog open={open} onOpenChange={setOpen} initialSection="account" />
-      </>
+      <AccountButton
+        className={className}
+        icon={<CircleUserRound className="size-4" />}
+        label="Account setup"
+      />
     )
   }
 
-  return <ConfiguredAccountLink className={className} open={open} setOpen={setOpen} />
+  return <ConfiguredAccountLink className={className} />
 }
 
 function ConfiguredAccountLink({
   className,
-  open,
-  setOpen,
 }: {
   className?: string
-  open: boolean
-  setOpen: (open: boolean) => void
 }) {
   const { isLoaded, isSignedIn } = useUser()
 
@@ -66,21 +53,17 @@ function ConfiguredAccountLink({
           className
         )}
       >
-        <UserRound className="size-4 opacity-60" />
+        <CircleUserRound className="size-4 opacity-60" />
       </span>
     )
   }
 
   return (
-    <>
-      <AccountButton
-        className={className}
-        icon={isSignedIn ? <UserRound className="size-4" /> : <LogIn className="size-4" />}
-        label={isSignedIn ? 'My account' : 'Sign in'}
-        onClick={() => setOpen(true)}
-      />
-      <SettingsDialog open={open} onOpenChange={setOpen} initialSection="account" />
-    </>
+    <AccountButton
+      className={className}
+      icon={isSignedIn ? <CircleUserRound className="size-4" /> : <UserRoundPlus className="size-4" />}
+      label={isSignedIn ? 'My account' : 'Sign in'}
+    />
   )
 }
 
@@ -88,25 +71,22 @@ function AccountButton({
   className,
   icon,
   label,
-  onClick,
 }: {
   className?: string
   icon: ReactNode
   label: string
-  onClick: () => void
 }) {
   return (
-    <button
-      type="button"
+    <Link
+      href="/account"
       className={cn(
         'text-muted-foreground hover:text-foreground inline-flex size-9 items-center justify-center rounded-md transition',
         className
       )}
       aria-label={label}
       title={label}
-      onClick={onClick}
     >
       {icon}
-    </button>
+    </Link>
   )
 }

@@ -20,7 +20,7 @@ function Item({
     <Comp
       data-slot="item"
       className={cn(
-        'group/item flex w-full min-w-0 items-center gap-3 rounded-md text-sm',
+        'group/item flex w-full min-w-0 flex-col items-start gap-3 rounded-md text-sm sm:flex-row sm:items-center',
         variant === 'outline' && 'border bg-background',
         variant === 'muted' && 'bg-muted/50',
         size === 'default' && 'p-4',
@@ -87,7 +87,7 @@ function ItemActions({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="item-actions"
-      className={cn('flex shrink-0 items-center gap-2', className)}
+      className={cn('flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto', className)}
       {...props}
     />
   )
