@@ -602,8 +602,8 @@ function BrowserPanel({
                 {showGitHubGuide && (
                   <div className="text-muted-foreground px-3 pb-3 text-xs">
                     <p>
-                      Open Settings, use Manage vaults, and export a browser backup before
-                      moving devices. The current export is a Caedora JSON backup. A
+                      Use the sidebar vault menu to open Manage vaults and export a browser
+                      backup before moving devices. The current export is a Caedora JSON backup. A
                       proper OKF folder export for dropping directly into a GitHub repo
                       is planned next.
                     </p>

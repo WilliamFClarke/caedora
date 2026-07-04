@@ -815,6 +815,24 @@
     @apply bg-background text-foreground;
     font-feature-settings: "ss01", "cv11";
     letter-spacing: -0.005em;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  @media (max-width: 767px) {
+    input:not([type="button"]):not([type="checkbox"]):not([type="color"]):not([type="file"]):not([type="image"]):not([type="radio"]):not([type="range"]):not([type="reset"]):not([type="submit"]):not(.caedora-title-input),
+    select,
+    textarea,
+    [contenteditable="true"] {
+      font-size: 16px !important;
+    }
+
+    input,
+    select,
+    textarea {
+      scroll-margin-bottom: calc(7rem + env(safe-area-inset-bottom));
+    }
   }
 
   .caedora-clerk-root {

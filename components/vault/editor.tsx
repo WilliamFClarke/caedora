@@ -13,7 +13,6 @@ interface EditorProps {
   contentRevision?: number
   onMetaAnchorChange?: (el: HTMLElement | null) => void
   documentHeader?: ReactNode
-  onOpenVaultSettings?: () => void
 }
 
 export function Editor({
@@ -23,7 +22,6 @@ export function Editor({
   contentRevision = 0,
   onMetaAnchorChange,
   documentHeader,
-  onOpenVaultSettings,
 }: EditorProps) {
   const initialContent = useMemo(
     () => mdToTiptap(initialMarkdown) as unknown,
@@ -38,7 +36,6 @@ export function Editor({
       content={initialContent}
       onMetaAnchorChange={onMetaAnchorChange}
       documentHeader={documentHeader}
-      onOpenVaultSettings={onOpenVaultSettings}
       onUpdate={(editor: TiptapEditor) => {
         const json = editor.getJSON() as unknown as TiptapDoc
         onChange(tiptapToMd(json))

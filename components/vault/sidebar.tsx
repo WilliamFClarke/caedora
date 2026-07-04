@@ -572,10 +572,7 @@ export function AppSidebar({
             )}
             <button
               type="button"
-              onClick={() => {
-                setSettingsSection('account')
-                setSettingsOpen(true)
-              }}
+              onClick={() => router.push('/account')}
               className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent flex size-8 items-center justify-center rounded-md"
               aria-label="Account"
               title="Account"
