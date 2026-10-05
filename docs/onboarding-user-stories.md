@@ -116,13 +116,10 @@ As a browser-vault user, I want to export my vault, so that I can back it up or 
 Acceptance criteria:
 - Vault settings include **Export this vault** for browser vaults.
 - Export produces a downloadable file.
-- The UI clearly says the current export is a Caedora JSON backup.
-- The UI does not imply the JSON file can already be dropped directly into GitHub as an OKF folder.
+- Export offers an OKF folder (zip of plain Markdown files) and a Caedora JSON backup.
+- The UI does not imply the JSON backup can be dropped directly into GitHub.
 
-Current status: Supported as JSON backup.
-
-Follow-up:
-- Implement proper OKF folder export.
+Current status: Supported as OKF folder zip and JSON backup.
 
 ## Story 9: User Moves a Vault to GitHub
 
@@ -135,12 +132,11 @@ Acceptance criteria:
   3. Add exported OKF files to that repository.
   4. Open Caedora -> Open existing vault -> GitHub.
   5. Select only that repository in GitHub.
-- The current UI explicitly says this depends on the future OKF folder export.
 
-Current status: Guidance present, proper OKF folder export not yet implemented.
+Current status: Supported. Export OKF folder produces a zip ready to add to a repository.
 
 Follow-up:
-- Build OKF folder export and import/reopen smoke tests.
+- Add an import/reopen smoke test against a real GitHub repository.
 
 ## Story 10: User Closes the Current Vault
 
@@ -208,6 +204,6 @@ Use this checklist before shipping onboarding changes:
 - GitHub connect lists accessible repos after authorization.
 - Previously saved GitHub vaults appear before reconnecting GitHub.
 - PAT option is not visible.
-- Browser vault export is available and clearly described as JSON backup.
+- Browser vault export offers an OKF folder zip and a JSON backup.
 - Close vault returns to the website without deleting the saved vault.
 - Close all vaults returns to the website and does not delete user data.

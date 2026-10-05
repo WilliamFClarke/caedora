@@ -4,6 +4,8 @@ All notable Caedora release changes should be recorded here before tagging.
 
 ## [Unreleased]
 
+- Added OKF folder export for browser vaults, alongside the JSON backup.
+
 ## [0.1.0]
 
 - Added optional Clerk-backed accounts while keeping Caedora usable without an account.

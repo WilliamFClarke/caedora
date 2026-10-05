@@ -20,7 +20,6 @@ import {
   BrowserBundleProvider,
   browserStoragePersistence,
   createBrowserBundleId,
-  exportBrowserBundle,
   getActiveVaultId,
   loadGitHubAppSession,
   listVaults,
@@ -38,6 +37,7 @@ import { slugifyFilename } from '@/lib/frontmatter'
 import { cn } from '@/lib/utils'
 import { Database, Folder, Github, Loader2 } from 'lucide-react'
 import { SavedVaultList, type StoredVault } from '@/components/vault/saved-vault-list'
+import { downloadBrowserVault } from '@/lib/vault-export'
 
 type Mode = 'create' | 'open'
 type OpenFlow = 'saved' | 'sources' | 'create'
@@ -132,20 +132,6 @@ export function ConnectDialog({
     await refreshVaults()
   }
 
-  async function exportVault(vault: StoredVault) {
-    if (!vault.state.browserBundleId) return
-    const name = vault.state.browserBundleName ?? 'Browser vault'
-    const blob = await exportBrowserBundle(vault.state.browserBundleId, name)
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${slugForDownload(name)}.caedora-vault.json`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
-  }
-
   async function closeAllVaults() {
     disconnect()
     setActiveVaultIdState(null)
@@ -202,7 +188,7 @@ export function ConnectDialog({
                 switchingVaultId={switchingVaultId}
                 onOpenVault={(id) => void openSavedVault(id)}
                 onDeleteVault={(id) => void deleteSavedVault(id)}
-                onExportVault={(vault) => void exportVault(vault)}
+                onExportVault={(vault, format) => void downloadBrowserVault(vault.state, format)}
                 onCreateVault={() => setOpenFlow('create')}
                 onAddExistingVault={() => setOpenFlow('sources')}
                 onCloseAllVaults={() => void closeAllVaults()}
@@ -602,14 +588,14 @@ function BrowserPanel({
                 {showGitHubGuide && (
                   <div className="text-muted-foreground px-3 pb-3 text-xs">
                     <p>
-                      Use the sidebar vault menu to open Manage vaults and export a browser
-                      backup before moving devices. The current export is a Caedora JSON backup. A
-                      proper OKF folder export for dropping directly into a GitHub repo
-                      is planned next.
+                      Use the sidebar vault menu to open Manage vaults, then choose
+                      Export OKF folder. You get a zip of plain Markdown files ready
+                      to add to a GitHub repository.
                     </p>
                     <p className="mt-2">
-                      To start GitHub sync today, create an empty private repository on
-                      GitHub, then use the GitHub tab and select only that repo.
+                      Create a private repository on GitHub, add the files from the
+                      unzipped folder to it, then use the GitHub tab and select only
+                      that repo.
                     </p>
                   </div>
                 )}
@@ -911,12 +897,4 @@ async function listReposWithSession(session: GitHubAppSession): Promise<GitHubRe
   }
   if (!response.ok) throw new Error(data.error || 'Could not list GitHub repositories.')
   return data.repos ?? []
-}
-
-function slugForDownload(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'caedora-vault'
 }

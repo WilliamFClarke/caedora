@@ -10,12 +10,12 @@ import {
 } from '@/components/ui/dialog'
 import { useVault } from '@/lib/vault-context'
 import {
-  exportBrowserBundle,
   getActiveVaultId,
   listVaults,
   removeVault,
 } from '@/lib/storage'
 import { SavedVaultList, type StoredVault } from '@/components/vault/saved-vault-list'
+import { downloadBrowserVault } from '@/lib/vault-export'
 
 export function VaultManagerDialog({
   open,
@@ -64,20 +64,6 @@ export function VaultManagerDialog({
     await refreshVaults()
   }
 
-  async function exportVault(vault: StoredVault) {
-    if (!vault.state.browserBundleId) return
-    const name = vault.state.browserBundleName ?? 'Browser vault'
-    const blob = await exportBrowserBundle(vault.state.browserBundleId, name)
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${slugForDownload(name)}.caedora-vault.json`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
-  }
-
   async function closeAllVaults() {
     disconnect()
     setActiveVaultIdState(null)
@@ -97,7 +83,7 @@ export function VaultManagerDialog({
             switchingVaultId={switchingVaultId}
             onOpenVault={(id) => void switchVault(id)}
             onDeleteVault={(id) => void deleteVault(id)}
-            onExportVault={(vault) => void exportVault(vault)}
+            onExportVault={(vault, format) => void downloadBrowserVault(vault.state, format)}
             onCreateVault={() => setConnectMode('create')}
             onAddExistingVault={() => setConnectMode('open')}
             onCloseAllVaults={() => void closeAllVaults()}
@@ -117,12 +103,4 @@ export function VaultManagerDialog({
       />
     </>
   )
-}
-
-function slugForDownload(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'caedora-vault'
 }
