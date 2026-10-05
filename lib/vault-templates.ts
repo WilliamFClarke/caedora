@@ -259,7 +259,11 @@ export async function loadGitHubTemplate(repository: string): Promise<VaultTempl
 }
 
 export async function fetchTemplateFiles(template: VaultTemplate): Promise<TemplateFile[]> {
-  if (template.files) return withDefaultDashboard(normalizeCuratedTemplateFiles(template), template.name)
+  if (template.files) {
+    return withDefaultDashboard(normalizeCuratedTemplateFiles(template), template.name, (file) =>
+      normalizeTemplateConcept(file, { templateId: template.id, templateTags: template.tags })
+    )
+  }
 
   const [owner, repo] = template.repository.split('/')
   const ref = template.ref ?? 'main'
@@ -290,9 +294,13 @@ export async function fetchTemplateFiles(template: VaultTemplate): Promise<Templ
 }
 
 /** Every template ships with a dashboard; generate a table dashboard when it has none. */
-function withDefaultDashboard(files: TemplateFile[], name: string): TemplateFile[] {
+function withDefaultDashboard(
+  files: TemplateFile[],
+  name: string,
+  normalize: (file: TemplateFile) => string = (file) => normalizeTemplateConcept(file)
+): TemplateFile[] {
   const dashboard = generateDefaultDashboard(files, name)
-  return dashboard ? [...files, dashboard] : files
+  return dashboard ? [...files, { ...dashboard, content: normalize(dashboard) }] : files
 }
 
 export async function importTemplateFiles(
