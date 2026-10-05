@@ -41,6 +41,7 @@ import { getActiveVaultId, listVaults } from '@/lib/storage'
 import type { FileEntry, PersistedVaultState, VaultProvider } from '@/lib/types'
 import { isLockedPath } from '@/lib/vault-index'
 import type { OkfConceptSummary } from '@/lib/okf'
+import { conceptMatches } from '@/lib/search'
 import { cn } from '@/lib/utils'
 import {
   FOLDER_COLORS,
@@ -116,6 +117,7 @@ interface AppSidebarProps {
   onDeletePath: (path: string) => Promise<void>
   onSync?: () => Promise<void>
   conceptCatalog: Record<string, OkfConceptSummary>
+  onOpenSearch: () => void
 }
 
 interface TreeNodeT {
@@ -234,6 +236,7 @@ export function AppSidebar({
   onDeletePath,
   onSync,
   conceptCatalog,
+  onOpenSearch,
 }: AppSidebarProps) {
   const router = useRouter()
   const { connectToVault, disconnect } = useVault()
@@ -281,10 +284,7 @@ export function AppSidebar({
           const concept = conceptCatalog[entry.path]
           return (
             entry.name.toLowerCase().includes(lowered) ||
-            concept?.title.toLowerCase().includes(lowered) ||
-            concept?.description.toLowerCase().includes(lowered) ||
-            concept?.type.toLowerCase().includes(lowered) ||
-            concept?.tags.some((tag) => tag.includes(lowered))
+            (concept ? conceptMatches(concept, lowered) : false)
           )
         })
         .map((entry) => entry.path)
@@ -422,6 +422,14 @@ export function AppSidebar({
                 tabIndex={searchOpen ? 0 : -1}
               />
             </div>
+            <button
+              type="button"
+              onClick={onOpenSearch}
+              tabIndex={searchOpen ? 0 : -1}
+              className="text-muted-foreground hover:text-foreground mt-1 px-1 text-left text-xs"
+            >
+              Search all note content (Ctrl/⌘ K)
+            </button>
           </div>
         </div>
       </SidebarHeader>
