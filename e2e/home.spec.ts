@@ -23,14 +23,15 @@ test('start now opens the browser vault dialog', async ({ page }) => {
   await expect(page.getByRole('button', { name: /Create browser vault/i })).toBeVisible()
 })
 
-test('account route opens account settings as a modal', async ({ page }) => {
+test('account route renders the account settings page', async ({ page }) => {
   await page.goto('/account')
 
-  const dialog = page.getByRole('dialog', { name: 'Settings' })
-  await expect(dialog).toBeVisible()
-  await expect(dialog.getByRole('main').getByRole('heading', { level: 2, name: 'Account' })).toBeVisible()
-  await expect(dialog.getByRole('tab', { name: 'GitHub' })).toBeVisible()
-  await expect(dialog.getByRole('tab', { name: 'Pricing' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Account settings' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Profile' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'GitHub access' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'GitHub access' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Data and privacy' })).toBeVisible()
 })
 
 test('download page links to GitHub Release assets', async ({ page }) => {
