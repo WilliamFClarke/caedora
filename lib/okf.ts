@@ -3,6 +3,7 @@ import remarkParse from 'remark-parse'
 import type { Link, Root, RootContent } from 'mdast'
 import { OKF_VERSION, parseFrontmatter, type Frontmatter } from './frontmatter'
 import type { FileEntry, VaultProvider } from './types'
+import { describeDatasetIssue, isDatasetFrontmatter, validateDatasetDocument } from './dataset'
 
 export const INDEX_FILENAME = 'index.md'
 export const LOG_FILENAME = 'log.md'
@@ -47,6 +48,7 @@ export interface OkfIssue {
     | 'invalid-index'
     | 'invalid-log'
     | 'broken-link'
+    | 'invalid-dataset'
   message: string
 }
 
@@ -238,7 +240,31 @@ export function validateConcept(path: string, raw: string): OkfIssue[] {
       message: 'timestamp should be an ISO 8601 datetime.',
     })
   }
+  if (isDatasetFrontmatter(parsed.frontmatter)) {
+    issues.push(...datasetIssues(path, raw))
+  }
   return issues
+}
+
+const MAX_DATASET_ISSUES = 5
+
+function datasetIssues(path: string, raw: string): OkfIssue[] {
+  const found = validateDatasetDocument(path, raw)
+  const shown = found.slice(0, MAX_DATASET_ISSUES).map((issue): OkfIssue => ({
+    path,
+    severity: 'warning',
+    code: 'invalid-dataset',
+    message: describeDatasetIssue(issue),
+  }))
+  if (found.length > MAX_DATASET_ISSUES) {
+    shown.push({
+      path,
+      severity: 'warning',
+      code: 'invalid-dataset',
+      message: `${found.length - MAX_DATASET_ISSUES} more dataset warnings.`,
+    })
+  }
+  return shown
 }
 
 export function validateDocument(path: string, raw: string): OkfIssue[] {

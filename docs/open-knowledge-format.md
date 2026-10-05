@@ -45,6 +45,8 @@ disclose the bundle instead of loading every file.
 - The sidebar reports live bundle conformance.
 - New concepts require a type and description.
 - Templates are normalized into conformant concepts during import.
+- `type: Dataset` concepts hold structured records in a Markdown table and are
+  checked against their column schema. See [Datasets](datasets.md).
 - Argus validates approved file mutations and maintains timestamps, indexes,
   and logs.
 - `caedora-mcp` exposes concept CRUD, search, graph, validation, ingest, index,
