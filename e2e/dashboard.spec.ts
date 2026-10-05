@@ -3,6 +3,7 @@ import { parseDataset } from '../lib/dataset'
 import { evaluateItem, filterRange, type DashboardData, type ItemResult } from '../lib/dashboard/evaluate'
 import { parseExpression, evaluateAggregate, ukTaxYear } from '../lib/dashboard/expression'
 import { formatValue } from '../lib/dashboard/format'
+import { applyLayoutEdit } from '../lib/dashboard/layout'
 import { loadDashboardData } from '../lib/dashboard/load'
 import { parseDashboard } from '../lib/dashboard/spec'
 import { validateDocument } from '../lib/okf'
@@ -183,5 +184,52 @@ test.describe('template dashboards', () => {
         }
       }
     }
+  })
+})
+
+test.describe('dashboard layout edits', () => {
+  const body = [
+    '# Finance',
+    '',
+    '```caedora-dashboard',
+    'data: { b: balances.md }',
+    'rows:',
+    '  - columns: 2',
+    '    items:',
+    '      - stat: { label: A, source: b, value: sum(balance) }  # first',
+    '      - stat: { label: B, source: b, value: sum(balance) }',
+    '  - columns: 1',
+    '    items:',
+    '      - text: Note',
+    '```',
+    '',
+    'After the block.',
+    '',
+  ].join('\n')
+  const labels = (markdown: string) =>
+    parseDashboard(markdown).rows.map((row) =>
+      row.items.map((item) => ('label' in item && item.kind !== 'list' ? item.label : item.kind))
+    )
+
+  test('reorders items within and across rows and keeps the rest of the note', () => {
+    const swapped = applyLayoutEdit(body, { kind: 'move-item', from: { row: 0, item: 1 }, to: { row: 0, index: 0 } })
+    expect(labels(swapped)).toEqual([['B', 'A'], ['text']])
+    expect(swapped).toContain('# first')
+    expect(swapped.startsWith('# Finance\n\n```caedora-dashboard\n')).toBe(true)
+    expect(swapped.endsWith('```\n\nAfter the block.\n')).toBe(true)
+
+    const across = applyLayoutEdit(body, { kind: 'move-item', from: { row: 1, item: 0 }, to: { row: 0, index: 1 } })
+    expect(labels(across)).toEqual([['A', 'text', 'B']])
+
+    const newRow = applyLayoutEdit(body, { kind: 'item-to-new-row', from: { row: 0, item: 0 }, at: 2 })
+    expect(labels(newRow)).toEqual([['B'], ['text'], ['A']])
+
+    const rows = applyLayoutEdit(body, { kind: 'move-row', from: 1, to: 0 })
+    expect(labels(rows)).toEqual([['text'], ['A', 'B']])
+
+    const columns = applyLayoutEdit(body, { kind: 'set-columns', row: 0, columns: 3 })
+    expect(parseDashboard(columns).rows[0].columns).toBe(3)
+
+    expect(applyLayoutEdit(body, { kind: 'move-item', from: { row: 1, item: 0 }, to: { row: 1, index: 1 } })).toBe(body)
   })
 })

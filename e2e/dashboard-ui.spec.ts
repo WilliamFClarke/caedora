@@ -21,6 +21,15 @@ test('UK personal finance template opens on a working dashboard', async ({ page 
   await expect(dashboard.locator('[data-slot="chart"]').first()).toBeVisible()
   await expect(dashboard.locator('[data-slot="dashboard-error"]')).toHaveCount(0)
 
+  await page.getByRole('button', { name: 'Edit layout' }).click()
+  const cards = page.getByTestId('dashboard-edit-item')
+  await expect(cards.first()).toHaveAttribute('aria-label', 'Net worth')
+  await page.getByRole('button', { name: 'Move Net worth forward' }).click()
+  await expect(cards.nth(1)).toHaveAttribute('aria-label', 'Net worth')
+  await expect(cards.first()).toHaveAttribute('aria-label', 'Cash')
+  await page.getByRole('button', { name: 'Done' }).click()
+  await expect(dashboard.locator('[data-slot="dashboard-stat"]').first()).toContainText('Cash')
+
   await page.getByRole('radio', { name: 'Source' }).click()
   await expect(page.getByText('caedora-dashboard').or(page.getByText('rows:')).first()).toBeVisible()
 

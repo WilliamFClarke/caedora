@@ -95,6 +95,10 @@ export type DashboardItem = StatItem | AreaItem | TableItem | ProgressItem | Lis
 export interface DashboardRow {
   columns: number
   items: DashboardItem[]
+  /** Position of this row in the YAML `rows` list. */
+  index: number
+  /** Position of each item in the row's YAML `items` list, parallel to `items`. */
+  itemIndexes: number[]
 }
 
 export interface DashboardSpec {
@@ -110,9 +114,19 @@ export function isDashboardFrontmatter(frontmatter: Pick<Frontmatter, 'type'>): 
 }
 
 export function findDashboardBlock(markdown: string): string | null {
+  return locateDashboardBlock(markdown)?.value ?? null
+}
+
+/** Finds the dashboard block and its character range in the Markdown body. */
+export function locateDashboardBlock(
+  markdown: string
+): { value: string; start: number; end: number } | null {
   const tree = unified().use(remarkParse).parse(markdown) as Root
   const block = findCode(tree.children)
-  return block ? block.value : null
+  const start = block?.position?.start.offset
+  const end = block?.position?.end.offset
+  if (!block || start === undefined || end === undefined) return null
+  return { value: block.value, start, end }
 }
 
 export function parseDashboard(markdown: string): DashboardSpec {
@@ -156,11 +170,16 @@ export function parseDashboardYaml(source: string): DashboardSpec {
   rawRows.forEach((rawRow, rowIndex) => {
     const row = isRecord(rawRow) ? rawRow : {}
     const rawItems = Array.isArray(row.items) ? row.items : Array.isArray(rawRow) ? rawRow : []
-    const items = rawItems
-      .map((rawItem, itemIndex) => parseItem(rawItem, `rows[${rowIndex}].items[${itemIndex}]`, data, issues))
-      .filter((item): item is DashboardItem => item !== null)
+    const items: DashboardItem[] = []
+    const itemIndexes: number[] = []
+    rawItems.forEach((rawItem, itemIndex) => {
+      const item = parseItem(rawItem, `rows[${rowIndex}].items[${itemIndex}]`, data, issues)
+      if (!item) return
+      items.push(item)
+      itemIndexes.push(itemIndex)
+    })
     const requested = typeof row.columns === 'number' ? Math.round(row.columns) : items.length
-    rows.push({ columns: Math.min(4, Math.max(1, requested || 1)), items })
+    rows.push({ columns: Math.min(4, Math.max(1, requested || 1)), items, index: rowIndex, itemIndexes })
   })
 
   return { data, rows, issues }

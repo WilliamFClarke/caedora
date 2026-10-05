@@ -2,8 +2,12 @@
 
 A Dashboard is an OKF concept with `type: Dashboard`. Caedora shows it as a
 grid of cards and charts, built from shadcn blocks and shadcn area charts, that
-read from [Datasets](datasets.md). Use the Dashboard / Source toggle above the
-page to edit the Markdown.
+read from [Datasets](datasets.md). Use the Dashboard / Source toggle in the top
+corner to edit the Markdown, or Edit layout to drag cards into a new order,
+move rows and change how many columns a row has. Layout changes are written
+straight back to the YAML block, keeping each card's settings as they were.
+
+In the sidebar, dashboards and Dataset files have their own icons.
 
 ## Format
 

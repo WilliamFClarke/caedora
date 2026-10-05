@@ -278,25 +278,25 @@ export function EditorPane({
         : null
   const showRendered = renderedView !== null && !showSource
 
+  const viewToggle = renderedView ? (
+    <ToggleGroup
+      type="single"
+      value={showSource ? 'source' : 'rendered'}
+      onValueChange={(value) => value && setShowSource(value === 'source')}
+      aria-label="View"
+      className="shrink-0"
+    >
+      <ToggleGroupItem value="rendered" className="h-7 px-2.5 text-xs">
+        {renderedView}
+      </ToggleGroupItem>
+      <ToggleGroupItem value="source" className="h-7 px-2.5 text-xs">
+        Source
+      </ToggleGroupItem>
+    </ToggleGroup>
+  ) : null
+
   return (
     <div className="flex h-full min-w-0 flex-col">
-      {renderedView && (
-        <div className="border-border flex items-center justify-end border-b px-3 py-1.5">
-          <ToggleGroup
-            type="single"
-            value={showSource ? 'source' : 'rendered'}
-            onValueChange={(value) => value && setShowSource(value === 'source')}
-            aria-label="View"
-          >
-            <ToggleGroupItem value="rendered" className="h-7 px-3 text-xs">
-              {renderedView}
-            </ToggleGroupItem>
-            <ToggleGroupItem value="source" className="h-7 px-3 text-xs">
-              Source
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-      )}
       <div className="min-h-0 flex-1 overflow-hidden">
         {showRendered && renderedView === 'Dashboard' ? (
           <DashboardView
@@ -306,6 +306,13 @@ export function EditorPane({
             description={metadata.description}
             body={liveBody ?? loaded.body}
             refreshKey={`${syncNonce}:${catalogStamp(conceptCatalog)}`}
+            viewToggle={viewToggle}
+            onBodyChange={(body) => {
+              setLiveBody(body)
+              setHasLocalChanges(true)
+              setBodyRevision((revision) => revision + 1)
+              setMetadata((current) => ({ ...current, timestamp: new Date().toISOString() }))
+            }}
           />
         ) : showRendered ? (
           <DatasetView
@@ -313,9 +320,11 @@ export function EditorPane({
             raw={candidateContent ?? loaded.raw}
             title={metadata.title || fallbackTitle}
             description={metadata.description}
+            viewToggle={viewToggle}
           />
         ) : (
         <Editor
+          toolbarActions={viewToggle}
           fileKey={loaded.path}
           contentRevision={bodyRevision}
           initialMarkdown={liveBody ?? loaded.body}
