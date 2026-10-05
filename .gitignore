@@ -46,3 +46,6 @@ next-env.d.ts
 
 # AI
 .claude
+
+# Local agent logs
+.codex-*.log

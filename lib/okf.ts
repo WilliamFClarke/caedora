@@ -4,6 +4,7 @@ import type { Link, Root, RootContent } from 'mdast'
 import { OKF_VERSION, parseFrontmatter, type Frontmatter } from './frontmatter'
 import type { FileEntry, VaultProvider } from './types'
 import { describeDatasetIssue, isDatasetFrontmatter, validateDatasetDocument } from './dataset'
+import { markdownToSearchText } from './search'
 
 export const INDEX_FILENAME = 'index.md'
 export const LOG_FILENAME = 'log.md'
@@ -27,6 +28,8 @@ export interface OkfConceptSummary {
   timestamp: string
   links: OkfLink[]
   conformant: boolean
+  /** Concept body flattened to plain text, used for full text search. */
+  body: string
 }
 
 export interface OkfLink {
@@ -142,6 +145,7 @@ export async function loadConceptCatalog(
             parsed.hasFrontmatter &&
             !parsed.error &&
             metadata.type.trim().length > 0,
+          body: markdownToSearchText(parsed.body),
         },
       ]
     })
