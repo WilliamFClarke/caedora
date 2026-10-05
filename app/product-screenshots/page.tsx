@@ -334,7 +334,7 @@ function TemplateMarketplaceMockup() {
     ['Reading system', 'Books, source notes, and review workflows.', 'reading research learning'],
     ['Daily journal', 'Daily notes, weekly reviews, decisions.', 'journal review habits'],
     ['Project hub', 'Specs, milestones, retrospectives.', 'projects planning work'],
-    ['Finance tracker', 'Budgets, subscriptions, money reviews.', 'finance budget'],
+    ['UK personal finance', 'Accounts, ISAs, mortgage and net worth.', 'finance uk isa'],
     ['Travel planner', 'Trips, itineraries, packing lists.', 'travel itinerary'],
   ]
   return (

@@ -12,6 +12,10 @@ import {
   Network,
 } from 'lucide-react'
 import { Editor } from './editor'
+import dynamic from 'next/dynamic'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { isDatasetFrontmatter } from '@/lib/dataset'
+import { isDashboardFrontmatter } from '@/lib/dashboard/spec'
 import { NoteMeta } from './note-meta'
 import {
   Popover,
@@ -37,6 +41,16 @@ import {
 import type { VaultProvider } from '@/lib/types'
 import { useSettings } from '@/lib/settings-context'
 import { cn } from '@/lib/utils'
+
+// Loaded on demand so recharts stays out of the editor bundle.
+const DashboardView = dynamic(
+  () => import('@/components/dashboard/dashboard-view').then((mod) => mod.DashboardView),
+  { ssr: false }
+)
+const DatasetView = dynamic(
+  () => import('@/components/dashboard/dataset-view').then((mod) => mod.DatasetView),
+  { ssr: false }
+)
 
 interface EditorPaneProps {
   provider: VaultProvider
@@ -103,6 +117,11 @@ export function EditorPane({
   const [branch, setBranch] = useState<string>('')
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [, forceTick] = useState(0)
+  const [showSource, setShowSource] = useState(false)
+
+  useEffect(() => {
+    setShowSource(false)
+  }, [path])
 
   useEffect(() => {
     let alive = true
@@ -250,11 +269,62 @@ export function EditorPane({
   const displayPath = path
   const reserved = isReservedPath(path)
   const fallbackTitle = deriveTitleFromPath(path)
+  const renderedView = reserved
+    ? null
+    : isDashboardFrontmatter(metadata)
+      ? 'Dashboard'
+      : isDatasetFrontmatter(metadata)
+        ? 'Table'
+        : null
+  const showRendered = renderedView !== null && !showSource
+
+  const viewToggle = renderedView ? (
+    <ToggleGroup
+      type="single"
+      value={showSource ? 'source' : 'rendered'}
+      onValueChange={(value) => value && setShowSource(value === 'source')}
+      aria-label="View"
+      className="shrink-0"
+    >
+      <ToggleGroupItem value="rendered" className="h-7 px-2.5 text-xs">
+        {renderedView}
+      </ToggleGroupItem>
+      <ToggleGroupItem value="source" className="h-7 px-2.5 text-xs">
+        Source
+      </ToggleGroupItem>
+    </ToggleGroup>
+  ) : null
 
   return (
     <div className="flex h-full min-w-0 flex-col">
       <div className="min-h-0 flex-1 overflow-hidden">
+        {showRendered && renderedView === 'Dashboard' ? (
+          <DashboardView
+            provider={provider}
+            path={path}
+            title={metadata.title || fallbackTitle}
+            description={metadata.description}
+            body={liveBody ?? loaded.body}
+            refreshKey={`${syncNonce}:${catalogStamp(conceptCatalog)}`}
+            viewToggle={viewToggle}
+            onBodyChange={(body) => {
+              setLiveBody(body)
+              setHasLocalChanges(true)
+              setBodyRevision((revision) => revision + 1)
+              setMetadata((current) => ({ ...current, timestamp: new Date().toISOString() }))
+            }}
+          />
+        ) : showRendered ? (
+          <DatasetView
+            path={path}
+            raw={candidateContent ?? loaded.raw}
+            title={metadata.title || fallbackTitle}
+            description={metadata.description}
+            viewToggle={viewToggle}
+          />
+        ) : (
         <Editor
+          toolbarActions={viewToggle}
           fileKey={loaded.path}
           contentRevision={bodyRevision}
           initialMarkdown={liveBody ?? loaded.body}
@@ -288,6 +358,7 @@ export function EditorPane({
             }
           }}
         />
+        )}
       </div>
       <StatusBar
         status={status}
@@ -302,6 +373,14 @@ export function EditorPane({
       />
     </div>
   )
+}
+
+/** Changes when any concept's timestamp changes, so dashboards re-read their Datasets. */
+function catalogStamp(catalog: Record<string, OkfConceptSummary>): string {
+  return Object.values(catalog)
+    .map((concept) => concept.timestamp)
+    .sort()
+    .join('|')
 }
 
 function StatusBar({

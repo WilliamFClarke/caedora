@@ -8,6 +8,8 @@ import {
   ChevronsUpDown,
   Database,
   FileText,
+  LayoutDashboard,
+  Sheet,
   FilePlus,
   Folder,
   FolderPlus,
@@ -965,7 +967,7 @@ function FileRow(props: TreeRowProps) {
               if (!isRenaming) onSelect(node.path)
             }}
           >
-            {isIndex ? <ListTree className="size-3.5" /> : <FileText />}
+            {isIndex ? <ListTree className="size-3.5" /> : <ConceptIcon type={concept?.type} />}
             {isRenaming ? (
               <InlineInput
                 initial={displayName(node.name)}
@@ -1459,4 +1461,16 @@ function MoveDialog({
 function containsMatch(node: TreeNodeT, matches: Set<string>): boolean {
   if (matches.has(node.path)) return true
   return node.children.some((c) => containsMatch(c, matches))
+}
+
+/** Dashboards and Datasets get their own icons so they stand out from notes. */
+function ConceptIcon({ type }: { type?: string }) {
+  const kind = type?.trim().toLowerCase()
+  if (kind === 'dashboard') {
+    return <LayoutDashboard aria-label="Dashboard" className="text-chart-2" />
+  }
+  if (kind === 'dataset') {
+    return <Sheet aria-label="Data file" className="text-chart-1" />
+  }
+  return <FileText />
 }

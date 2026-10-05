@@ -40,7 +40,7 @@ import { ToolbarProvider } from "./toolbar-provider";
 import { UnderlineToolbar } from "./underline";
 import { UndoToolbar } from "./undo";
 
-export const EditorToolbar = ({ editor }: { editor: Editor }) => {
+export const EditorToolbar = ({ editor, actions }: { editor: Editor; actions?: React.ReactNode }) => {
   const toolsRowRef = React.useRef<HTMLDivElement>(null);
   const collapseLevel = useToolbarCollapseLevel(toolsRowRef);
 
@@ -122,6 +122,7 @@ export const EditorToolbar = ({ editor }: { editor: Editor }) => {
 
             <div className="caedora-editor-toolbar-actions ml-auto flex shrink-0 items-center gap-0.5">
               <ResponsiveOverflowToolbar collapseLevel={collapseLevel} />
+              {actions}
               <DesktopAssistantToolbarToggle />
             </div>
           </div>
