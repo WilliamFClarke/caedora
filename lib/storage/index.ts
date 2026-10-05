@@ -34,6 +34,7 @@ export {
   browserStoragePersistence,
   createBrowserBundleId,
   exportBrowserBundle,
+  exportBrowserBundleAsOkfZip,
 } from './browser-provider'
 
 /**
