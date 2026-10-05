@@ -3,6 +3,11 @@ import type { NextConfig } from 'next'
 const nextConfig: NextConfig = {
   // No data collection - all user data lives in their own git repos
   output: 'standalone',
+  webpack(config) {
+    // packages/caedora-mcp is NodeNext ESM and imports its own .ts files as .js.
+    config.resolve.extensionAlias = { '.js': ['.ts', '.js'] }
+    return config
+  },
   async headers() {
     return [
       {

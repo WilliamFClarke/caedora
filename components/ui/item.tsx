@@ -43,16 +43,6 @@ function ItemGroup({ className, ...props }: React.ComponentProps<'div'>) {
   )
 }
 
-function ItemMedia({ className, ...props }: React.ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="item-media"
-      className={cn('text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-md border bg-background', className)}
-      {...props}
-    />
-  )
-}
-
 function ItemContent({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
@@ -99,6 +89,5 @@ export {
   ItemContent,
   ItemDescription,
   ItemGroup,
-  ItemMedia,
   ItemTitle,
 }
