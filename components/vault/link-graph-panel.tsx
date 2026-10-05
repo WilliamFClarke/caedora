@@ -335,9 +335,9 @@ function LinkList({
         {items.length === 0 ? (
           <p className="text-muted-foreground rounded-md border border-dashed p-3 text-center text-xs">None yet.</p>
         ) : (
-          items.map((item) => (
+          items.map((item, index) => (
             <button
-              key={`${item.path ?? item.fallback}-${item.title}`}
+              key={`${item.path ?? item.fallback}-${item.title}-${index}`}
               type="button"
               disabled={!item.path}
               onClick={() => {

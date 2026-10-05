@@ -133,6 +133,7 @@ export interface RichTextEditorProps {
   contentRevision?: number;
   onMetaAnchorChange?: (el: HTMLElement | null) => void;
   documentHeader?: React.ReactNode;
+  toolbarActions?: React.ReactNode;
 }
 
 export function RichTextEditorDemo({
@@ -143,6 +144,7 @@ export function RichTextEditorDemo({
   contentRevision = 0,
   onMetaAnchorChange,
   documentHeader,
+  toolbarActions,
 }: RichTextEditorProps) {
   const router = useRouter();
   const routerRef = React.useRef(router);
@@ -233,7 +235,7 @@ export function RichTextEditorDemo({
         className
       )}
     >
-      <EditorToolbar editor={editor} />
+      <EditorToolbar editor={editor} actions={toolbarActions} />
       <FloatingToolbar editor={editor} />
       <TipTapFloatingMenu editor={editor} />
       {/* Clicks in the empty space below the document content land on this

@@ -13,6 +13,8 @@ interface EditorProps {
   contentRevision?: number
   onMetaAnchorChange?: (el: HTMLElement | null) => void
   documentHeader?: ReactNode
+  /** Extra controls shown at the right end of the editor toolbar. */
+  toolbarActions?: ReactNode
 }
 
 export function Editor({
@@ -22,6 +24,7 @@ export function Editor({
   contentRevision = 0,
   onMetaAnchorChange,
   documentHeader,
+  toolbarActions,
 }: EditorProps) {
   const initialContent = useMemo(
     () => mdToTiptap(initialMarkdown) as unknown,
@@ -36,6 +39,7 @@ export function Editor({
       content={initialContent}
       onMetaAnchorChange={onMetaAnchorChange}
       documentHeader={documentHeader}
+      toolbarActions={toolbarActions}
       onUpdate={(editor: TiptapEditor) => {
         const json = editor.getJSON() as unknown as TiptapDoc
         onChange(tiptapToMd(json))
