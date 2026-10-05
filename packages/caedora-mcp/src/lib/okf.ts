@@ -1,35 +1,101 @@
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
-import { parseFrontmatter } from './frontmatter.js'
+import { OKF_VERSION, parseFrontmatter, type Frontmatter } from './frontmatter.js'
 import { titleFromPath } from './conventions.js'
 import { listFilesRecursive, type FileEntry, type VaultProvider } from '../providers/types.js'
 
-export const OKF_VERSION = '0.1'
+export { OKF_VERSION }
 export const INDEX_FILENAME = 'index.md'
 export const LOG_FILENAME = 'log.md'
+export const RESERVED_FILENAMES = new Set([INDEX_FILENAME, LOG_FILENAME])
+
+export interface OkfConcept {
+  id: string
+  path: string
+  metadata: Frontmatter
+  body: string
+  links: OkfLink[]
+}
+
+export interface OkfLink {
+  label: string
+  href: string
+  targetPath: string | null
+  targetId: string | null
+  external: boolean
+}
+
+export interface OkfIssue {
+  path: string
+  severity: 'error' | 'warning'
+  code:
+    | 'missing-frontmatter'
+    | 'invalid-frontmatter'
+    | 'missing-type'
+    | 'invalid-timestamp'
+    | 'invalid-index'
+    | 'invalid-log'
+    | 'broken-link'
+  message: string
+}
+
+export interface OkfBundleReport {
+  version: typeof OKF_VERSION
+  conformant: boolean
+  concepts: number
+  indexes: number
+  logs: number
+  links: number
+  brokenLinks: number
+  issues: OkfIssue[]
+}
+
+export function basename(path: string): string {
+  return path.split('/').pop() ?? path
+}
+
+export function isMarkdownPath(path: string): boolean {
+  return path.toLowerCase().endsWith('.md')
+}
 
 export function isReservedPath(path: string): boolean {
-  const name = path.split('/').pop()?.toLowerCase()
-  return name === INDEX_FILENAME || name === LOG_FILENAME
+  return RESERVED_FILENAMES.has(basename(path).toLowerCase())
 }
 
 export function isConceptPath(path: string): boolean {
-  return path.toLowerCase().endsWith('.md') && !isReservedPath(path)
+  return isMarkdownPath(path) && !isReservedPath(path)
 }
 
 export function conceptId(path: string): string {
-  return path.replace(/^\/+/, '').replace(/\.md$/i, '')
+  return cleanPath(path).replace(/\.md$/i, '')
 }
 
-export function extractLinks(markdown: string, sourcePath: string) {
+export function parseConcept(path: string, raw: string): OkfConcept {
+  if (!isConceptPath(path)) {
+    throw new Error(`${path} is a reserved OKF document, not a concept.`)
+  }
+  const parsed = parseFrontmatter(raw)
+  if (!parsed.hasFrontmatter) {
+    throw new Error(`${path} is missing YAML frontmatter.`)
+  }
+  if (parsed.error) {
+    throw new Error(`${path} has invalid YAML frontmatter: ${parsed.error}`)
+  }
+  if (!parsed.frontmatter.type.trim()) {
+    throw new Error(`${path} is missing the required type field.`)
+  }
+  return {
+    id: conceptId(path),
+    path,
+    metadata: parsed.frontmatter,
+    body: parsed.body,
+    links: extractLinks(parsed.body, path),
+  }
+}
+
+export function extractLinks(markdown: string, sourcePath: string): OkfLink[] {
   const tree = unified().use(remarkParse).parse(markdown) as unknown as NodeLike
-  const links: Array<{
-    label: string
-    href: string
-    targetPath: string | null
-    targetId: string | null
-    external: boolean
-  }> = []
+  const links: OkfLink[] = []
   walk(tree, (node) => {
     if (node.type !== 'link' || typeof node.url !== 'string') return
     const targetPath = resolveBundleLink(sourcePath, node.url)
@@ -55,42 +121,78 @@ export function resolveBundleLink(sourcePath: string, href: string): string | nu
   return normalized.endsWith('/') ? `${normalized}${INDEX_FILENAME}` : normalized
 }
 
-export async function validateBundle(provider: VaultProvider) {
-  const entries = await listFilesRecursive(provider)
-  const markdown = entries.filter((entry) => entry.type === 'file' && entry.path.endsWith('.md'))
-  const paths = new Set(markdown.map((entry) => entry.path))
-  const issues: Array<{ path: string; severity: 'error' | 'warning'; code: string; message: string }> = []
+export function validateConcept(path: string, raw: string): OkfIssue[] {
+  const parsed = parseFrontmatter(raw)
+  if (!parsed.hasFrontmatter) {
+    return [{ path, severity: 'error', code: 'missing-frontmatter', message: 'Concept documents must start with YAML frontmatter.' }]
+  }
+  if (parsed.error) {
+    return [{ path, severity: 'error', code: 'invalid-frontmatter', message: parsed.error }]
+  }
+  const issues: OkfIssue[] = []
+  if (!parsed.frontmatter.type.trim()) {
+    issues.push({ path, severity: 'error', code: 'missing-type', message: 'Concept frontmatter requires a non-empty type field.' })
+  }
+  if (parsed.frontmatter.timestamp && Number.isNaN(Date.parse(parsed.frontmatter.timestamp))) {
+    issues.push({ path, severity: 'warning', code: 'invalid-timestamp', message: 'timestamp should be an ISO 8601 datetime.' })
+  }
+  return issues
+}
+
+export function validateDocument(path: string, raw: string): OkfIssue[] {
+  if (!isMarkdownPath(path)) return []
+  const filename = basename(path).toLowerCase()
+  if (filename === INDEX_FILENAME) return validateIndex(path, raw)
+  if (filename === LOG_FILENAME) return validateLog(path, raw)
+  return validateConcept(path, raw)
+}
+
+export function assertValidOkfDocument(path: string, raw: string): void {
+  const errors = validateDocument(path, raw).filter((issue) => issue.severity === 'error')
+  if (errors.length === 0) return
+  throw new Error(errors.map((issue) => issue.message).join(' '))
+}
+
+export async function validateBundle(
+  provider: VaultProvider,
+  entries?: FileEntry[]
+): Promise<OkfBundleReport> {
+  const all = entries ?? (await listFilesRecursive(provider))
+  const files = all.filter((entry) => entry.type === 'file' && isMarkdownPath(entry.path))
+  const pathSet = new Set(files.map((entry) => cleanPath(entry.path)))
+  const issues: OkfIssue[] = []
   let concepts = 0
+  let indexes = 0
+  let logs = 0
   let links = 0
   let brokenLinks = 0
 
-  for (const entry of markdown) {
-    const raw = await provider.readFile(entry.path)
-    if (isReservedPath(entry.path)) {
-      validateReserved(entry.path, raw, issues)
+  for (const entry of files) {
+    const raw = await provider.readFile(entry.path).catch(() => '')
+    const filename = basename(entry.path).toLowerCase()
+    issues.push(...validateDocument(entry.path, raw))
+    if (filename === INDEX_FILENAME) {
+      indexes++
+      continue
+    }
+    if (filename === LOG_FILENAME) {
+      logs++
       continue
     }
     concepts++
-    const parsed = parseFrontmatter(raw)
-    if (!parsed.hasFrontmatter) {
-      issues.push({ path: entry.path, severity: 'error', code: 'missing-frontmatter', message: 'Concept requires YAML frontmatter.' })
-      continue
-    }
-    if (parsed.error) {
-      issues.push({ path: entry.path, severity: 'error', code: 'invalid-frontmatter', message: parsed.error })
-      continue
-    }
-    if (!parsed.frontmatter.type.trim()) {
-      issues.push({ path: entry.path, severity: 'error', code: 'missing-type', message: 'Concept requires a non-empty type.' })
-    }
-    if (parsed.frontmatter.timestamp && Number.isNaN(Date.parse(parsed.frontmatter.timestamp))) {
-      issues.push({ path: entry.path, severity: 'warning', code: 'invalid-timestamp', message: 'timestamp should be ISO 8601.' })
-    }
-    for (const link of extractLinks(parsed.body, entry.path).filter((item) => !item.external)) {
-      links++
-      if (link.targetPath && !paths.has(link.targetPath)) {
+    if (issues.some((issue) => issue.path === entry.path && issue.severity === 'error')) continue
+
+    const conceptLinks = extractLinks(parseFrontmatter(raw).body, entry.path).filter((link) => !link.external)
+    links += conceptLinks.length
+    for (const link of conceptLinks) {
+      if (link.targetPath && !pathSet.has(link.targetPath)) {
         brokenLinks++
-        issues.push({ path: entry.path, severity: 'warning', code: 'broken-link', message: `Missing target ${link.href}` })
+        issues.push({
+          path: entry.path,
+          severity: 'warning',
+          code: 'broken-link',
+          message: `Link target does not currently exist: ${link.href}`,
+        })
       }
     }
   }
@@ -99,38 +201,41 @@ export async function validateBundle(provider: VaultProvider) {
     version: OKF_VERSION,
     conformant: !issues.some((issue) => issue.severity === 'error'),
     concepts,
+    indexes,
+    logs,
     links,
     brokenLinks,
     issues,
   }
 }
 
-export async function buildConceptCatalog(provider: VaultProvider) {
-  const entries = await listFilesRecursive(provider)
-  const concepts = []
-  for (const entry of entries.filter((item) => item.type === 'file' && isConceptPath(item.path))) {
-    const raw = await provider.readFile(entry.path)
-    const parsed = parseFrontmatter(raw)
-    concepts.push({
-      id: conceptId(entry.path),
-      path: entry.path,
-      type: parsed.frontmatter.type || 'Unknown',
-      title: parsed.frontmatter.title || titleFromPath(entry.path),
-      description: parsed.frontmatter.description,
-      resource: parsed.frontmatter.resource,
-      tags: parsed.frontmatter.tags,
-      timestamp: parsed.frontmatter.timestamp,
-      links: parsed.error ? [] : extractLinks(parsed.body, entry.path),
-      conformant: parsed.hasFrontmatter && !parsed.error && !!parsed.frontmatter.type.trim(),
+export async function buildConceptCatalog(provider: VaultProvider, entries?: FileEntry[]) {
+  const all = entries ?? (await listFilesRecursive(provider))
+  const conceptEntries = all.filter((item) => item.type === 'file' && isConceptPath(item.path))
+  return Promise.all(
+    conceptEntries.map(async (entry) => {
+      const parsed = parseFrontmatter(await provider.readFile(entry.path).catch(() => ''))
+      return {
+        id: conceptId(entry.path),
+        path: entry.path,
+        type: parsed.frontmatter.type || 'Unknown',
+        title: parsed.frontmatter.title || titleFromPath(entry.path),
+        description: parsed.frontmatter.description,
+        resource: parsed.frontmatter.resource,
+        tags: parsed.frontmatter.tags,
+        timestamp: parsed.frontmatter.timestamp,
+        links: parsed.error ? [] : extractLinks(parsed.body, entry.path),
+        conformant: parsed.hasFrontmatter && !parsed.error && !!parsed.frontmatter.type.trim(),
+      }
     })
-  }
-  return concepts
+  )
 }
 
-export async function rebuildIndexes(provider: VaultProvider) {
-  const entries = await listFilesRecursive(provider)
-  const concepts = await buildConceptCatalog(provider)
-  const directories = collectDirectories(entries, concepts.map((item) => item.path))
+/** Rebuild every hierarchical index.md required for progressive disclosure. */
+export async function rebuildIndexes(provider: VaultProvider, entries?: FileEntry[]) {
+  const all = entries ?? (await listFilesRecursive(provider))
+  const concepts = await buildConceptCatalog(provider, all)
+  const directories = collectDirectories(all, concepts.map((item) => item.path))
   const changed: string[] = []
   for (const directory of directories) {
     const path = directory ? `${directory}/${INDEX_FILENAME}` : INDEX_FILENAME
@@ -141,7 +246,7 @@ export async function rebuildIndexes(provider: VaultProvider) {
     changed.push(path)
   }
   if (changed.length > 0 && !provider.writesAreCommits) {
-    await provider.commit('Update bundle indexes', changed)
+    await provider.commit(changed.length === 1 ? `Update ${changed[0]}` : 'Update vault indexes', changed)
   }
   return { updated: changed }
 }
@@ -149,54 +254,78 @@ export async function rebuildIndexes(provider: VaultProvider) {
 export async function appendLog(
   provider: VaultProvider,
   action: string,
-  message: string
+  message: string,
+  scope = ''
 ) {
+  const path = scope ? `${scope}/${LOG_FILENAME}` : LOG_FILENAME
   const date = new Date().toISOString().slice(0, 10)
-  const entry = `* **${action}**: ${message}`
-  const current = await provider.readFile(LOG_FILENAME).catch(() => '# Bundle Update Log\n')
-  const heading = `## ${date}`
-  let next: string
-  if (current.includes(`${heading}\n`)) {
-    const marker = `${heading}\n`
-    const index = current.indexOf(marker) + marker.length
-    next = `${current.slice(0, index)}${entry}\n${current.slice(index).replace(/^\n*/, '')}`
-  } else {
-    const title = current.match(/^#\s+.+$/m)?.[0] ?? '# Bundle Update Log'
-    const rest = current.replace(/^#\s+.+\s*/m, '').trim()
-    next = `${title}\n\n${heading}\n${entry}\n${rest ? `\n${rest}\n` : ''}`
+  const current = await provider.readFile(path).catch(() => '# Vault Update Log\n')
+  const next = insertNewestEntry(current, date, `* **${action}**: ${message}`)
+  if (next !== current) {
+    await provider.writeFile(path, next)
+    if (!provider.writesAreCommits) await provider.commit(`Update ${path}`, [path])
   }
-  await provider.writeFile(LOG_FILENAME, next)
-  if (!provider.writesAreCommits) await provider.commit(`Update ${LOG_FILENAME}`, [LOG_FILENAME])
-  return { path: LOG_FILENAME, action, recorded: true }
+  return { path, action, recorded: true }
+}
+
+export function insertNewestEntry(log: string, date: string, entry: string): string {
+  const normalized = log.trimEnd()
+  const heading = `## ${date}`
+  if (normalized.includes(`${heading}\n`)) {
+    const marker = `${heading}\n`
+    const index = normalized.indexOf(marker) + marker.length
+    return `${normalized.slice(0, index)}${entry}\n${normalized.slice(index).replace(/^\n*/, '')}\n`
+  }
+
+  const titleMatch = normalized.match(/^#\s+.+$/m)
+  if (!titleMatch || titleMatch.index === undefined) {
+    return `# Vault Update Log\n\n${heading}\n${entry}\n`
+  }
+  const titleEnd = titleMatch.index + titleMatch[0].length
+  return `${normalized.slice(0, titleEnd)}\n\n${heading}\n${entry}\n${normalized.slice(titleEnd).replace(/^\s*/, '')}\n`
 }
 
 function renderIndex(
   directory: string,
   directories: string[],
-  concepts: Awaited<ReturnType<typeof buildConceptCatalog>>
+  concepts: Array<{ path: string; title: string; description: string; type: string; tags: string[] }>
 ): string {
-  const lines = directory
-    ? [`# ${titleFromPath(directory)} Index`, '']
-    : ['---', `okf_version: "${OKF_VERSION}"`, '---', '', '# Knowledge Bundle', '', 'Progressive-disclosure map of this OKF bundle.', '']
-  const children = directories.filter((candidate) => candidate && dirname(candidate) === directory)
-  if (children.length > 0) {
-    lines.push('# Directories', '')
-    for (const child of children.sort()) {
+  const childDirectories = directories.filter((candidate) => candidate && dirname(candidate) === directory).sort()
+  const childConcepts = concepts
+    .filter((concept) => dirname(concept.path) === directory)
+    .sort((a, b) => a.title.localeCompare(b.title))
+
+  const lines: string[] = []
+  if (!directory) lines.push('---', `okf_version: "${OKF_VERSION}"`, '---', '')
+  lines.push('# Index', '')
+  if (!directory) {
+    lines.push(
+      'Progressive-disclosure map of this Open Knowledge Format vault.',
+      'Open the most relevant concept rather than loading the entire vault.',
+      ''
+    )
+  }
+  if (childDirectories.length > 0) {
+    lines.push('### Directories', '')
+    for (const child of childDirectories) {
       const name = child.split('/').pop() ?? child
       lines.push(`* [${titleFromPath(name)}](${encodeURI(`${name}/${INDEX_FILENAME}`)}) - Browse this section.`)
     }
     lines.push('')
   }
-  const local = concepts.filter((item) => dirname(item.path) === directory).sort((a, b) => a.title.localeCompare(b.title))
-  if (local.length > 0) {
-    lines.push('# Concepts', '')
-    for (const item of local) {
-      const relative = item.path.slice(directory ? directory.length + 1 : 0)
-      lines.push(`* [${item.title}](${encodeURI(relative)}) - ${item.description || `${item.type} concept.`}`)
+  if (childConcepts.length > 0) {
+    lines.push('### Concepts', '')
+    for (const concept of childConcepts) {
+      const relative = concept.path.slice(directory ? directory.length + 1 : 0)
+      const description = concept.description || `${concept.type} concept.`
+      const tags = concept.tags.length > 0 ? ` Tags: ${concept.tags.join(', ')}.` : ''
+      lines.push(`* [${concept.title}](${encodeURI(relative)}) - ${description}${tags}`)
     }
     lines.push('')
   }
-  if (children.length === 0 && local.length === 0) lines.push('_No concepts in this scope yet._', '')
+  if (childDirectories.length === 0 && childConcepts.length === 0) {
+    lines.push('_No concepts in this scope yet._', '')
+  }
   return `${lines.join('\n').trimEnd()}\n`
 }
 
@@ -206,7 +335,10 @@ function collectDirectories(entries: FileEntry[], conceptPaths: string[]) {
     if (entry.type === 'dir') addParents(directories, entry.path)
   }
   for (const path of conceptPaths) addParents(directories, dirname(path))
-  return [...directories]
+  return [...directories].sort((a, b) => {
+    const depth = a.split('/').filter(Boolean).length - b.split('/').filter(Boolean).length
+    return depth || a.localeCompare(b)
+  })
 }
 
 function addParents(target: Set<string>, path: string) {
@@ -215,50 +347,40 @@ function addParents(target: Set<string>, path: string) {
   for (let index = 1; index <= parts.length; index++) target.add(parts.slice(0, index).join('/'))
 }
 
-function validateReserved(
-  path: string,
-  raw: string,
-  issues: Array<{ path: string; severity: 'error' | 'warning'; code: string; message: string }>
-) {
-  const name = path.split('/').pop()?.toLowerCase()
-  if (name === INDEX_FILENAME) {
-    const parsed = parseFrontmatter(raw)
-    if (parsed.hasFrontmatter && parsed.error) {
-      issues.push({ path, severity: 'error', code: 'invalid-index', message: `Index has invalid YAML frontmatter: ${parsed.error}` })
-      return
-    }
-    if (parsed.hasFrontmatter && path.replace(/^\/+/, '') !== INDEX_FILENAME) {
-      issues.push({ path, severity: 'error', code: 'invalid-index', message: 'Only the bundle-root index.md may contain frontmatter.' })
-      return
-    }
-    if (parsed.hasFrontmatter) {
-      const standardFieldsPresent =
-        parsed.frontmatter.type ||
-        parsed.frontmatter.title ||
-        parsed.frontmatter.description ||
-        parsed.frontmatter.resource ||
-        parsed.frontmatter.tags.length > 0 ||
-        parsed.frontmatter.timestamp
-      const unsupportedKeys = Object.keys(parsed.frontmatter.extra).filter((key) => key !== 'okf_version')
-      if (standardFieldsPresent || unsupportedKeys.length > 0) {
-        issues.push({ path, severity: 'error', code: 'invalid-index', message: 'Root index.md frontmatter may only declare okf_version.' })
-        return
-      }
-    }
-    const body = parsed.hasFrontmatter ? parsed.body : raw
-    if (
-      !/^#\s+\S/m.test(body) ||
-      (!/\[[^\]]+\]\([^)]+\)/.test(body) && !/_No concepts in this scope yet\._/.test(body))
-    ) {
-      issues.push({ path, severity: 'error', code: 'invalid-index', message: 'Index requires headings and links.' })
+function validateIndex(path: string, raw: string): OkfIssue[] {
+  const invalid = (message: string): OkfIssue[] => [{ path, severity: 'error', code: 'invalid-index', message }]
+  const parsed = parseFrontmatter(raw)
+  if (parsed.hasFrontmatter) {
+    if (parsed.error) return invalid(`index.md has invalid YAML frontmatter: ${parsed.error}`)
+    if (cleanPath(path) !== INDEX_FILENAME) return invalid('Only the vault-root index.md may contain frontmatter.')
+    const standardFieldsPresent =
+      parsed.frontmatter.type ||
+      parsed.frontmatter.title ||
+      parsed.frontmatter.description ||
+      parsed.frontmatter.resource ||
+      parsed.frontmatter.tags.length > 0 ||
+      parsed.frontmatter.timestamp
+    const unsupportedKeys = Object.keys(parsed.frontmatter.extra).filter((key) => key !== 'okf_version')
+    if (standardFieldsPresent || unsupportedKeys.length > 0) {
+      return invalid('Root index.md frontmatter may only declare okf_version.')
     }
   }
-  if (name === LOG_FILENAME) {
-    const dates = [...raw.matchAll(/^##\s+(.+)$/gm)].map((match) => match[1].trim())
-    if (!/^#\s+\S/m.test(raw) || dates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date))) {
-      issues.push({ path, severity: 'error', code: 'invalid-log', message: 'Log date headings must use YYYY-MM-DD.' })
-    }
+  const body = parsed.hasFrontmatter ? parsed.body : raw
+  if (
+    !/^#\s+\S/m.test(body) ||
+    (!/\[[^\]]+\]\([^)]+\)/.test(body) && !/_No concepts in this scope yet\._/.test(body))
+  ) {
+    return invalid('index.md must use headings and Markdown links to enumerate its scope.')
   }
+  return []
+}
+
+function validateLog(path: string, raw: string): OkfIssue[] {
+  const dates = [...raw.matchAll(/^##\s+(.+)$/gm)].map((match) => match[1].trim())
+  if (!/^#\s+\S/m.test(raw) || dates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date))) {
+    return [{ path, severity: 'error', code: 'invalid-log', message: 'log.md must have a title and ISO 8601 YYYY-MM-DD date headings.' }]
+  }
+  return []
 }
 
 interface NodeLike {
@@ -278,8 +400,12 @@ function textContent(node: NodeLike): string {
   return (node.children ?? []).map(textContent).join('')
 }
 
+function cleanPath(path: string): string {
+  return normalizePath(path.replace(/^\/+/, ''))
+}
+
 function dirname(path: string): string {
-  const parts = path.split('/')
+  const parts = cleanPath(path).split('/')
   parts.pop()
   return parts.join('/')
 }
