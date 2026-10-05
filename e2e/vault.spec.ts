@@ -1,17 +1,68 @@
 import { readFile } from 'node:fs/promises'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+import { conceptTitle, createBrowserVault, editorBody, sidebarConcept } from './helpers'
 
-async function createBrowserVault(page: Page, name: string) {
-  await page.goto('/')
-  await page.getByRole('button', { name: /Start now/i }).first().click()
-  await page.getByLabel('Vault name').fill(name)
-  await page.getByRole('button', { name: /Create browser vault/i }).click()
-  await expect(page).toHaveURL(/\/vault\/welcome\.md$/, { timeout: 30_000 })
-}
+test('a new concept is created, edited and still there after a reload', async ({ page }) => {
+  await createBrowserVault(page, 'Editing vault')
+
+  await page.getByRole('button', { name: 'New concept' }).click()
+  const dialog = page.getByRole('dialog', { name: 'New concept' })
+  await dialog.getByLabel('Concept title').fill('Garden plans')
+  await dialog.getByLabel('Description').fill('What to plant this spring.')
+  await dialog.getByRole('button', { name: 'Create concept' }).click()
+  await expect(dialog).toBeHidden()
+
+  await expect(page).toHaveURL(/\/vault\/garden-plans\.md$/)
+  await expect(conceptTitle(page)).toHaveValue('Garden plans')
+  await expect(sidebarConcept(page, 'Garden plans')).toBeVisible()
+
+  await editorBody(page).click()
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('Plant tomatoes near the fence.')
+  await expect(page.getByRole('main').getByText('Saved', { exact: true })).toBeVisible()
+
+  await page.reload()
+  await expect(conceptTitle(page)).toHaveValue('Garden plans')
+  await expect(editorBody(page)).toContainText('Plant tomatoes near the fence.')
+})
+
+test('a concept is renamed and deleted from the sidebar', async ({ page }) => {
+  await createBrowserVault(page, 'Tidy vault')
+
+  await page.getByRole('button', { name: 'New concept' }).click()
+  const dialog = page.getByRole('dialog', { name: 'New concept' })
+  await dialog.getByLabel('Concept title').fill('Scratch')
+  await dialog.getByRole('button', { name: 'Create concept' }).click()
+  await expect(page).toHaveURL(/\/vault\/scratch\.md$/)
+
+  await sidebarConcept(page, 'Scratch').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Rename' }).click()
+  const renameInput = page.getByRole('listitem').getByRole('textbox')
+  await expect(renameInput).toBeFocused()
+  await renameInput.fill('Kept notes')
+  await renameInput.press('Enter')
+  await expect(page).toHaveURL(/\/vault\/kept-notes\.md$/)
+
+  await sidebarConcept(page, 'Scratch').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Delete' }).click()
+  await expect(sidebarConcept(page, 'Scratch')).toBeHidden()
+  await expect(page).toHaveURL(/\/vault$/)
+
+  await page.reload()
+  await expect(sidebarConcept(page, 'Welcome to Caedora').first()).toBeVisible()
+  await expect(sidebarConcept(page, 'Scratch')).toBeHidden()
+})
+
+test('a concept link in the editor opens the linked concept in the vault', async ({ page }) => {
+  await createBrowserVault(page, 'Links vault')
+
+  await editorBody(page).getByRole('link', { name: 'Home Base' }).click()
+  await expect(page).toHaveURL(/\/vault\/personal\/home-base\.md$/)
+  await expect(conceptTitle(page)).toHaveValue('Home Base')
+})
 
 test('Ctrl+K searches note content and opens the matching concept', async ({ page }) => {
   await createBrowserVault(page, 'Search vault')
-  await page.goto('/vault')
 
   await page.keyboard.press('Control+k')
   const dialog = page.getByRole('dialog', { name: 'Search vault' })

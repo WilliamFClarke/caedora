@@ -809,6 +809,24 @@ function VaultKindInlineIcon({ state }: { state: PersistedVaultState }) {
   return <Icon className="text-muted-foreground ml-1.5 inline size-3.5 align-[-2px]" />
 }
 
+// The context menu traps focus while open and hands it back to its trigger on
+// close, so the inline rename input it opens has to be focused explicitly.
+function useRenameFromMenu(setRenaming: (path: string | null) => void) {
+  const renameRequested = useRef(false)
+  return {
+    startRename: (path: string) => {
+      renameRequested.current = true
+      setRenaming(path)
+    },
+    keepRenameFocus: (event: Event) => {
+      if (!renameRequested.current) return
+      renameRequested.current = false
+      event.preventDefault()
+      document.querySelector<HTMLInputElement>('input[data-inline-rename]')?.focus()
+    },
+  }
+}
+
 function TreeRow(props: TreeRowProps) {
   const { node, matches } = props
   if (matches && !containsMatch(node, matches)) return null
@@ -829,6 +847,7 @@ function FolderRow(props: TreeRowProps) {
   } = props
   const [open, setOpen] = useState(true)
   const isRenaming = renaming === node.path
+  const { startRename, keepRenameFocus } = useRenameFromMenu(setRenaming)
   const appearance = folderAppearances[node.path] ?? suggestedFolderAppearance(node.path)
   const Icon = folderIconComponent(appearance.icon)
 
@@ -865,7 +884,7 @@ function FolderRow(props: TreeRowProps) {
               </CollapsibleTrigger>
             </div>
           </ContextMenuTrigger>
-          <ContextMenuContent>
+          <ContextMenuContent onCloseAutoFocus={keepRenameFocus}>
             <ContextMenuItem
               onSelect={() => {
                 setOpen(true)
@@ -894,7 +913,7 @@ function FolderRow(props: TreeRowProps) {
               New folder
             </ContextMenuItem>
             <ContextMenuSeparator />
-            <ContextMenuItem onSelect={() => setRenaming(node.path)}>
+            <ContextMenuItem onSelect={() => startRename(node.path)}>
               <Pencil />
               Rename
             </ContextMenuItem>
@@ -943,6 +962,7 @@ function FileRow(props: TreeRowProps) {
     conceptCatalog,
   } = props
   const isRenaming = renaming === node.path
+  const { startRename, keepRenameFocus } = useRenameFromMenu(setRenaming)
   const isSel = selected === node.path
   const isPinned = pinned.has(node.path)
   const isLocked = isLockedPath(node.path)
@@ -986,7 +1006,7 @@ function FileRow(props: TreeRowProps) {
             {node.pending && <Loader2 className="ml-auto size-3 animate-spin" />}
           </SidebarMenuButton>
         </ContextMenuTrigger>
-        <ContextMenuContent>
+        <ContextMenuContent onCloseAutoFocus={keepRenameFocus}>
           {isIndex && (
             <ContextMenuItem disabled>
               <ListTree />
@@ -1002,7 +1022,7 @@ function FileRow(props: TreeRowProps) {
           {!isLocked && (
             <>
               <ContextMenuSeparator />
-              <ContextMenuItem onSelect={() => setRenaming(node.path)}>
+              <ContextMenuItem onSelect={() => startRename(node.path)}>
                 <Pencil />
                 Rename
               </ContextMenuItem>
@@ -1060,6 +1080,7 @@ function InlineInput({
     <input
       type="text"
       autoFocus
+      data-inline-rename
       value={value}
       placeholder={placeholder}
       onFocus={(e) => e.currentTarget.select()}
@@ -1252,7 +1273,13 @@ function CreateItemDialog({
       setConceptDescription('')
       setError(null)
       setBusy(false)
-      const t = setTimeout(() => inputRef.current?.select(), 80)
+      // Only select the default name if focus is still on it, otherwise a
+      // quick typist who has moved on to another field loses their text.
+      const t = setTimeout(() => {
+        const input = inputRef.current
+        const active = document.activeElement
+        if (input && (active === input || active === document.body)) input.select()
+      }, 80)
       return () => clearTimeout(t)
     }
   }, [creating])

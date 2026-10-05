@@ -321,6 +321,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       if (isLockedPath(from)) {
         throw new Error(`${from} is maintained by Caedora and can't be renamed or moved.`)
       }
+      // Let a pending autosave land first, or it can recreate the old path.
+      await editorSaveRef.current?.()
       // Slugify just the final segment of the destination, keeping parent
       // folders untouched. Renames of folder paths also get a clean slug.
       const parts = to.split('/')
@@ -387,6 +389,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       if (isLockedPath(path)) {
         throw new Error(`${path} is maintained by Caedora and can't be deleted.`)
       }
+      await editorSaveRef.current?.()
       if (virtualFolders.has(path)) {
         // Virtual folder — just remove from state
         setVirtualFolders((prev) => {
