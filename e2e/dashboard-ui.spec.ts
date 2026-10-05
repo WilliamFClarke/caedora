@@ -1,4 +1,13 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
+
+// Headless Chromium here does not start native drags from mouse events, so dispatch them.
+async function dragRow(page: Page, from: Locator, to: Locator) {
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer())
+  await from.dispatchEvent('dragstart', { dataTransfer })
+  await to.dispatchEvent('dragover', { dataTransfer })
+  await to.dispatchEvent('drop', { dataTransfer })
+  await from.dispatchEvent('dragend', { dataTransfer })
+}
 
 test('UK personal finance template opens on a working dashboard', async ({ page }) => {
   await page.goto('/')
@@ -26,6 +35,11 @@ test('UK personal finance template opens on a working dashboard', async ({ page 
   await expect(cards.first()).toHaveAttribute('aria-label', 'Net worth')
   await page.getByRole('button', { name: 'Move Net worth forward' }).click()
   await expect(cards.nth(1)).toHaveAttribute('aria-label', 'Net worth')
+  await expect(cards.first()).toHaveAttribute('aria-label', 'Cash')
+  const rows = page.getByTestId('dashboard-edit-row')
+  await dragRow(page, rows.nth(1), rows.first())
+  await expect(cards.first()).toHaveAttribute('aria-label', 'Net worth over time')
+  await dragRow(page, rows.nth(1), rows.first())
   await expect(cards.first()).toHaveAttribute('aria-label', 'Cash')
   await page.getByRole('button', { name: 'Done' }).click()
   await expect(dashboard.locator('[data-slot="dashboard-stat"]').first()).toContainText('Cash')

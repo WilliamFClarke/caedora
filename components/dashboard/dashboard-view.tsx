@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { flushSync } from 'react-dom'
 import {
   ArrowDown,
   ArrowLeft,
@@ -79,7 +80,10 @@ export function DashboardView({
 
   const edit = (change: LayoutEdit) => {
     const next = applyLayoutEdit(body, change)
-    if (next !== body) onBodyChange?.(next)
+    if (next === body || !onBodyChange) return
+    // Cards carry view-transition-names, so the browser animates them to their new places.
+    if (!document.startViewTransition) return onBodyChange(next)
+    document.startViewTransition(() => flushSync(() => onBodyChange(next)))
   }
 
   const canEdit = Boolean(onBodyChange) && spec.rows.length > 0
@@ -166,7 +170,9 @@ function LayoutEditor({
   onEdit: (edit: LayoutEdit) => void
 }) {
   const [dragging, setDragging] = useState<ItemAt | null>(null)
+  const [draggingRow, setDraggingRow] = useState<number | null>(null)
   const [target, setTarget] = useState<string | null>(null)
+  const names = useMemo(() => transitionNames(rows), [rows])
 
   const drop = (to: { row: number; index: number } | { newRowAt: number }) => {
     if (!dragging) return
@@ -188,22 +194,49 @@ function LayoutEditor({
         <section
           key={row.index}
           aria-label={`Row ${rowPosition + 1}`}
+          draggable
+          data-testid="dashboard-edit-row"
           className={cn(
             'rounded-xl border border-dashed p-3 transition-colors',
-            target === `row-${row.index}` && 'border-primary bg-primary/5'
+            target === `row-${row.index}` && 'border-primary bg-primary/5',
+            draggingRow === row.index && 'opacity-40'
           )}
+          onDragStart={(event) => {
+            // Card drags bubble up here too; only drags that start on the row itself move the row.
+            if (event.target !== event.currentTarget) return
+            event.dataTransfer.effectAllowed = 'move'
+            event.dataTransfer.setData('text/plain', `Row ${rowPosition + 1}`)
+            setDraggingRow(row.index)
+          }}
+          onDragEnd={() => {
+            setDraggingRow(null)
+            setTarget(null)
+          }}
           onDragOver={(event) => {
+            if (draggingRow !== null) {
+              event.preventDefault()
+              if (draggingRow !== row.index) setTarget(`row-${row.index}`)
+              return
+            }
             if (!dragging) return
             event.preventDefault()
             if (event.target === event.currentTarget) setTarget(`row-${row.index}`)
           }}
           onDrop={(event) => {
+            if (draggingRow !== null) {
+              event.preventDefault()
+              if (draggingRow !== row.index) onEdit({ kind: 'move-row', from: draggingRow, to: row.index })
+              setDraggingRow(null)
+              setTarget(null)
+              return
+            }
             if (event.target !== event.currentTarget) return
             event.preventDefault()
             drop({ row: row.index, index: endOfRow(row) })
           }}
         >
-          <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="mb-3 flex cursor-grab flex-wrap items-center gap-2 active:cursor-grabbing">
+            <GripVertical className="text-muted-foreground size-4" aria-hidden />
             <span className="text-muted-foreground text-xs font-medium">Row {rowPosition + 1}</span>
             <ToggleGroup
               type="single"
@@ -248,6 +281,7 @@ function LayoutEditor({
             rowPosition={rowPosition}
             rows={rows}
             data={data}
+            names={names[rowPosition]}
             dragging={dragging}
             target={target}
             setTarget={setTarget}
@@ -289,6 +323,7 @@ function EditableRow({
   rowPosition,
   rows,
   data,
+  names,
   dragging,
   target,
   setTarget,
@@ -302,6 +337,7 @@ function EditableRow({
   rowPosition: number
   rows: DashboardRow[]
   data: DashboardData
+  names: string[]
   dragging: ItemAt | null
   target: string | null
   setTarget: (target: string | null) => void
@@ -329,6 +365,7 @@ function EditableRow({
             draggable
             data-testid="dashboard-edit-item"
             aria-label={label}
+            style={{ viewTransitionName: names[position] }}
             onDragStart={(event) => {
               event.dataTransfer.effectAllowed = 'move'
               event.dataTransfer.setData('text/plain', label)
@@ -344,6 +381,7 @@ function EditableRow({
               setTarget(`${at.row}:${at.item}:${after ? 'after' : 'before'}`)
             }}
             onDrop={(event) => {
+              if (!dragging) return
               event.preventDefault()
               event.stopPropagation()
               const rect = event.currentTarget.getBoundingClientRect()
@@ -397,6 +435,22 @@ function EditableRow({
         )
       })}
     </div>
+  )
+}
+
+/** A stable view-transition-name per card, from its YAML, so moved cards animate. */
+function transitionNames(rows: DashboardRow[]): string[][] {
+  const seen = new Map<string, number>()
+  return rows.map((row) =>
+    row.items.map((item) => {
+      const json = JSON.stringify(item)
+      let hash = 5381
+      for (let i = 0; i < json.length; i++) hash = (hash * 33) ^ json.charCodeAt(i)
+      const key = (hash >>> 0).toString(36)
+      const count = seen.get(key) ?? 0
+      seen.set(key, count + 1)
+      return `dashboard-card-${key}-${count}`
+    })
   )
 }
 
