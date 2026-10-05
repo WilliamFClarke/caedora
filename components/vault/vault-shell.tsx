@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
+import { SearchDialog, useSearchShortcut } from './search-dialog'
 import { LinkGraphPanel } from './link-graph-panel'
 import { AssistantSidebarLoader } from '@/components/assistant/assistant-sidebar-loader'
 import { SettingsDialog, type SettingsSection } from '@/components/settings-dialog'
@@ -51,6 +52,9 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [linkGraphOpen, setLinkGraphOpen] = useState(false)
+  const [searchDialogOpen, setSearchDialogOpen] = useState(false)
+  const openSearchDialog = useCallback(() => setSearchDialogOpen(true), [])
+  useSearchShortcut(openSearchDialog)
   const [conceptCatalog, setConceptCatalog] = useState<Record<string, OkfConceptSummary>>({})
   const { pinned, toggle: togglePin, rename: renamePinned, remove: removePinned } = usePinned()
   const {
@@ -464,6 +468,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         onDeletePath={onDeletePath}
         onSync={onSync}
         conceptCatalog={conceptCatalog}
+        onOpenSearch={openSearchDialog}
       />
       <SidebarInset className="min-w-0">
         <div className="caedora-vault-workspace relative flex h-full min-w-0 flex-1 overflow-hidden bg-card">
@@ -512,6 +517,12 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         initialSection={settingsSection}
+      />
+      <SearchDialog
+        open={searchDialogOpen}
+        onOpenChange={setSearchDialogOpen}
+        conceptCatalog={conceptCatalog}
+        onSelect={onSelect}
       />
     </SidebarProvider>
   )

@@ -7,6 +7,7 @@ import {
 } from '@/packages/caedora-mcp/src/lib/okf'
 import { titleFromPath } from '@/packages/caedora-mcp/src/lib/conventions'
 import type { FileEntry, VaultProvider } from './types'
+import { markdownToSearchText } from './search'
 
 export * from '@/packages/caedora-mcp/src/lib/okf'
 export { titleFromPath as deriveTitleFromPath }
@@ -21,6 +22,8 @@ export interface OkfConceptSummary {
   timestamp: string
   links: OkfLink[]
   conformant: boolean
+  /** Concept body flattened to plain text, used for full text search. */
+  body: string
 }
 
 export async function loadConceptCatalog(
@@ -50,6 +53,7 @@ export async function loadConceptCatalog(
             parsed.hasFrontmatter &&
             !parsed.error &&
             metadata.type.trim().length > 0,
+          body: markdownToSearchText(parsed.body),
         },
       ]
     })

@@ -6,6 +6,7 @@ import {
   CircleCheck,
   Database,
   Download,
+  FolderArchive,
   FolderOpen,
   FolderPlus,
   Github,
@@ -25,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { PersistedVaultState } from '@/lib/types'
+import type { VaultExportFormat } from '@/lib/vault-export'
 import { cn } from '@/lib/utils'
 
 export type StoredVault = { id: string; state: PersistedVaultState }
@@ -35,7 +37,7 @@ type SavedVaultListProps = {
   switchingVaultId?: string | null
   onOpenVault: (id: string) => void
   onDeleteVault: (id: string) => void
-  onExportVault: (vault: StoredVault) => void
+  onExportVault: (vault: StoredVault, format: VaultExportFormat) => void
   onAddExistingVault: () => void
   onCreateVault?: () => void
   onCloseAllVaults?: () => void
@@ -143,7 +145,7 @@ export function SavedVaultList({
                               <MoreVertical className="size-4" />
                             </button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuContent align="end" className="w-52">
                             {!isActive && (
                               <DropdownMenuItem onSelect={() => onOpenVault(vault.id)}>
                                 <FolderOpen className="size-4" />
@@ -153,12 +155,22 @@ export function SavedVaultList({
                             <DropdownMenuItem
                               onSelect={(event) => {
                                 if (!canExport) event.preventDefault()
-                                if (canExport) onExportVault(vault)
+                                if (canExport) onExportVault(vault, 'okf')
+                              }}
+                              disabled={!canExport}
+                            >
+                              <FolderArchive className="size-4" />
+                              Export OKF folder
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={(event) => {
+                                if (!canExport) event.preventDefault()
+                                if (canExport) onExportVault(vault, 'json')
                               }}
                               disabled={!canExport}
                             >
                               <Download className="size-4" />
-                              Export
+                              Export JSON backup
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem

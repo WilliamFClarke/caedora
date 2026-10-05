@@ -1,6 +1,7 @@
 import { openDB, type IDBPDatabase } from 'idb'
 import { buildDiffResult } from '../diff'
 import { assertValidOkfDocument, isMarkdownPath } from '../okf'
+import { createZip } from '../zip'
 import type { CommitEntry, DiffResult, FileEntry, VaultProvider } from '../types'
 
 const DB_NAME = 'caedora-browser-bundles'
@@ -226,15 +227,11 @@ export async function browserStoragePersistence(): Promise<{
 }
 
 export async function exportBrowserBundle(bundleId: string, bundleName: string): Promise<Blob> {
-  const db = await openBrowserBundleDB()
-  const files = (await db.getAll(FILES_STORE) as BrowserFileRecord[])
-    .filter((file) => file.bundleId === bundleId)
-    .sort((a, b) => a.path.localeCompare(b.path))
-    .map((file) => ({
-      path: file.path,
-      content: file.content,
-      lastModified: file.lastModified,
-    }))
+  const files = (await readBundleFiles(bundleId)).map((file) => ({
+    path: file.path,
+    content: file.content,
+    lastModified: file.lastModified,
+  }))
 
   return new Blob([
     JSON.stringify({
@@ -245,6 +242,27 @@ export async function exportBrowserBundle(bundleId: string, bundleName: string):
       files,
     }, null, 2),
   ], { type: 'application/json' })
+}
+
+/**
+ * Export a browser vault as a zipped OKF folder. The archive holds a single
+ * top-level folder whose contents can be committed straight into a GitHub repo.
+ */
+export async function exportBrowserBundleAsOkfZip(bundleId: string, folderName: string): Promise<Blob> {
+  const files = await readBundleFiles(bundleId)
+  const zip = createZip(files.map((file) => ({
+    path: `${folderName}/${file.path}`,
+    content: file.content,
+    lastModified: file.lastModified,
+  })))
+  return new Blob([zip as BlobPart], { type: 'application/zip' })
+}
+
+async function readBundleFiles(bundleId: string): Promise<BrowserFileRecord[]> {
+  const db = await openBrowserBundleDB()
+  return (await db.getAll(FILES_STORE) as BrowserFileRecord[])
+    .filter((file) => file.bundleId === bundleId)
+    .sort((a, b) => a.path.localeCompare(b.path))
 }
 
 export async function listBrowserBundles(): Promise<BrowserBundleRecord[]> {

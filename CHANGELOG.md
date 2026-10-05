@@ -4,6 +4,9 @@ All notable Caedora release changes should be recorded here before tagging.
 
 ## [Unreleased]
 
+- Added OKF folder export for browser vaults, alongside the JSON backup.
+- Added full text search across note content with a Ctrl/Cmd+K dialog, highlighted snippets and `tag:` and `in:` filters.
+
 ## [0.1.0]
 
 - Added optional Clerk-backed accounts while keeping Caedora usable without an account.
