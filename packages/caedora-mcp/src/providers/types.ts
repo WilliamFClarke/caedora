@@ -13,7 +13,7 @@ export interface FileEntry {
 }
 
 export interface VaultProvider {
-  readonly type: 'local' | 'github'
+  readonly type: string
   readonly writesAreCommits: boolean
 
   readFile(path: string): Promise<string>

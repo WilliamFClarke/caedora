@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import type { VaultProvider } from './providers/types.js'
+import { rebuildIndexes } from './lib/okf.js'
 import {
   grepConcepts,
   grepConceptsSchema,
@@ -35,8 +36,6 @@ import {
   ingestSource,
   ingestSourceSchema,
   lintBundle,
-  rebuildBundleIndexes,
-  rebuildIndexesSchema,
   recordQuery,
   recordQuerySchema,
   validateBundleSchema,
@@ -148,8 +147,8 @@ export function buildServer({ provider, readOnly = false }: BuildServerOptions):
     server.tool(
       'rebuild_indexes',
       'Regenerate hierarchical index.md files for progressive disclosure.',
-      rebuildIndexesSchema,
-      async () => textResult(await rebuildBundleIndexes(provider))
+      {},
+      async () => textResult(await rebuildIndexes(provider))
     )
     server.tool(
       'record_query',
