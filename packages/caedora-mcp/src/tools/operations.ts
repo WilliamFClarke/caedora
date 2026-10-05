@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { appendLog, rebuildIndexes, validateBundle } from '../lib/okf.js'
+import { appendLog, validateBundle } from '../lib/okf.js'
 import type { VaultProvider } from '../providers/types.js'
 import { createConcept } from './write.js'
 
@@ -20,12 +20,6 @@ export async function lintBundle(
     )
   }
   return report
-}
-
-export const rebuildIndexesSchema = {}
-
-export async function rebuildBundleIndexes(provider: VaultProvider) {
-  return rebuildIndexes(provider)
 }
 
 export const ingestSourceSchema = {
