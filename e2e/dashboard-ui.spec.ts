@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { createBrowserVault } from './helpers'
 
 // Headless Chromium here does not start native drags from mouse events, so dispatch them.
 async function dragRow(page: Page, from: Locator, to: Locator) {
@@ -10,11 +11,7 @@ async function dragRow(page: Page, from: Locator, to: Locator) {
 }
 
 test('UK personal finance template opens on a working dashboard', async ({ page }) => {
-  await page.goto('/')
-  await page.getByRole('button', { name: /Start now/i }).first().click()
-  await page.getByLabel('Vault name').fill('Finance')
-  await page.getByRole('button', { name: /Create browser vault/i }).click()
-  await page.waitForURL(/\/vault/, { waitUntil: 'commit' })
+  await createBrowserVault(page, 'Finance')
 
   await page.getByRole('button', { name: 'Templates' }).first().click()
   await page.getByRole('button', { name: 'Import UK personal finance' }).first().click()

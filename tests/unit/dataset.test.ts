@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
-import { parseDataset, parseNumber } from '../lib/dataset'
-import { validateDocument } from '../lib/okf'
+import { parseDataset, parseNumber } from '@/lib/dataset'
+import { validateDocument } from '@/lib/okf'
 
 const BALANCES = `---
 type: Dataset
