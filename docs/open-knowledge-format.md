@@ -47,6 +47,8 @@ disclose the bundle instead of loading every file.
 - Templates are normalized into conformant concepts during import.
 - `type: Dataset` concepts hold structured records in a Markdown table and are
   checked against their column schema. See [Datasets](datasets.md).
+- `type: Dashboard` concepts render cards and charts from Datasets. See
+  [Dashboards](dashboards.md).
 - Argus validates approved file mutations and maintains timestamps, indexes,
   and logs.
 - `caedora-mcp` exposes concept CRUD, search, graph, validation, ingest, index,

@@ -79,6 +79,7 @@
     "radix-ui": "^1.4.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "recharts": "^2.15.4",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "remark-stringify": "^11.0.0",
@@ -186,6 +187,11 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    }
+  },
+  "overrides": {
+    "recharts": {
+      "react-is": "^19.0.0"
     }
   }
 }

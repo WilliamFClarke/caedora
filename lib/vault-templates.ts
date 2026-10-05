@@ -9,6 +9,9 @@ import { isReservedPath } from './okf'
 import { rebuildBundleIndexes } from './vault-index'
 import { appendBundleLog } from './bundle-log'
 import { listFilesRecursive } from './storage'
+import { extractFirstTable, DATASET_TYPE } from './dataset'
+import { generateDefaultDashboard } from './dashboard/generate'
+import { UK_PERSONAL_FINANCE_FILES } from './templates/uk-personal-finance'
 
 export interface TemplateFile {
   path: string
@@ -95,6 +98,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     tags: ['projects', 'planning', 'work'],
     files: [
       file('projects/README.md', '# Project hub\n\nTrack active projects, specs, decisions, milestones, and retrospectives here.\n'),
+      file('projects/projects.md', '---\ntags: [projects, status]\n---\n\n# Projects\n\n| Project | Status | Owner | Due | Next step |\n| --- | --- | --- | --- | --- |\n'),
       file('projects/templates/project-brief.md', '---\ntags: [projects, brief]\nstatus: proposed\n---\n\n# Project brief\n\n## Outcome\n\n## Scope\n\n## Milestones\n\n## Risks\n'),
       file('projects/templates/retro.md', '---\ntags: [projects, retro]\n---\n\n# Retrospective\n\n## What changed\n\n## What worked\n\n## What to improve\n\n## Follow-ups\n'),
       file('projects/AGENTS.md', '# Project planning guidance\n\nUse briefs, milestones, and retrospectives to keep recommendations grounded in current project state and documented decisions.\n'),
@@ -167,21 +171,15 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     ],
   },
   {
-    id: 'finance-tracker',
-    name: 'Finance tracker',
-    description: 'Budgets, subscriptions, savings goals, and recurring money reviews.',
+    id: 'uk-personal-finance',
+    name: 'UK personal finance',
+    description: 'Bank accounts, ISAs, mortgage, pensions and net worth with a finance dashboard.',
     category: 'Finance',
-    repository: 'WilliamFClarke/caedora-template-finance',
-    skills: ['AGENTS.md finance review guidance'],
-    conventions: ['budget tables', 'subscription lists', 'monthly reviews'],
-    tags: ['finance', 'budget', 'subscriptions'],
-    files: [
-      file('finance/README.md', '# Finance tracker\n\nTrack budgets, subscriptions, savings goals, and recurring reviews here.\n'),
-      file('finance/budget.md', '---\ntags: [finance, budget]\n---\n\n# Budget\n\n| Category | Planned | Actual | Notes |\n| --- | --- | --- | --- |\n'),
-      file('finance/subscriptions.md', '---\ntags: [finance, subscriptions]\n---\n\n# Subscriptions\n\n| Service | Cost | Renewal | Keep? |\n| --- | --- | --- | --- |\n'),
-      file('finance/monthly-review.md', '---\ntags: [finance, review]\n---\n\n# Monthly finance review\n\n## Summary\n\n## Changes\n\n## Upcoming\n\n## Actions\n'),
-      file('finance/AGENTS.md', '# Finance review guidance\n\nHelp organize recorded financial notes and recurring reviews. Do not provide regulated financial advice or infer account details.\n'),
-    ],
+    repository: 'WilliamFClarke/caedora',
+    skills: ['AGENTS.md finance Dataset guidance'],
+    conventions: ['balance snapshots', 'ISA allowance by tax year', 'finance dashboard'],
+    tags: ['finance', 'uk', 'net-worth', 'isa', 'mortgage'],
+    files: UK_PERSONAL_FINANCE_FILES,
   },
   {
     id: 'investment-tracker',
@@ -261,7 +259,7 @@ export async function loadGitHubTemplate(repository: string): Promise<VaultTempl
 }
 
 export async function fetchTemplateFiles(template: VaultTemplate): Promise<TemplateFile[]> {
-  if (template.files) return normalizeCuratedTemplateFiles(template)
+  if (template.files) return withDefaultDashboard(normalizeCuratedTemplateFiles(template), template.name)
 
   const [owner, repo] = template.repository.split('/')
   const ref = template.ref ?? 'main'
@@ -285,7 +283,16 @@ export async function fetchTemplateFiles(template: VaultTemplate): Promise<Templ
     )
     if (raw.ok) out.push({ path: root ? path.slice(root.length + 1) : path, content: await raw.text() })
   }
-  return out
+  return withDefaultDashboard(
+    out.map((file) => ({ ...file, content: normalizeTemplateConcept(file) })),
+    template.name
+  )
+}
+
+/** Every template ships with a dashboard; generate a table dashboard when it has none. */
+function withDefaultDashboard(files: TemplateFile[], name: string): TemplateFile[] {
+  const dashboard = generateDefaultDashboard(files, name)
+  return dashboard ? [...files, dashboard] : files
 }
 
 export async function importTemplateFiles(
@@ -392,7 +399,9 @@ function normalizeTemplateConcept(
         ? 'Template'
         : /(^|\/)readme\.md$/i.test(file.path)
           ? 'Overview'
-          : 'Reference')
+          : extractFirstTable(rawBody)
+            ? DATASET_TYPE
+            : 'Reference')
   const description =
     parsed.frontmatter.description ||
     (context.templateId ? defaultTemplateDescription(file.path, title, type) : firstParagraph(rawBody)) ||
