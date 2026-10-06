@@ -41,7 +41,7 @@ import { Progress } from '@/components/ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { filterRange, rangeLabel, type ChartResult, type ItemResult } from '@/lib/dashboard/evaluate'
-import { formatDate, formatValue } from '@/lib/dashboard/format'
+import { formatDate, formatMonth, formatValue } from '@/lib/dashboard/format'
 import { cn } from '@/lib/utils'
 
 type Result<K extends ItemResult['kind']> = Extract<ItemResult, { kind: K }>
@@ -140,8 +140,12 @@ function ChartCard({ result }: { result: ChartResult }) {
   const points = useMemo(() => filterRange(result.points, range), [result.points, range])
   const config = useMemo(() => seriesConfig(result.series), [result.series])
   const datesOnX = typeof points[0]?.x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(String(points[0].x))
+  const monthsOnX = typeof points[0]?.x === 'string' && /^\d{4}-\d{2}$/.test(String(points[0].x))
   const id = useId().replace(/[^a-zA-Z0-9]/g, '')
-  const formatX = (value: unknown) => (datesOnX ? formatDate(String(value), 'short') : String(value))
+  const formatX = (value: unknown) =>
+    datesOnX ? formatDate(String(value), 'short') : monthsOnX ? formatMonth(String(value), 'short') : String(value)
+  const formatLabel = (value: unknown) =>
+    datesOnX ? formatDate(String(value)) : monthsOnX ? formatMonth(String(value)) : String(value ?? '')
   const formatY = (value: unknown) => formatValue(Number(value), result.spec, { compact: true })
   const sideways = result.kind === 'bar' && result.horizontal
   const stackId = result.stacked ? 'stack' : undefined
@@ -154,7 +158,14 @@ function ChartCard({ result }: { result: ChartResult }) {
   const yAxis = sideways ? (
     <XAxis type="number" tickLine={false} axisLine={false} tickFormatter={formatY} />
   ) : (
-    <YAxis tickLine={false} axisLine={false} width={64} tickFormatter={formatY} />
+    // Lines show change, so they scale to the data rather than starting at zero.
+    <YAxis
+      tickLine={false}
+      axisLine={false}
+      width={64}
+      tickFormatter={formatY}
+      domain={result.kind === 'line' ? ['auto', 'auto'] : undefined}
+    />
   )
   const shared = (
     <>
@@ -167,8 +178,7 @@ function ChartCard({ result }: { result: ChartResult }) {
           <ChartTooltipContent
             indicator="dot"
             labelFormatter={(_, payload) => {
-              const x = payload?.[0]?.payload?.x
-              return datesOnX ? formatDate(String(x)) : String(x ?? '')
+              return formatLabel(payload?.[0]?.payload?.x)
             }}
             formatter={(value, name, item) => (
               <div className="flex w-full items-center justify-between gap-3">
@@ -216,7 +226,7 @@ function ChartCard({ result }: { result: ChartResult }) {
         ) : (
           <ChartContainer config={config} className="aspect-auto h-[250px] w-full">
             {result.kind === 'bar' ? (
-              <BarChart data={points} layout={sideways ? 'vertical' : 'horizontal'} margin={{ left: 4, right: 12 }}>
+              <BarChart data={points} layout={sideways ? 'vertical' : 'horizontal'} stackOffset="sign" margin={{ left: 4, right: 12 }}>
                 {shared}
                 {result.series.map((series) => (
                   <Bar key={series.key} dataKey={series.key} fill={`var(--color-${series.key})`} stackId={stackId} radius={result.stacked ? 0 : 4} />

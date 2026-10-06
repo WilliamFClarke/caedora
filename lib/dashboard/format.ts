@@ -41,3 +41,14 @@ export function formatDate(value: string, style: 'short' | 'long' = 'long'): str
     timeZone: 'UTC',
   }).format(date)
 }
+
+/** Formats a `YYYY-MM` month, as produced by `month(date)`, like "May 2026". */
+export function formatMonth(value: string, style: 'short' | 'long' = 'long'): string {
+  const date = new Date(`${value}-01T00:00:00Z`)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-GB', {
+    month: 'short',
+    year: style === 'long' ? 'numeric' : '2-digit',
+    timeZone: 'UTC',
+  }).format(date)
+}

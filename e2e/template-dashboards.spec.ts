@@ -2,16 +2,17 @@ import { expect, test } from '@playwright/test'
 import { createBrowserVault } from './helpers'
 
 const TEMPLATES = [
-  { name: 'Fitness planner', dashboard: 'fitness/dashboard.md', stat: 'Sessions logged', card: 'Sessions by type' },
-  { name: 'Reading system', dashboard: 'reading/dashboard.md', stat: 'Books finished', card: 'Yearly reading goal' },
-  { name: 'Daily journal', dashboard: 'journal/dashboard.md', stat: 'Average mood', card: 'Decisions to revisit' },
-  { name: 'Project hub', dashboard: 'projects/dashboard.md', stat: 'Active projects', card: 'Upcoming milestones' },
-  { name: 'Job search tracker', dashboard: 'career/job-search/dashboard.md', stat: 'Applications sent', card: 'Pipeline' },
-  { name: 'Personal CRM', dashboard: 'people/dashboard.md', stat: 'Open follow-ups', card: 'People by circle' },
-  { name: 'Home operations', dashboard: 'home/dashboard.md', stat: 'Next check due', card: 'Spending by area' },
-  { name: 'Travel planner', dashboard: 'travel/dashboard.md', stat: 'Next trip', card: 'Where the money goes' },
+  { name: 'Fitness planner', dashboard: 'fitness/dashboard.md', stat: 'VO2 max', card: 'Strength, best lift (kg)' },
+  { name: 'Reading system', dashboard: 'reading/dashboard.md', stat: 'Books this year', card: 'Reading goal this year' },
+  { name: 'Daily journal', dashboard: 'journal/dashboard.md', stat: 'Mood (out of 10)', card: 'Wheel of life' },
+  { name: 'Project hub', dashboard: 'projects/dashboard.md', stat: 'Velocity (points)', card: 'Points completed per sprint' },
+  { name: 'Career and job search', dashboard: 'career/dashboard.md', stat: 'Base salary', card: 'Salary and bonus' },
+  { name: 'Personal CRM', dashboard: 'people/dashboard.md', stat: 'Catch ups this year', card: 'Catch ups per month' },
+  { name: 'Home operations', dashboard: 'home/dashboard.md', stat: 'Upgrades save each year', card: 'Energy cost per month' },
+  { name: 'Travel planner', dashboard: 'travel/dashboard.md', stat: 'Nights away this year', card: 'Nights away per year' },
+  { name: 'Freelance and side business', dashboard: 'business/dashboard.md', stat: 'Revenue this tax year', card: 'Revenue per month' },
   { name: 'Investment tracker', dashboard: 'finance/investments/dashboard.md', stat: 'Portfolio value', card: 'Value by asset class' },
-  { name: 'UK student loan tracker', dashboard: 'finance/uk-student-loan/dashboard.md', stat: 'Balance at last statement', card: 'Balance by statement' },
+  { name: 'UK student loan tracker', dashboard: 'finance/uk-student-loan/dashboard.md', stat: 'Repaid since 2021', card: 'Loan paid off' },
 ]
 
 for (const template of TEMPLATES) {

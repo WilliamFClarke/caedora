@@ -22,6 +22,7 @@ import { HOME_OPERATIONS_FILES } from './templates/home-operations'
 import { TRAVEL_PLANNER_FILES } from './templates/travel-planner'
 import { INVESTMENT_TRACKER_FILES } from './templates/investment-tracker'
 import { UK_STUDENT_LOAN_FILES } from './templates/uk-student-loan'
+import { SIDE_BUSINESS_FILES } from './templates/side-business'
 
 export interface TemplateFile {
   path: string
@@ -94,13 +95,13 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
   },
   {
     id: 'job-search',
-    name: 'Job search tracker',
-    description: 'Applications, company research, interviews, and follow-up notes.',
+    name: 'Career and job search',
+    description: 'Salary history, applications, interviews and company research, with a career dashboard.',
     category: 'Career',
     repository: 'WilliamFClarke/caedora-template-job-search',
     skills: ['AGENTS.md interview prep guidance'],
-    conventions: ['application status', 'company tags', 'contact logs'],
-    tags: ['career', 'jobs', 'crm'],
+    conventions: ['salary history', 'application funnel', 'interview notes'],
+    tags: ['career', 'jobs', 'salary'],
     files: JOB_SEARCH_FILES,
   },
   {
@@ -135,6 +136,17 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     conventions: ['trip folders', 'reservation tables', 'packing lists'],
     tags: ['travel', 'planning', 'itinerary'],
     files: TRAVEL_PLANNER_FILES,
+  },
+  {
+    id: 'side-business',
+    name: 'Freelance and side business',
+    description: 'Clients, invoices, hours and expenses for freelance work, with a business dashboard.',
+    category: 'Work',
+    repository: 'WilliamFClarke/caedora',
+    skills: ['AGENTS.md business guidance'],
+    conventions: ['invoice log', 'tax year revenue', 'expense categories'],
+    tags: ['business', 'freelance', 'invoices'],
+    files: SIDE_BUSINESS_FILES,
   },
   {
     id: 'uk-personal-finance',
