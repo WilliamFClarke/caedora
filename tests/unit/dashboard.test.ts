@@ -177,9 +177,16 @@ test.describe('template dashboards', () => {
         expect(errors, path).toEqual([])
       }
 
+      for (const file of templateFiles.filter((file) => /type: Dataset/.test(file.content))) {
+        expect(parseDataset(file.path, file.content).issues, file.path).toEqual([])
+      }
+
       const [dashboard] = dashboards
       const spec = parseDashboard(dashboard.content)
       expect(spec.issues, template.id).toEqual([])
+      // Curated templates ship a designed dashboard, not the generated tables.
+      const kinds = spec.rows.flatMap((row) => row.items.map((item) => item.kind))
+      expect(kinds, template.id).toContain('stat')
       const data = await loadDashboardData(
         { readFile: async (path) => store.get(path) ?? Promise.reject(new Error(path)) },
         dashboard.path,

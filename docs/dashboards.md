@@ -105,5 +105,8 @@ total even when accounts were updated on different days. On an `area` chart,
 
 ## Templates
 
-Every template ships with a `dashboard.md`. When a template has none, Caedora
-generates one that shows each of its Datasets as a table.
+Every template ships with a `dashboard.md`. The built in templates each come
+with a dashboard of their own and example rows in their Datasets, so it shows
+something straight away; replace the rows with your own. When a template from
+GitHub has no dashboard, Caedora generates one that shows each of its Datasets
+as a table.
