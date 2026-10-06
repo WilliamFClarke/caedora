@@ -66,6 +66,7 @@ Config file locations:
 - `rebuild_indexes()`
 - `record_query(summary, conceptPaths?)`
 
-Every mutation preserves producer-defined YAML fields, maintains timestamps,
+Every mutation preserves producer-defined YAML fields, records OKF v0.2
+`generated: { by, at }` provenance (pass `generatedBy` to name the agent),
 regenerates hierarchical indexes, and records significant operations in
 `log.md`. Reserved `index.md` and `log.md` documents are protected.

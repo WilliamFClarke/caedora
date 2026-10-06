@@ -1,6 +1,17 @@
-import { parseDocument, stringify } from 'yaml'
+import { Document, isMap, isSeq, parseDocument } from 'yaml'
 
-export const OKF_VERSION = '0.1'
+export const OKF_VERSION = '0.2'
+
+/** Actor for content written by a person in the Caedora editor (OKF v0.2 §7). */
+export const HUMAN_ACTOR = 'human:owner'
+/** Actor for content Caedora itself writes, such as starter concepts and templates. */
+export const CAEDORA_ACTOR = 'caedora/app'
+
+/** A `{ by, at }` pair, used by `generated` and each `verified` entry. */
+export interface ActorStamp {
+  by: string
+  at: string
+}
 
 export interface Frontmatter {
   type: string
@@ -8,6 +19,15 @@ export interface Frontmatter {
   description: string
   resource: string
   tags: string[]
+  /** Who or what produced the current content, and when it last meaningfully changed. */
+  generated: ActorStamp | null
+  /** Independent confirmations of the content. A bare mapping is read as one entry. */
+  verified: ActorStamp[]
+  /** Lifecycle status: draft, stable or deprecated. Empty means stable. */
+  status: string
+  /** ISO 8601 instant on or after which the content is stale. */
+  staleAfter: string
+  /** Legacy OKF v0.1 last change time, superseded by `generated.at`. */
   timestamp: string
   /** Producer-defined YAML values, preserved when Caedora rewrites metadata. */
   extra: Record<string, unknown>
@@ -27,8 +47,15 @@ const STANDARD_KEYS = new Set([
   'description',
   'resource',
   'tags',
+  'generated',
+  'verified',
+  'status',
+  'stale_after',
   'timestamp',
 ])
+
+/** Standard keys whose malformed values are kept in extra rather than dropped. */
+const PRESERVED_WHEN_MALFORMED = new Set(['generated', 'verified', 'status', 'stale_after'])
 
 export function emptyFrontmatter(overrides: Partial<Frontmatter> = {}): Frontmatter {
   return {
@@ -37,6 +64,10 @@ export function emptyFrontmatter(overrides: Partial<Frontmatter> = {}): Frontmat
     description: '',
     resource: '',
     tags: [],
+    generated: null,
+    verified: [],
+    status: '',
+    staleAfter: '',
     timestamp: '',
     extra: {},
     ...overrides,
@@ -72,6 +103,14 @@ export function parseFrontmatter(md: string): ParsedFrontmatter {
     for (const [key, fieldValue] of Object.entries(value)) {
       if (!STANDARD_KEYS.has(key)) extra[key] = fieldValue
     }
+    const generated = actorStamp(value.generated)
+    const verified = verifiedList(value.verified)
+    // Keep malformed trust values as written so a rewrite never loses them.
+    if (value.generated != null && !generated) extra.generated = value.generated
+    if (value.verified != null && !verified) extra.verified = value.verified
+    for (const key of ['status', 'stale_after'] as const) {
+      if (value[key] != null && typeof value[key] !== 'string') extra[key] = value[key]
+    }
 
     return {
       frontmatter: {
@@ -80,6 +119,10 @@ export function parseFrontmatter(md: string): ParsedFrontmatter {
         description: stringValue(value.description),
         resource: stringValue(value.resource),
         tags: tagList(value.tags),
+        generated,
+        verified: verified ?? [],
+        status: typeof value.status === 'string' ? value.status : '',
+        staleAfter: typeof value.stale_after === 'string' ? value.stale_after : '',
         timestamp: stringValue(value.timestamp),
         extra,
       },
@@ -104,19 +147,35 @@ export function serializeFrontmatter(frontmatter: Frontmatter): string {
   if (frontmatter.description.trim()) data.description = frontmatter.description.trim()
   if (frontmatter.resource.trim()) data.resource = frontmatter.resource.trim()
   if (frontmatter.tags.length > 0) data.tags = uniqueTags(frontmatter.tags)
-  if (frontmatter.timestamp.trim()) data.timestamp = frontmatter.timestamp.trim()
+  if (frontmatter.status.trim()) data.status = frontmatter.status.trim()
+  if (frontmatter.generated) data.generated = { ...frontmatter.generated }
+  if (frontmatter.verified.length > 0) data.verified = frontmatter.verified.map((entry) => ({ ...entry }))
+  if (frontmatter.staleAfter.trim()) data.stale_after = frontmatter.staleAfter.trim()
+  // generated.at supersedes the v0.1 timestamp, so the legacy key is dropped once it exists.
+  if (frontmatter.timestamp.trim() && !frontmatter.generated) data.timestamp = frontmatter.timestamp.trim()
 
   for (const [key, value] of Object.entries(frontmatter.extra)) {
-    if (!STANDARD_KEYS.has(key) && value !== undefined) data[key] = value
+    if (value === undefined || Object.hasOwn(data, key)) continue
+    if (!STANDARD_KEYS.has(key) || PRESERVED_WHEN_MALFORMED.has(key)) data[key] = value
   }
 
   if (Object.keys(data).length === 0) return ''
 
-  const yaml = stringify(data, {
-    lineWidth: 0,
-    defaultStringType: 'PLAIN',
-    defaultKeyType: 'PLAIN',
-  }).trimEnd()
+  const document = new Document(data)
+  // Match the compact `{ by, at }` style the OKF spec uses for trust stamps.
+  const generatedNode = document.get('generated', true)
+  if (isMap(generatedNode)) generatedNode.flow = true
+  const verifiedNode = document.get('verified', true)
+  if (isSeq(verifiedNode)) {
+    for (const item of verifiedNode.items) if (isMap(item)) item.flow = true
+  }
+  const yaml = document
+    .toString({
+      lineWidth: 0,
+      defaultStringType: 'PLAIN',
+      defaultKeyType: 'PLAIN',
+    })
+    .trimEnd()
   return `---\n${yaml}\n---\n`
 }
 
@@ -144,14 +203,44 @@ export function createConceptFrontmatter(
   type = 'Reference',
   overrides: Partial<Frontmatter> = {}
 ): Frontmatter {
-  return emptyFrontmatter({
+  const merged = emptyFrontmatter({
     type,
     title: title.trim(),
-    timestamp: new Date().toISOString(),
     ...overrides,
     tags: uniqueTags(overrides.tags ?? []),
     extra: overrides.extra ?? {},
   })
+  if (merged.generated) return merged
+  // A caller that still passes a v0.1 timestamp gets it carried into generated.at.
+  return markGenerated(merged, CAEDORA_ACTOR, merged.timestamp || undefined)
+}
+
+/** Record a meaningful content change by `by`, replacing any legacy timestamp. */
+export function markGenerated(
+  frontmatter: Frontmatter,
+  by: string,
+  at = new Date().toISOString()
+): Frontmatter {
+  return { ...frontmatter, generated: { by, at }, timestamp: '' }
+}
+
+/** When the content last meaningfully changed, falling back to the v0.1 timestamp. */
+export function lastChanged(frontmatter: Frontmatter): string {
+  return frontmatter.generated?.at || frontmatter.timestamp
+}
+
+function actorStamp(value: unknown): ActorStamp | null {
+  if (!isRecord(value)) return null
+  return { by: stringValue(value.by), at: stringValue(value.at) }
+}
+
+function verifiedList(value: unknown): ActorStamp[] | null {
+  if (value === null || value === undefined) return []
+  // OKF v0.2 §5.2: a bare mapping is a one-element list.
+  if (isRecord(value)) return [actorStamp(value)!]
+  if (!Array.isArray(value)) return null
+  const entries = value.map(actorStamp)
+  return entries.every((entry): entry is ActorStamp => entry !== null) ? entries : null
 }
 
 function tagList(value: unknown): string[] {

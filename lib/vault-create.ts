@@ -45,9 +45,15 @@ title: Human-readable title
 description: One sentence explaining when to open this concept.
 resource: https://example.com/canonical-resource
 tags: [topic, status]
-timestamp: 2026-06-15T12:00:00Z
+status: stable
+generated: { by: human:owner, at: 2026-06-15T12:00:00Z }
 ---
 \`\`\`
+
+Caedora follows Open Knowledge Format v0.2. Editing a concept records you as
+its author in \`generated\`. Use the Details panel to mark a concept as a draft
+or deprecated, set a date after which it goes stale, or mark it as reviewed,
+which adds an entry to \`verified\` and shows it as human reviewed.
 
 Write the durable knowledge in the Markdown body. Link related concepts with
 normal Markdown links such as \`[Related concept](/concepts/example.md)\`.

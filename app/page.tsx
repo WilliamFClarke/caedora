@@ -108,7 +108,7 @@ function Hero() {
 
         <Badge variant="outline" className="mb-6 gap-1.5 rounded-full px-3 py-1">
           <Sparkles className="text-primary size-3" />
-          <span className="text-xs">OKF v0.1 workspace with visual linking</span>
+          <span className="text-xs">OKF v0.2 workspace with visual linking</span>
         </Badge>
 
         <h1 className="max-w-3xl text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
@@ -141,7 +141,7 @@ function Hero() {
 }
 
 function LogoStrip() {
-  const items = ['OKF v0.1', 'Markdown', 'YAML', 'GitHub', 'MCP', 'Local-first']
+  const items = ['OKF v0.2', 'Markdown', 'YAML', 'GitHub', 'MCP', 'Local-first']
   return (
     <section className="border-b">
       <div className="text-muted-foreground mx-auto flex w-full max-w-6xl flex-wrap items-center justify-center gap-x-10 gap-y-3 px-4 py-8 text-xs uppercase tracking-widest sm:px-6">
@@ -170,7 +170,7 @@ const FEATURES = [
     icon: FolderTree,
     title: 'Open Knowledge Format',
     body:
-      'Each concept is a Markdown document with YAML frontmatter for type, title, description, resource, tags, and timestamp.',
+      'Each concept is a Markdown document with YAML frontmatter for type, title, description, resource, tags, provenance, and trust.',
   },
   {
     icon: FileCheck2,
@@ -239,7 +239,7 @@ const OKF_SUPPORT = [
   {
     title: 'Structured frontmatter',
     body:
-      'Title, type, description, resource, tags, timestamp, and custom YAML fields are first-class controls, not hidden implementation detail.',
+      'Title, type, description, resource, tags, status, trust, and custom YAML fields are first-class controls, not hidden implementation detail.',
   },
   {
     title: 'Conformant saves',
@@ -364,7 +364,7 @@ function ShowcaseAlternating() {
       eyebrow: 'Editor',
       title: 'Structured metadata, readable content.',
       body:
-        'Edit title, type, description, tags, resource, and timestamp as first-class fields while the body remains portable Markdown.',
+        'Edit title, type, description, tags, resource, status, and review state as first-class fields while the body remains portable Markdown.',
       reverse: false,
     },
     {

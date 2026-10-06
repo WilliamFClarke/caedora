@@ -46,7 +46,10 @@ export async function searchConcepts(
       title: concept.title,
       description: concept.description,
       tags: concept.tags,
-      timestamp: concept.timestamp,
+      lastChanged: concept.lastChanged,
+      status: concept.status,
+      trust: concept.trust,
+      stale: concept.stale,
       score,
       snippet: snippetAround(body, q),
     })
