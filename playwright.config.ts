@@ -8,9 +8,15 @@ export default defineConfig({
   testIgnore: ['**/desktop/**'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: [['html'], ['list']],
+  // One retry so a flake still shows up as "flaky" in the report rather than
+  // being hidden, while not failing the run outright.
+  retries: process.env.CI ? 1 : 0,
+  // Each test gets its own browser context and IndexedDB, so tests are safe to
+  // run side by side. GitHub's Linux runners have four cores.
+  workers: process.env.CI ? 2 : undefined,
+  reporter: process.env.CI
+    ? [['github'], ['list'], ['html', { open: 'never' }]]
+    : [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL,
     channel: process.env.PLAYWRIGHT_CHANNEL,

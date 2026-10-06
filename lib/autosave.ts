@@ -29,7 +29,8 @@ export interface UseAutosaveResult {
  *   - writeFile after `writeDebounceMs` of idleness (skipped when disabled)
  *   - commit after `commitDebounceMs` of further idleness (local provider only)
  *   - commit on blur / beforeunload of the tab
- *   - saveNow() flushes immediately regardless of disabled flag
+ *   - saveNow() waits for any running write, then flushes immediately
+ *     regardless of disabled flag
  */
 export function useAutosave({
   provider,
@@ -44,6 +45,9 @@ export function useAutosave({
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastSavedRef = useRef<string | null>(null)
   const dirtyPathsRef = useRef<Set<string>>(new Set())
+  // The debounced write currently running, so saveNow can wait for it before
+  // the caller renames or deletes the file underneath it.
+  const inFlightRef = useRef<Promise<unknown>>(Promise.resolve())
 
   // Stable refs so saveNow can always see current values without re-creating
   const providerRef = useRef(provider)
@@ -72,7 +76,9 @@ export function useAutosave({
     if (writeTimer.current) clearTimeout(writeTimer.current)
     writeTimer.current = setTimeout(async () => {
       try {
-        await provider.writeFile(path, content)
+        const write = provider.writeFile(path, content)
+        inFlightRef.current = write.catch(() => undefined)
+        await write
         lastSavedRef.current = content
         dirtyPathsRef.current.add(path)
         setStatus('saved')
@@ -130,6 +136,7 @@ export function useAutosave({
   }, [provider])
 
   const saveNow = useCallback(async () => {
+    await inFlightRef.current
     const p = providerRef.current
     const pt = pathRef.current
     const c = contentRef.current

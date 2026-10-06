@@ -32,11 +32,26 @@ export interface TiptapDoc {
 export function mdToTiptap(md: string): TiptapDoc {
   const tree = unified().use(remarkParse).use(remarkGfm).parse(md) as Root
   const content = tree.children
-    .flatMap(mdastBlockToTiptap)
+    .flatMap((node) => imageBlocks(node) ?? mdastBlockToTiptap(node))
     .filter((n): n is TiptapNode => n !== null)
   // TipTap requires at least one block node
   if (content.length === 0) content.push({ type: 'paragraph' })
   return { type: 'doc', content }
+}
+
+/**
+ * A top-level paragraph holding only images becomes the editor's block image
+ * nodes, so the image survives a save instead of turning into its alt text.
+ * Only the top level: the image node is not allowed inside lists or quotes.
+ */
+function imageBlocks(node: RootContent): TiptapNode[] | null {
+  if (node.type !== 'paragraph') return null
+  const visible = node.children.filter((c) => !(c.type === 'text' && !c.value.trim()))
+  if (visible.length === 0 || !visible.every((c) => c.type === 'image')) return null
+  return visible.map((image) => ({
+    type: 'image',
+    attrs: { src: image.url, alt: image.alt ?? null, title: image.title ?? null },
+  }))
 }
 
 function mdastBlockToTiptap(node: RootContent): TiptapNode | TiptapNode[] | null {
@@ -291,6 +306,21 @@ function tiptapBlockToMdast(node: TiptapNode): RootContent | null {
       }
     case 'horizontalRule':
       return { type: 'thematicBreak' }
+    case 'image': {
+      const src = typeof node.attrs?.src === 'string' ? node.attrs.src : ''
+      if (!src) return null
+      const alt = node.attrs?.alt
+      const title = node.attrs?.title
+      return {
+        type: 'paragraph',
+        children: [{
+          type: 'image',
+          url: src,
+          alt: typeof alt === 'string' ? alt : null,
+          title: typeof title === 'string' ? title : null,
+        }],
+      }
+    }
     default:
       return null
   }
