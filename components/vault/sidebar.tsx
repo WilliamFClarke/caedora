@@ -302,7 +302,8 @@ export function AppSidebar({
     return entries.filter((e) => e.type === 'dir').map((e) => e.path).sort()
   }, [entries])
   const conceptTypes = useMemo(() => {
-    return [...new Set(Object.values(conceptCatalog).map((concept) => concept.type).filter(Boolean))]
+    const types = Object.values(conceptCatalog).map((concept) => concept.type)
+    return [...new Set(['Dashboard', 'Dataset', ...types].filter(Boolean))]
       .sort((a, b) => a.localeCompare(b))
   }, [conceptCatalog])
 

@@ -12,15 +12,18 @@ import {
   GripVertical,
   LayoutGrid,
   Loader2,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import { DashboardItemView } from './dashboard-items'
+import { ElementBuilder, type DatasetChoice } from './element-builder'
 import { ViewHeader } from './view-header'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { evaluateItem, type DashboardData, type ItemResult } from '@/lib/dashboard/evaluate'
 import { applyLayoutEdit, type LayoutEdit } from '@/lib/dashboard/layout'
 import { loadDashboardData } from '@/lib/dashboard/load'
-import { parseDashboard, type DashboardRow } from '@/lib/dashboard/spec'
+import { findDashboardBlock, parseDashboard, type DashboardRow } from '@/lib/dashboard/spec'
 import type { VaultProvider } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -42,6 +45,7 @@ export function DashboardView({
   body,
   refreshKey,
   viewToggle,
+  datasets = [],
   onBodyChange,
 }: {
   provider: VaultProvider
@@ -52,12 +56,16 @@ export function DashboardView({
   /** Changes whenever the vault's files change, so Datasets are re-read. */
   refreshKey?: unknown
   viewToggle?: ReactNode
+  /** Datasets in the vault, offered by Add element. */
+  datasets?: DatasetChoice[]
   /** Receives the rewritten Markdown body after a layout edit. */
   onBodyChange?: (body: string) => void
 }) {
   const spec = useMemo(() => parseDashboard(body), [body])
   const [data, setData] = useState<DashboardData | null>(null)
   const [editing, setEditing] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const hasBlock = useMemo(() => findDashboardBlock(body) !== null, [body])
   const sourcesKey = JSON.stringify(spec.data)
 
   useEffect(() => {
@@ -87,6 +95,7 @@ export function DashboardView({
   }
 
   const canEdit = Boolean(onBodyChange) && spec.rows.length > 0
+  const empty = spec.rows.length === 0 && (!hasBlock || spec.issues.length <= 1)
 
   return (
     <div data-testid="dashboard-view" className="@container/dashboard h-full overflow-y-auto">
@@ -96,6 +105,12 @@ export function DashboardView({
           description={description}
           actions={
             <>
+              {onBodyChange && (
+                <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => setAdding(true)}>
+                  <Plus className="size-4" />
+                  Add element
+                </Button>
+              )}
               {canEdit && (
                 <Button
                   type="button"
@@ -112,7 +127,7 @@ export function DashboardView({
             </>
           }
         />
-        {spec.issues.length > 0 && (
+        {spec.issues.length > 0 && !empty && (
           <div className="border-destructive/40 text-destructive rounded-lg border p-3 text-sm">
             <p className="flex items-center gap-2 font-medium">
               <CircleAlert className="size-4" />
@@ -125,7 +140,18 @@ export function DashboardView({
             </ul>
           </div>
         )}
-        {!data ? (
+        {empty ? (
+          <div className="text-muted-foreground flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center text-sm">
+            <LayoutGrid className="size-6" />
+            <p>This dashboard is empty. Add stat cards, charts and tables that read from your Datasets.</p>
+            {onBodyChange && (
+              <Button type="button" size="sm" onClick={() => setAdding(true)}>
+                <Plus className="size-4" />
+                Add your first element
+              </Button>
+            )}
+          </div>
+        ) : !data ? (
           <div className="text-muted-foreground flex items-center gap-2 py-12 text-sm">
             <Loader2 className="size-4 animate-spin" />
             Loading data…
@@ -136,6 +162,18 @@ export function DashboardView({
           spec.rows.map((row) => <DashboardRowView key={row.index} row={row} data={data} />)
         )}
       </div>
+      {onBodyChange && (
+        <ElementBuilder
+          open={adding}
+          onOpenChange={setAdding}
+          provider={provider}
+          dashboardPath={path}
+          data={spec.data}
+          rows={spec.rows}
+          datasets={datasets}
+          onAdd={edit}
+        />
+      )}
     </div>
   )
 }
@@ -429,6 +467,16 @@ function EditableRow({
                 }
               >
                 <ArrowRight className="size-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="hover:text-destructive size-6"
+                aria-label={`Remove ${label}`}
+                onClick={() => onEdit({ kind: 'remove-item', at })}
+              >
+                <Trash2 className="size-3.5" />
               </Button>
             </div>
           </div>

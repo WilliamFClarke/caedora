@@ -11,12 +11,27 @@ export type LayoutEdit =
   | { kind: 'item-to-new-row'; from: { row: number; item: number }; at: number }
   | { kind: 'move-row'; from: number; to: number }
   | { kind: 'set-columns'; row: number; columns: number }
+  /** Adds `{ [kind]: settings }` to a row (or a new row at the end), listing its Dataset under data. */
+  | {
+      kind: 'add-item'
+      item: Record<string, unknown>
+      data?: { alias: string; path: string }
+      row: number | 'new'
+    }
+  | { kind: 'remove-item'; at: { row: number; item: number } }
 
 export function applyLayoutEdit(markdown: string, edit: LayoutEdit): string {
-  const block = locateDashboardBlock(markdown)
+  let block = locateDashboardBlock(markdown)
+  if (!block && edit.kind === 'add-item') {
+    // A new dashboard has no block yet, so start one at the end of the note.
+    const prefix = markdown.trimEnd() ? `${markdown.trimEnd()}\n\n` : ''
+    markdown = `${prefix}\`\`\`${DASHBOARD_FENCE}\nrows: []\n\`\`\`\n`
+    block = locateDashboardBlock(markdown)
+  }
   if (!block) return markdown
   const doc = parseDocument(block.value)
   if (doc.errors.length > 0) return markdown
+  if (edit.kind === 'add-item' && !isSeq(doc.get('rows'))) doc.set('rows', new YAMLSeq(doc.schema))
   const rows = doc.get('rows')
   if (!isSeq(rows)) return markdown
 
@@ -56,6 +71,42 @@ export function applyLayoutEdit(markdown: string, edit: LayoutEdit): string {
       rows.items.splice(Math.max(0, Math.min(edit.to, rows.items.length)), 0, row)
       break
     }
+    case 'add-item': {
+      if (edit.data) {
+        let data = doc.get('data')
+        if (!isMap(data)) {
+          data = new YAMLMap(doc.schema)
+          doc.set('data', data)
+          // Keep data above rows, as people write it.
+          moveKeyFirst(doc, 'data')
+        }
+        if (!(data as YAMLMap).has(edit.data.alias)) (data as YAMLMap).set(edit.data.alias, edit.data.path)
+      }
+      const node = doc.createNode(edit.item) as YAMLMap
+      for (const pair of node.items) if (isMap(pair.value)) pair.value.flow = true
+      const existing = edit.row === 'new' ? null : itemsOf(doc, rows.items[edit.row])
+      if (existing) {
+        existing.items.push(node)
+        // Widen the row so the new card sits beside the others.
+        const row = rows.items[edit.row as number]
+        const columns = isMap(row) ? Number(row.get('columns') ?? existing.items.length - 1) : 4
+        if (isMap(row) && columns < Math.min(4, existing.items.length)) row.set('columns', Math.min(4, existing.items.length))
+      } else {
+        const row = new YAMLMap(doc.schema)
+        row.set('columns', 1)
+        const items = new YAMLSeq(doc.schema)
+        items.items.push(node)
+        row.set('items', items)
+        rows.items.push(row)
+        rows.flow = false
+      }
+      break
+    }
+    case 'remove-item': {
+      if (!takeItem(doc, rows, edit.at)) return markdown
+      removeIfEmpty(rows, edit.at.row)
+      break
+    }
     case 'set-columns': {
       const row = rows.items[edit.row]
       if (!isMap(row)) return markdown
@@ -67,6 +118,13 @@ export function applyLayoutEdit(markdown: string, edit: LayoutEdit): string {
   const yaml = doc.toString({ lineWidth: 0 })
   const fence = markdown.slice(block.start, block.end).match(/^(`{3,}|~{3,})/)?.[1] ?? '```'
   return `${markdown.slice(0, block.start)}${fence}${DASHBOARD_FENCE}\n${yaml}${fence}${markdown.slice(block.end)}`
+}
+
+function moveKeyFirst(doc: Document, key: string): void {
+  const contents = doc.contents
+  if (!isMap(contents)) return
+  const index = contents.items.findIndex((pair) => (pair.key as { value?: unknown })?.value === key || pair.key === key)
+  if (index > 0) contents.items.unshift(...contents.items.splice(index, 1))
 }
 
 function itemsOf(doc: Document, row: unknown): YAMLSeq | null {

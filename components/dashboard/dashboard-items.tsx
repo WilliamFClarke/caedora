@@ -1,7 +1,23 @@
 'use client'
 
 import { useId, useMemo, useState } from 'react'
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Label,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  PolarAngleAxis,
+  RadialBar,
+  RadialBarChart,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { CircleAlert, TrendingDown, TrendingUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -24,7 +40,7 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { filterRange, rangeLabel, type ItemResult } from '@/lib/dashboard/evaluate'
+import { filterRange, rangeLabel, type ChartResult, type ItemResult } from '@/lib/dashboard/evaluate'
 import { formatDate, formatValue } from '@/lib/dashboard/format'
 import { cn } from '@/lib/utils'
 
@@ -35,11 +51,15 @@ export function DashboardItemView({ result }: { result: ItemResult }) {
     case 'stat':
       return <StatCard result={result} />
     case 'area':
-      return <AreaCard result={result} />
+    case 'bar':
+    case 'line':
+      return <ChartCard result={result} />
+    case 'pie':
+      return <PieCard result={result} />
     case 'table':
       return <TableCard result={result} />
     case 'progress':
-      return <ProgressCard result={result} />
+      return result.gauge ? <GaugeCard result={result} /> : <ProgressCard result={result} />
     case 'list':
       return <ListCard result={result} />
     case 'text':
@@ -71,6 +91,7 @@ function StatCard({ result }: { result: Result<'stat'> }) {
           </CardAction>
         )}
       </CardHeader>
+      {result.sparkline && result.sparkline.length > 1 && <Sparkline values={result.sparkline} />}
       {(trend || result.description) && (
         <CardFooter className="flex-col items-start gap-1.5 text-sm">
           {trend && (
@@ -86,25 +107,89 @@ function StatCard({ result }: { result: Result<'stat'> }) {
   )
 }
 
-/** Based on the shadcn interactive area chart. */
-function AreaCard({ result }: { result: Result<'area'> }) {
+const CURVES = { smooth: 'monotone', linear: 'linear', step: 'step' } as const
+
+function seriesConfig(series: Array<{ key: string; label: string }>): ChartConfig {
+  return Object.fromEntries(
+    series.map((entry, index) => [entry.key, { label: entry.label, color: `var(--chart-${(index % 5) + 1})` }])
+  )
+}
+
+function Sparkline({ values }: { values: number[] }) {
+  const id = useId().replace(/[^a-zA-Z0-9]/g, '')
+  const points = values.map((value, index) => ({ index, value }))
+  return (
+    <ChartContainer config={{ value: { label: 'Value', color: 'var(--chart-1)' } }} className="aspect-auto h-12 w-full px-6">
+      <AreaChart data={points} margin={{ top: 2, bottom: 2, left: 0, right: 0 }}>
+        <defs>
+          <linearGradient id={`spark-${id}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="var(--color-value)" stopOpacity={0.5} />
+            <stop offset="95%" stopColor="var(--color-value)" stopOpacity={0.05} />
+          </linearGradient>
+        </defs>
+        <YAxis hide domain={['dataMin', 'dataMax']} />
+        <Area dataKey="value" type="monotone" stroke="var(--color-value)" fill={`url(#spark-${id})`} isAnimationActive={false} />
+      </AreaChart>
+    </ChartContainer>
+  )
+}
+
+/** Based on the shadcn interactive area, line and bar charts. */
+function ChartCard({ result }: { result: ChartResult }) {
   const [range, setRange] = useState(result.ranges[result.ranges.length - 1] ?? 'all')
   const points = useMemo(() => filterRange(result.points, range), [result.points, range])
-  const config = useMemo<ChartConfig>(
-    () =>
-      Object.fromEntries(
-        result.series.map((series, index) => [
-          series.key,
-          { label: series.label, color: `var(--chart-${(index % 5) + 1})` },
-        ])
-      ),
-    [result.series]
-  )
+  const config = useMemo(() => seriesConfig(result.series), [result.series])
   const datesOnX = typeof points[0]?.x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(String(points[0].x))
   const id = useId().replace(/[^a-zA-Z0-9]/g, '')
+  const formatX = (value: unknown) => (datesOnX ? formatDate(String(value), 'short') : String(value))
+  const formatY = (value: unknown) => formatValue(Number(value), result.spec, { compact: true })
+  const sideways = result.kind === 'bar' && result.horizontal
+  const stackId = result.stacked ? 'stack' : undefined
+
+  const xAxis = sideways ? (
+    <YAxis dataKey="x" type="category" tickLine={false} axisLine={false} width={96} tickFormatter={formatX} />
+  ) : (
+    <XAxis dataKey="x" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} tickFormatter={formatX} />
+  )
+  const yAxis = sideways ? (
+    <XAxis type="number" tickLine={false} axisLine={false} tickFormatter={formatY} />
+  ) : (
+    <YAxis tickLine={false} axisLine={false} width={64} tickFormatter={formatY} />
+  )
+  const shared = (
+    <>
+      <CartesianGrid vertical={sideways} horizontal={!sideways} />
+      {xAxis}
+      {yAxis}
+      <ChartTooltip
+        cursor={result.kind === 'bar'}
+        content={
+          <ChartTooltipContent
+            indicator="dot"
+            labelFormatter={(_, payload) => {
+              const x = payload?.[0]?.payload?.x
+              return datesOnX ? formatDate(String(x)) : String(x ?? '')
+            }}
+            formatter={(value, name, item) => (
+              <div className="flex w-full items-center justify-between gap-3">
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2.5 rounded-[2px]" style={{ backgroundColor: item.color }} />
+                  <span className="text-muted-foreground">{config[String(name)]?.label ?? name}</span>
+                </span>
+                <span className="text-foreground font-mono font-medium tabular-nums">
+                  {formatValue(Number(value), result.spec)}
+                </span>
+              </div>
+            )}
+          />
+        }
+      />
+      {result.series.length > 1 && <ChartLegend content={<ChartLegendContent />} />}
+    </>
+  )
 
   return (
-    <Card data-slot="dashboard-area" className="@container/card">
+    <Card data-slot={`dashboard-${result.kind}`} className="@container/card">
       <CardHeader>
         {result.title && <CardTitle>{result.title}</CardTitle>}
         {result.description && <CardDescription>{result.description}</CardDescription>}
@@ -130,44 +215,76 @@ function AreaCard({ result }: { result: Result<'area'> }) {
           <p className="text-muted-foreground py-12 text-center text-sm">No data in this range yet.</p>
         ) : (
           <ChartContainer config={config} className="aspect-auto h-[250px] w-full">
-            <AreaChart data={points} margin={{ left: 4, right: 12 }}>
-              <defs>
+            {result.kind === 'bar' ? (
+              <BarChart data={points} layout={sideways ? 'vertical' : 'horizontal'} margin={{ left: 4, right: 12 }}>
+                {shared}
                 {result.series.map((series) => (
-                  <linearGradient key={series.key} id={`fill-${id}-${series.key}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={`var(--color-${series.key})`} stopOpacity={0.8} />
-                    <stop offset="95%" stopColor={`var(--color-${series.key})`} stopOpacity={0.1} />
-                  </linearGradient>
+                  <Bar key={series.key} dataKey={series.key} fill={`var(--color-${series.key})`} stackId={stackId} radius={result.stacked ? 0 : 4} />
                 ))}
-              </defs>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="x"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                minTickGap={32}
-                tickFormatter={(value) => (datesOnX ? formatDate(String(value), 'short') : String(value))}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                width={64}
-                tickFormatter={(value) => formatValue(Number(value), result.spec, { compact: true })}
-              />
+              </BarChart>
+            ) : result.kind === 'line' ? (
+              <LineChart data={points} margin={{ left: 4, right: 12 }}>
+                {shared}
+                {result.series.map((series) => (
+                  <Line key={series.key} dataKey={series.key} type={CURVES[result.curve]} stroke={`var(--color-${series.key})`} strokeWidth={2} dot={false} />
+                ))}
+              </LineChart>
+            ) : (
+              <AreaChart data={points} margin={{ left: 4, right: 12 }}>
+                <defs>
+                  {result.series.map((series) => (
+                    <linearGradient key={series.key} id={`fill-${id}-${series.key}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={`var(--color-${series.key})`} stopOpacity={0.8} />
+                      <stop offset="95%" stopColor={`var(--color-${series.key})`} stopOpacity={0.1} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                {shared}
+                {result.series.map((series) => (
+                  <Area
+                    key={series.key}
+                    dataKey={series.key}
+                    type={CURVES[result.curve]}
+                    fill={`url(#fill-${id}-${series.key})`}
+                    stroke={`var(--color-${series.key})`}
+                    stackId={stackId}
+                  />
+                ))}
+              </AreaChart>
+            )}
+          </ChartContainer>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+/** Based on the shadcn donut chart with text. */
+function PieCard({ result }: { result: Result<'pie'> }) {
+  const config = useMemo(() => seriesConfig(result.slices), [result.slices])
+  const data = result.slices.map((slice) => ({ ...slice, fill: `var(--color-${slice.key})` }))
+  return (
+    <Card data-slot="dashboard-pie" className="@container/card">
+      <CardHeader>
+        {result.title && <CardTitle>{result.title}</CardTitle>}
+        {result.description && <CardDescription>{result.description}</CardDescription>}
+      </CardHeader>
+      <CardContent className="flex-1 pb-0">
+        {data.length === 0 ? (
+          <p className="text-muted-foreground py-12 text-center text-sm">Nothing to show yet.</p>
+        ) : (
+          <ChartContainer config={config} className="mx-auto aspect-square max-h-[250px]">
+            <PieChart>
               <ChartTooltip
                 cursor={false}
                 content={
                   <ChartTooltipContent
-                    indicator="dot"
-                    labelFormatter={(_, payload) => {
-                      const x = payload?.[0]?.payload?.x
-                      return datesOnX ? formatDate(String(x)) : String(x ?? '')
-                    }}
+                    hideLabel
                     formatter={(value, name, item) => (
                       <div className="flex w-full items-center justify-between gap-3">
                         <span className="flex items-center gap-1.5">
-                          <span className="size-2.5 rounded-[2px]" style={{ backgroundColor: item.color }} />
-                          <span className="text-muted-foreground">{config[String(name)]?.label ?? name}</span>
+                          <span className="size-2.5 rounded-[2px]" style={{ backgroundColor: item.payload?.fill }} />
+                          <span className="text-muted-foreground">{name}</span>
                         </span>
                         <span className="text-foreground font-mono font-medium tabular-nums">
                           {formatValue(Number(value), result.spec)}
@@ -177,21 +294,36 @@ function AreaCard({ result }: { result: Result<'area'> }) {
                   />
                 }
               />
-              {result.series.map((series) => (
-                <Area
-                  key={series.key}
-                  dataKey={series.key}
-                  type="monotone"
-                  fill={`url(#fill-${id}-${series.key})`}
-                  stroke={`var(--color-${series.key})`}
-                  stackId={result.stacked ? 'stack' : undefined}
-                />
-              ))}
-              {result.series.length > 1 && <ChartLegend content={<ChartLegendContent />} />}
-            </AreaChart>
+              <Pie data={data} dataKey="value" nameKey="label" innerRadius={result.donut ? 60 : 0} strokeWidth={4}>
+                {result.donut && (
+                  <Label
+                    content={({ viewBox }) =>
+                      viewBox && 'cx' in viewBox && 'cy' in viewBox ? (
+                        <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
+                          <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-xl font-bold">
+                            {formatValue(result.total, result.spec, { compact: true })}
+                          </tspan>
+                          <tspan x={viewBox.cx} y={(viewBox.cy ?? 0) + 22} className="fill-muted-foreground text-xs">
+                            Total
+                          </tspan>
+                        </text>
+                      ) : null
+                    }
+                  />
+                )}
+              </Pie>
+            </PieChart>
           </ChartContainer>
         )}
       </CardContent>
+      <CardFooter className="flex-wrap gap-x-4 gap-y-1 text-xs">
+        {result.slices.map((slice) => (
+          <span key={slice.key} className="text-muted-foreground flex items-center gap-1.5">
+            <span className="size-2.5 rounded-[2px]" style={{ backgroundColor: `var(--chart-${(Number(slice.key.slice(1)) % 5) + 1})` }} />
+            {slice.label}
+          </span>
+        ))}
+      </CardFooter>
     </Card>
   )
 }
@@ -308,6 +440,37 @@ function ProgressCard({ result }: { result: Result<'progress'> }) {
           {result.description ? `. ${result.description}` : ''}
         </p>
       </CardContent>
+    </Card>
+  )
+}
+
+/** Based on the shadcn radial chart with text. */
+function GaugeCard({ result }: { result: Result<'progress'> }) {
+  const percent = Math.min(100, Math.max(0, (result.value / result.max) * 100))
+  return (
+    <Card data-slot="dashboard-progress" className="@container/card shadow-xs">
+      <CardHeader>
+        <CardDescription>{result.label}</CardDescription>
+      </CardHeader>
+      <CardContent className="pb-0">
+        <ChartContainer config={{ value: { label: result.label, color: 'var(--chart-1)' } }} className="mx-auto aspect-square max-h-[180px]">
+          <RadialBarChart data={[{ value: result.value }]} startAngle={90} endAngle={-270} innerRadius="75%" outerRadius="100%">
+            <PolarAngleAxis type="number" domain={[0, result.max]} tick={false} axisLine={false} />
+            <RadialBar dataKey="value" background cornerRadius={10} fill="var(--color-value)" aria-label={`${result.label}: ${percent.toFixed(0)}%`} />
+            <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
+              <tspan x="50%" dy="-0.2em" className="fill-foreground text-2xl font-bold">
+                {percent.toFixed(0)}%
+              </tspan>
+              <tspan x="50%" dy="1.6em" className="fill-muted-foreground text-xs">
+                of {formatValue(result.max, result.spec, { compact: true })}
+              </tspan>
+            </text>
+          </RadialBarChart>
+        </ChartContainer>
+      </CardContent>
+      <CardFooter className="text-muted-foreground justify-center text-sm tabular-nums">
+        {formatValue(result.value, result.spec)} used, {formatValue(Math.max(0, result.max - result.value), result.spec)} left
+      </CardFooter>
     </Card>
   )
 }

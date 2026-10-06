@@ -37,10 +37,17 @@ export interface StatItem extends ItemBase {
   currency?: string
   /** Compare with the previous snapshot of the `latest` date column. */
   trend?: boolean
+  /** Draw a small line of the value at every snapshot of the `latest` date column. */
+  sparkline?: boolean
 }
 
-export interface AreaItem extends ItemBase {
-  kind: 'area'
+export type ChartKind = 'area' | 'bar' | 'line'
+export type ChartCurve = 'smooth' | 'linear' | 'step'
+export const CHART_CURVES: readonly ChartCurve[] = ['smooth', 'linear', 'step']
+
+/** Area, line and bar charts share their settings, after the shadcn chart blocks. */
+export interface ChartItem extends ItemBase {
+  kind: ChartKind
   x: string
   y: string
   series?: string
@@ -48,6 +55,20 @@ export interface AreaItem extends ItemBase {
   /** Rebuild every point as a snapshot of the latest row per key at that date. */
   snapshots?: boolean
   ranges?: string[]
+  format?: ValueFormat
+  currency?: string
+  /** Area and line charts: how points are joined. */
+  curve?: ChartCurve
+  /** Bar charts: bars run sideways, with x down the left. */
+  horizontal?: boolean
+}
+
+/** A donut or pie chart: one slice per value of `label`, sized by `value`. */
+export interface PieItem extends ItemBase {
+  kind: 'pie'
+  label: string
+  value: string
+  donut?: boolean
   format?: ValueFormat
   currency?: string
 }
@@ -74,6 +95,8 @@ export interface ProgressItem extends ItemBase {
   max: string | SubQuery
   format?: ValueFormat
   currency?: string
+  /** Show a radial gauge instead of a bar. */
+  gauge?: boolean
 }
 
 export interface ListItem extends ItemBase {
@@ -90,7 +113,7 @@ export interface TextItem {
   text: string
 }
 
-export type DashboardItem = StatItem | AreaItem | TableItem | ProgressItem | ListItem | TextItem
+export type DashboardItem = StatItem | ChartItem | PieItem | TableItem | ProgressItem | ListItem | TextItem
 
 export interface DashboardRow {
   columns: number
@@ -107,7 +130,8 @@ export interface DashboardSpec {
   issues: string[]
 }
 
-export const ITEM_KINDS = ['stat', 'area', 'table', 'progress', 'list', 'text'] as const
+export const ITEM_KINDS = ['stat', 'area', 'bar', 'line', 'pie', 'table', 'progress', 'list', 'text'] as const
+export type ItemKind = (typeof ITEM_KINDS)[number]
 
 export function isDashboardFrontmatter(frontmatter: Pick<Frontmatter, 'type'>): boolean {
   return frontmatter.type.trim().toLowerCase() === DASHBOARD_TYPE.toLowerCase()
@@ -185,7 +209,7 @@ export function parseDashboardYaml(source: string): DashboardSpec {
   return { data, rows, issues }
 }
 
-function parseItem(
+export function parseItem(
   raw: unknown,
   where: string,
   data: Record<string, string>,
@@ -251,9 +275,12 @@ function parseItem(
         format,
         currency,
         trend: body.trend === true,
+        sparkline: body.sparkline === true,
       }
     }
-    case 'area': {
+    case 'area':
+    case 'bar':
+    case 'line': {
       const x = require('x')
       const y = require('y')
       if (!x || !y) return null
@@ -268,7 +295,15 @@ function parseItem(
         ranges: Array.isArray(body.ranges) ? body.ranges.map(String) : undefined,
         format,
         currency,
+        curve: CHART_CURVES.find((curve) => curve === body.curve),
+        horizontal: body.horizontal === true,
       }
+    }
+    case 'pie': {
+      const label = require('label')
+      const value = require('value')
+      if (!label || !value) return null
+      return { ...base, kind, label, value, donut: body.donut !== false, format, currency }
     }
     case 'table':
       return {
@@ -290,6 +325,7 @@ function parseItem(
         max,
         format,
         currency,
+        gauge: body.gauge === true,
       }
     }
     case 'list': {
