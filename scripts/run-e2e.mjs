@@ -74,7 +74,7 @@ try {
 
   const result = spawnSync(
     process.execPath,
-    ['node_modules/@playwright/test/cli.js', 'test', '--reporter=list', ...process.argv.slice(2)],
+    ['node_modules/@playwright/test/cli.js', 'test', ...process.argv.slice(2)],
     {
       env: {
         ...process.env,

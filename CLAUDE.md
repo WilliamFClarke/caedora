@@ -16,12 +16,13 @@ npm run build         # Production build
 npm run lint          # ESLint (next lint)
 npx tsc --noEmit      # Type check (matches CI)
 npm run test:e2e      # Playwright e2e (builds + starts prod server first)
+npm run test:unit     # caedora-mcp tests and browserless logic tests in tests/unit
 npm run test:e2e:ui   # Playwright UI mode
 npx playwright test e2e/home.spec.ts          # Run a single spec
 npx playwright test -g "name of test"         # Filter by test name
 ```
 
-CI (`.github/workflows/ci.yml`) runs build → e2e in sequence; e2e runs inside the official Playwright container (`mcr.microsoft.com/playwright:v1.59.1-noble`) on Chromium only.
+CI (`.github/workflows/ci.yml`) runs one job: type check, lint, unit tests, then build and e2e, all inside the official Playwright container (`mcr.microsoft.com/playwright:v1.59.1-noble`) on Chromium only.
 
 ## Architecture
 
@@ -57,6 +58,14 @@ Components are **hand-coded into `components/ui/`**, not added via the shadcn CL
 ### Styling
 
 Tailwind CSS v4 (PostCSS plugin, no `tailwind.config.*` — config lives in `app/globals.css` via `@theme`). Dark mode via `next-themes` (`attribute="class"`, system default). Use the `cn()` helper from `@/lib/utils`.
+
+## Testing
+
+- New or changed UI ships with Playwright tests in the same PR. Cover the user flow the change adds or alters (what someone clicks and what they should see), not implementation details. A PR that adds UI without a test is not ready for review.
+- Browser tests live in `e2e/*.spec.ts`. Use `createBrowserVault()` and the locators in `e2e/helpers.ts` to start from a fresh browser vault; every test gets its own browser context, so tests must not depend on each other or on run order.
+- Prefer role and label locators (`getByRole`, `getByLabel`) and web-first assertions (`await expect(...).toBeVisible()`). Never use `waitForTimeout` or fixed sleeps; wait for a visible outcome such as a URL, a heading or the Saved pill instead. If a control has no accessible name, give it one rather than reaching for CSS selectors.
+- Logic that needs no browser (OKF validation, search, markdown, zip and so on) goes in `tests/unit/*.test.ts`, which run in about a second without building the app.
+- Before pushing UI work, run `npm run test:e2e` locally. To repeat a single spec while checking for flakiness: `npx playwright test e2e/vault.spec.ts --repeat-each=5`.
 
 ## Conventions
 

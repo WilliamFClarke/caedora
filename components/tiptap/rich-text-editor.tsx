@@ -2,6 +2,7 @@
 import * as React from "react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
 import "./tiptap.css";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ImageExtension } from "@/components/tiptap/extensions/image";
 import { ImagePlaceholder } from "@/components/tiptap/extensions/image-placeholder";
@@ -88,7 +89,8 @@ const extensions = [
   Subscript,
   Superscript,
   Underline,
-  Link,
+  // Clicks are routed by handleLinkClick below so concept links stay in the app.
+  Link.configure({ openOnClick: false }),
   Color,
   Highlight.configure({
     multicolor: true,
@@ -104,6 +106,24 @@ const extensions = [
   TaskList.configure({ HTMLAttributes: { class: "tiptap-task-list" } }),
   TaskItem.configure({ nested: true, HTMLAttributes: { class: "tiptap-task-item" } }),
 ];
+
+/**
+ * Concept links are root-relative vault paths such as `/personal/home.md`, so
+ * they open inside the vault rather than at that path on the site. Anything
+ * else opens in a new tab, as TipTap's default click handling would.
+ */
+function handleLinkClick(event: MouseEvent, navigate: (path: string) => void) {
+  const anchor = (event.target as HTMLElement | null)?.closest("a[href]");
+  const href = anchor?.getAttribute("href");
+  if (!href) return false;
+  event.preventDefault();
+  if (href.startsWith("/") && !href.startsWith("//")) {
+    navigate(href.startsWith("/vault/") ? href : `/vault${href}`);
+  } else {
+    window.open(href, "_blank", "noopener,noreferrer");
+  }
+  return true;
+}
 
 export interface RichTextEditorProps {
   className?: string;
@@ -126,6 +146,9 @@ export function RichTextEditorDemo({
   documentHeader,
   toolbarActions,
 }: RichTextEditorProps) {
+  const router = useRouter();
+  const routerRef = React.useRef(router);
+  routerRef.current = router;
   const anchorCbRef = React.useRef(onMetaAnchorChange);
   React.useEffect(() => {
     anchorCbRef.current = onMetaAnchorChange;
@@ -154,6 +177,8 @@ export function RichTextEditorDemo({
         "data-form-type": "other",
         spellcheck: "true",
       },
+      handleClick: (_view, _pos, event) =>
+        handleLinkClick(event, (path) => routerRef.current.push(path)),
     },
     onUpdate: onUpdate ? ({ editor }) => onUpdate(editor) : undefined,
   });
