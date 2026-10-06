@@ -307,6 +307,10 @@ export function EditorPane({
             body={liveBody ?? loaded.body}
             refreshKey={`${syncNonce}:${catalogStamp(conceptCatalog)}`}
             viewToggle={viewToggle}
+            datasets={Object.values(conceptCatalog)
+              .filter((concept) => concept.type.toLowerCase() === 'dataset')
+              .map((concept) => ({ path: concept.path, title: concept.title }))
+              .sort((a, b) => a.path.localeCompare(b.path))}
             onBodyChange={(body) => {
               setLiveBody(body)
               setHasLocalChanges(true)

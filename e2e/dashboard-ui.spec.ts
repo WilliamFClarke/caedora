@@ -41,8 +41,19 @@ test('UK personal finance template opens on a working dashboard', async ({ page 
   await page.getByRole('button', { name: 'Done' }).click()
   await expect(dashboard.locator('[data-slot="dashboard-stat"]').first()).toContainText('Cash')
 
+  await page.getByRole('button', { name: 'Add element' }).click()
+  const builder = page.getByTestId('element-builder')
+  await builder.getByRole('radio', { name: 'Donut chart' }).click()
+  await builder.getByLabel('Title').fill('Where my money is')
+  await builder.getByLabel('Data file').selectOption('finance/balances.md')
+  await builder.getByLabel('Slice for each').selectOption('account.category')
+  await expect(builder.getByTestId('element-preview').locator('[data-slot="dashboard-pie"]')).toContainText('Property')
+  await builder.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(dashboard.locator('[data-slot="dashboard-pie"]')).toContainText('Where my money is')
+
   await page.getByRole('radio', { name: 'Source' }).click()
   await expect(page.getByText('caedora-dashboard').or(page.getByText('rows:')).first()).toBeVisible()
+  await expect(page.getByText(/pie: \{ title: Where my money is/)).toBeVisible()
 
   await page.goto('/vault/finance/balances.md')
   await expect(page.getByTestId('dataset-view').getByText('54 rows')).toBeVisible()

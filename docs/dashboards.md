@@ -9,6 +9,15 @@ straight back to the YAML block, keeping each card's settings as they were.
 
 In the sidebar, dashboards and Dataset files have their own icons.
 
+## Building a dashboard without writing YAML
+
+Create a concept with the type `Dashboard` (or open an existing one) and click
+Add element. Pick an element and its style, choose the Dataset it reads and
+which columns to use, and a live preview shows it drawn from your data. Add
+writes the element into the `caedora-dashboard` block, adding the Dataset under
+`data` if it is not there yet, and creates the block if the note has none. In
+Edit layout each card also has a remove button.
+
 ## Format
 
 List the Datasets as normal Markdown links so the OKF link graph sees them,
@@ -52,12 +61,17 @@ Every component except `text` takes `source`, and optionally `title`,
 
 | Component | Settings | Shows |
 | --- | --- | --- |
-| `stat` | `label`, `value`, `format`, `trend` | A summary card. `trend: true` compares with the previous snapshot of the `latest` date |
+| `stat` | `label`, `value`, `format`, `trend`, `sparkline` | A summary card. `trend: true` compares with the previous snapshot of the `latest` date, `sparkline: true` draws the value at every snapshot |
 | `area` | `x`, `y`, `series`, `stacked`, `snapshots`, `ranges` | An area chart. `series` splits it into one area per value, `ranges` adds a time range picker (`3m`, `12m`, `ytd`, `all`) |
+| `line` | as `area` | A line chart |
+| `bar` | as `area`, plus `horizontal` | A bar chart. `horizontal: true` runs the bars sideways, `stacked: true` stacks the series |
+| `pie` | `label`, `value`, `donut` | A donut chart with one slice per value of `label`, sized by `value`. `donut: false` draws a full pie |
 | `table` | `columns`, `sort`, `limit` | A table of rows. `sort: -balance` sorts descending |
-| `progress` | `label`, `value`, `max` | A progress bar. `max` can be a number, an expression or `{ source, where, value }` to read it from another Dataset |
+| `progress` | `label`, `value`, `max`, `gauge` | A progress bar, or a radial gauge with `gauge: true`. `max` can be a number, an expression or `{ source, where, value }` to read it from another Dataset |
 | `list` | `label`, `detail`, `sort`, `limit` | A simple list of rows |
 | `text` | the text | A note between cards |
+
+Area and line charts take `curve: smooth` (the default), `linear` or `step`.
 
 `format` is `currency`, `number`, `integer`, `percent` (a fraction, so 0.62
 shows as 62%), `date` or `text`. When it is left out the format follows the

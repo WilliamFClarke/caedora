@@ -12,8 +12,11 @@ import {
   type ExpressionScope,
 } from './expression'
 import type {
-  AreaItem,
+  ChartCurve,
+  ChartItem,
+  ChartKind,
   DashboardItem,
+  PieItem,
   ListItem,
   ProgressItem,
   StatItem,
@@ -45,15 +48,16 @@ export type ItemResult =
       value: DatasetValue
       spec: ValueSpec
       trend: { delta: number; ratio: number | null } | null
+      sparkline: number[] | null
     }
+  | ChartResult
   | {
-      kind: 'area'
+      kind: 'pie'
       title?: string
       description?: string
-      points: Array<Record<string, string | number>>
-      series: Array<{ key: string; label: string }>
-      stacked: boolean
-      ranges: string[]
+      slices: Array<{ key: string; label: string; value: number }>
+      total: number
+      donut: boolean
       spec: ValueSpec
     }
   | {
@@ -70,6 +74,7 @@ export type ItemResult =
       value: number
       max: number
       spec: ValueSpec
+      gauge: boolean
     }
   | {
       kind: 'list'
@@ -78,6 +83,19 @@ export type ItemResult =
       items: Array<{ label: string; detail: string }>
       detailSpec: ValueSpec | null
     }
+
+export interface ChartResult {
+  kind: ChartKind
+  title?: string
+  description?: string
+  points: Array<Record<string, string | number>>
+  series: Array<{ key: string; label: string }>
+  stacked: boolean
+  ranges: string[]
+  spec: ValueSpec
+  curve: ChartCurve
+  horizontal: boolean
+}
 
 export function evaluateItem(item: DashboardItem, data: DashboardData): ItemResult {
   if (item.kind === 'text') return item
@@ -92,7 +110,11 @@ export function evaluateItem(item: DashboardItem, data: DashboardData): ItemResu
       case 'stat':
         return evaluateStat(item, source, rows, data)
       case 'area':
-        return evaluateArea(item, source, data)
+      case 'bar':
+      case 'line':
+        return evaluateChart(item, source, data)
+      case 'pie':
+        return evaluatePie(item, source, rows, data)
       case 'table':
         return evaluateTable(item, source, rows, data)
       case 'progress':
@@ -248,6 +270,15 @@ function evaluateStat(item: StatItem, dataset: Dataset, rows: DatasetRow[], data
     }
   }
 
+  let sparkline: number[] | null = null
+  if (item.sparkline && item.latest) {
+    const date = dateColumn(dataset, item.latest)
+    const dates = [...new Set(dataset.rows.map((row) => row[date]).filter((v): v is string => typeof v === 'string'))].sort()
+    sparkline = dates.map(
+      (cutoff) => toNumber(aggregateRows(expr, dataset, selectRows(dataset, item, data, cutoff), data)) ?? 0
+    )
+  }
+
   return {
     kind: 'stat',
     label: item.label,
@@ -255,10 +286,35 @@ function evaluateStat(item: StatItem, dataset: Dataset, rows: DatasetRow[], data
     value,
     spec: valueSpec(item.format, item.currency, guessColumn(dataset, expr, data)),
     trend,
+    sparkline,
   }
 }
 
-function evaluateArea(item: AreaItem, dataset: Dataset, data: DashboardData): ItemResult {
+function evaluatePie(item: PieItem, dataset: Dataset, rows: DatasetRow[], data: DashboardData): ItemResult {
+  const valueExpr = parseExpression(item.value)
+  const labelPath = item.label.split('.')
+  const groups = new Map<string, DatasetRow[]>()
+  for (const row of rows) {
+    const label = String(readPath(dataset, row, labelPath, data) ?? 'Other')
+    groups.set(label, [...(groups.get(label) ?? []), row])
+  }
+  const slices = [...groups]
+    .map(([label, groupRows]) => ({ label: prettyLabel(label), value: toNumber(aggregateRows(valueExpr, dataset, groupRows, data)) ?? 0 }))
+    .filter((slice) => slice.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .map((slice, index) => ({ ...slice, key: `s${index}` }))
+  return {
+    kind: 'pie',
+    title: item.title,
+    description: item.description,
+    slices,
+    total: slices.reduce((sum, slice) => sum + slice.value, 0),
+    donut: item.donut ?? true,
+    spec: valueSpec(item.format, item.currency, guessColumn(dataset, valueExpr, data)),
+  }
+}
+
+function evaluateChart(item: ChartItem, dataset: Dataset, data: DashboardData): ItemResult {
   const yExpr = parseExpression(item.y)
   const xPath = item.x.split('.')
   const seriesPath = item.series?.split('.')
@@ -303,7 +359,7 @@ function evaluateArea(item: AreaItem, dataset: Dataset, data: DashboardData): It
   }
 
   return {
-    kind: 'area',
+    kind: item.kind,
     title: item.title,
     description: item.description,
     points,
@@ -311,6 +367,8 @@ function evaluateArea(item: AreaItem, dataset: Dataset, data: DashboardData): It
     stacked: item.stacked ?? false,
     ranges: item.ranges ?? [],
     spec: valueSpec(item.format, item.currency, guessColumn(dataset, yExpr, data)),
+    curve: item.curve ?? 'smooth',
+    horizontal: item.horizontal ?? false,
   }
 }
 
@@ -352,6 +410,7 @@ function evaluateProgress(item: ProgressItem, dataset: Dataset, rows: DatasetRow
     value,
     max,
     spec: valueSpec(item.format, item.currency, guessColumn(dataset, valueExpr, data)),
+    gauge: item.gauge ?? false,
   }
 }
 

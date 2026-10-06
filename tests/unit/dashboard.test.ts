@@ -5,7 +5,16 @@ import { parseExpression, evaluateAggregate, ukTaxYear } from '@/lib/dashboard/e
 import { formatValue } from '@/lib/dashboard/format'
 import { applyLayoutEdit } from '@/lib/dashboard/layout'
 import { loadDashboardData } from '@/lib/dashboard/load'
-import { parseDashboard } from '@/lib/dashboard/spec'
+import { parseDashboard, parseItem } from '@/lib/dashboard/spec'
+import {
+  buildItem,
+  columnOptions,
+  emptyForm,
+  formForDataset,
+  relativePath,
+  sourceFor,
+  type BuilderForm,
+} from '@/lib/dashboard/builder'
 import { validateDocument } from '@/lib/okf'
 import { UK_PERSONAL_FINANCE_FILES } from '@/lib/templates/uk-personal-finance'
 import { CURATED_TEMPLATES, fetchTemplateFiles } from '@/lib/vault-templates'
@@ -231,5 +240,76 @@ test.describe('dashboard layout edits', () => {
     expect(parseDashboard(columns).rows[0].columns).toBe(3)
 
     expect(applyLayoutEdit(body, { kind: 'move-item', from: { row: 1, item: 0 }, to: { row: 1, index: 1 } })).toBe(body)
+  })
+})
+
+test.describe('dashboard builder', () => {
+  test('builds YAML settings that evaluate against the finance data', async () => {
+    const balances = parseDataset('finance/balances.md', files.get('finance/balances.md')!)
+    const data = await loadDashboardData(provider, 'finance/overview.md', { balances: 'balances.md' }, TODAY)
+    const options = columnOptions(balances, data.byPath)
+    expect(options.map((option) => option.path)).toContain('account.category')
+
+    const evaluate = (form: BuilderForm) => {
+      const issues: string[] = []
+      const item = parseItem(buildItem(form, 'balances', balances), 'test', { balances: 'balances.md' }, issues)
+      expect(issues).toEqual([])
+      return evaluateItem(item!, data)
+    }
+    const base = (kind: BuilderForm['kind']) =>
+      formForDataset({ ...emptyForm(kind), source: 'finance/balances.md' }, balances, options)
+
+    const donut = evaluate({ ...base('pie'), group: 'account.category' })
+    expect(donut.kind === 'pie' && donut.slices.map((slice) => slice.label)).toEqual(
+      expect.arrayContaining(['Cash', 'Investments', 'Pensions', 'Property'])
+    )
+    expect(buildItem({ ...base('pie'), group: 'account.category' }, 'balances', balances)).toEqual({
+      pie: { title: 'Balances', source: 'balances', latest: 'date', label: 'account.category', value: 'sum(balance)' },
+    })
+
+    const bars = evaluate({ ...base('bar'), variant: 'horizontal', group: 'account.category', stacked: true })
+    expect(bars).toMatchObject({ kind: 'bar', horizontal: true, stacked: true })
+
+    const line = evaluate({ ...base('line'), variant: 'step' })
+    expect(line).toMatchObject({ kind: 'line', curve: 'step' })
+
+    const spark = evaluate({ ...base('stat'), variant: 'sparkline', title: 'Net worth' })
+    expect(spark.kind === 'stat' && spark.sparkline).toHaveLength(6)
+
+    const gauge = evaluate({ ...base('progress'), variant: 'gauge', target: '500000' })
+    expect(gauge).toMatchObject({ kind: 'progress', gauge: true, max: 500000 })
+  })
+
+  test('writes new elements into the dashboard block, creating it when missing', () => {
+    const added = applyLayoutEdit('---\ntype: Dashboard\n---\n\n# Overview\n', {
+      kind: 'add-item',
+      item: { stat: { label: 'Net worth', source: 'balances', value: 'sum(balance)' } },
+      data: { alias: 'balances', path: 'balances.md' },
+      row: 'new',
+    })
+    const spec = parseDashboard(added)
+    expect(spec.issues).toEqual([])
+    expect(spec.data).toEqual({ balances: 'balances.md' })
+    expect(added).toContain('- stat: { label: Net worth, source: balances, value: sum(balance) }')
+
+    const second = applyLayoutEdit(added, {
+      kind: 'add-item',
+      item: { text: 'Hello' },
+      row: 0,
+    })
+    expect(parseDashboard(second).rows[0]).toMatchObject({ columns: 2, items: [{ kind: 'stat' }, { kind: 'text' }] })
+
+    const removed = applyLayoutEdit(second, { kind: 'remove-item', at: { row: 0, item: 0 } })
+    expect(parseDashboard(removed).rows[0].items).toEqual([{ kind: 'text', text: 'Hello' }])
+  })
+
+  test('picks relative paths and unique aliases for data files', () => {
+    expect(relativePath('finance/dashboard.md', 'finance/balances.md')).toBe('balances.md')
+    expect(relativePath('dashboards/home.md', 'finance/balances.md')).toBe('../finance/balances.md')
+    expect(sourceFor('finance/dashboard.md', 'finance/balances.md', { balances: 'balances.md' })).toEqual({
+      alias: 'balances',
+      href: 'balances.md',
+    })
+    expect(sourceFor('dash.md', 'other/balances.md', { balances: 'balances.md' }).alias).toBe('balances_2')
   })
 })
