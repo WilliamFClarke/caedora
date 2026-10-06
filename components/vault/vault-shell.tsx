@@ -16,6 +16,7 @@ import { rebuildBundleIndexes, isLockedPath } from '@/lib/vault-index'
 import {
   combine,
   createConceptFrontmatter,
+  HUMAN_ACTOR,
   slugifyFilename,
 } from '@/lib/frontmatter'
 import {
@@ -267,6 +268,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       const content = combine(
         createConceptFrontmatter(display, metadata.type, {
           description: metadata.description,
+          generated: { by: HUMAN_ACTOR, at: new Date().toISOString() },
         }),
         '# Notes\n\n'
       )

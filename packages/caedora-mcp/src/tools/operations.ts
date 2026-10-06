@@ -51,6 +51,7 @@ export async function ingestSource(
     description: args.description,
     resource: args.resource,
     tags: ['source', ...(args.tags ?? [])],
+    sources: args.resource ? [{ id: 'origin', resource: args.resource, title: args.title }] : undefined,
     body: args.body,
   })
   await appendLog(provider, 'Ingest', `Ingested [${args.title}](/${args.path}).`)

@@ -10,8 +10,10 @@ own GitHub repository. Caedora does not store bundle content on its servers.
 
 ## OKF support
 
-- OKF v0.1 concept metadata: `type`, `title`, `description`, `resource`, `tags`,
-  and `timestamp`.
+- OKF v0.2 concept metadata: `type`, `title`, `description`, `resource`, `tags`,
+  plus the provenance, trust and lifecycle families (`sources`, `generated`,
+  `verified`, `status`, `stale_after`). v0.1 `timestamp` fields are still read
+  and become `generated.at` the next time a concept is saved.
 - Arbitrary producer-defined YAML fields preserved during round trips.
 - Path-based concept IDs and bundle-relative Markdown links.
 - Automatic hierarchical `index.md` generation.

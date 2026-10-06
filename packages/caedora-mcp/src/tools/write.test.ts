@@ -79,7 +79,9 @@ describe('OKF concept writes', () => {
     assert.equal(parsed.frontmatter.title, 'Orders')
     assert.deepEqual(parsed.frontmatter.tags, ['sales', 'revenue'])
     assert.match(provider.files.get('tables/index.md')!, /\[Orders\]\(orders\.md\)/)
-    assert.match(provider.files.get('index.md')!, /okf_version: "0\.1"/)
+    assert.equal(parsed.frontmatter.generated?.by, 'caedora-mcp/0.2.0')
+    assert.equal(parsed.frontmatter.timestamp, '')
+    assert.match(provider.files.get('index.md')!, /okf_version: "0\.2"/)
     assert.match(provider.files.get('log.md')!, /\*\*Creation\*\*/)
   })
 
@@ -101,14 +103,18 @@ describe('OKF concept writes', () => {
     const provider = new MemoryProvider()
     provider.files.set(
       'metric.md',
-      '---\ntype: Metric\ntitle: Revenue\nowner:\n  team: finance\n---\n\n# Definition\n\nOld.'
+      '---\ntype: Metric\ntitle: Revenue\ntimestamp: 2026-05-28T22:53:05Z\nverified: { by: human:will, at: 2026-06-01T00:00:00Z }\nowner:\n  team: finance\n---\n\n# Definition\n\nOld.'
     )
     await updateConcept(provider, {
       path: 'metric.md',
       metadata: { description: 'Recognized revenue.' },
+      generatedBy: 'claude/opus',
       body: '# Definition\n\nNew.',
     })
     const parsed = parseFrontmatter(provider.files.get('metric.md')!)
+    assert.equal(parsed.frontmatter.generated?.by, 'claude/opus')
+    assert.equal(parsed.frontmatter.timestamp, '')
+    assert.deepEqual(parsed.frontmatter.verified, [{ by: 'human:will', at: '2026-06-01T00:00:00Z' }])
     assert.deepEqual(parsed.frontmatter.extra.owner, { team: 'finance' })
     assert.equal(parsed.frontmatter.description, 'Recognized revenue.')
     assert.match(parsed.body, /New\./)
