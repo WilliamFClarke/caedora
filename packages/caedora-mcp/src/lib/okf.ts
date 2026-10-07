@@ -1,6 +1,6 @@
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
-import { OKF_VERSION, parseFrontmatter, type Frontmatter } from './frontmatter.js'
+import { OKF_VERSION, lastChanged, parseFrontmatter, type Frontmatter } from './frontmatter.js'
 import { titleFromPath } from './conventions.js'
 import { listFilesRecursive, type FileEntry, type VaultProvider } from '../providers/types.js'
 
@@ -33,6 +33,9 @@ export interface OkfIssue {
     | 'invalid-frontmatter'
     | 'missing-type'
     | 'invalid-timestamp'
+    | 'invalid-trust'
+    | 'invalid-sources'
+    | 'invalid-computation'
     | 'invalid-index'
     | 'invalid-log'
     | 'broken-link'
@@ -133,10 +136,131 @@ export function validateConcept(path: string, raw: string): OkfIssue[] {
   if (!parsed.frontmatter.type.trim()) {
     issues.push({ path, severity: 'error', code: 'missing-type', message: 'Concept frontmatter requires a non-empty type field.' })
   }
-  if (parsed.frontmatter.timestamp && Number.isNaN(Date.parse(parsed.frontmatter.timestamp))) {
-    issues.push({ path, severity: 'warning', code: 'invalid-timestamp', message: 'timestamp should be an ISO 8601 datetime.' })
+  return [...issues, ...v02Issues(path, parsed.frontmatter)]
+}
+
+export type LifecycleStatus = 'draft' | 'stable' | 'deprecated'
+export type TrustTier = 'unverified' | 'machine-confirmed' | 'human-reviewed'
+
+const LIFECYCLE_STATUSES = new Set<string>(['draft', 'stable', 'deprecated'])
+
+/** OKF v0.2 §5.4: an absent status is stable; other workflow values are read as stable too. */
+export function lifecycleStatus(metadata: Frontmatter): LifecycleStatus {
+  const status = metadata.status.trim().toLowerCase()
+  return LIFECYCLE_STATUSES.has(status) ? (status as LifecycleStatus) : 'stable'
+}
+
+/** OKF v0.2 §5.3: the trust tier is derived from `verified`, never stored. */
+export function trustTier(metadata: Frontmatter): TrustTier {
+  if (metadata.verified.length === 0) return 'unverified'
+  return metadata.verified.some((entry) => entry.by.startsWith('human:'))
+    ? 'human-reviewed'
+    : 'machine-confirmed'
+}
+
+/** OKF v0.2 §5.5: a concept is stale when now >= stale_after. */
+export function isStale(metadata: Frontmatter, now = new Date()): boolean {
+  const staleAfter = Date.parse(metadata.staleAfter)
+  return !Number.isNaN(staleAfter) && now.getTime() >= staleAfter
+}
+
+/** The latest verification time, or an empty string when unverified. */
+export function lastVerified(metadata: Frontmatter): string {
+  return metadata.verified
+    .map((entry) => entry.at)
+    .filter((at) => !Number.isNaN(Date.parse(at)))
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? ''
+}
+
+export interface OkfSource {
+  id: string
+  resource: string
+  title: string
+}
+
+/** Read the `sources` provenance list (OKF v0.2 §5.1), skipping entries without a resource. */
+export function conceptSources(metadata: Frontmatter): OkfSource[] {
+  const sources = metadata.extra.sources
+  if (!Array.isArray(sources)) return []
+  return sources.flatMap((entry) => {
+    if (!isPlainRecord(entry) || typeof entry.resource !== 'string' || !entry.resource.trim()) return []
+    return [{
+      id: typeof entry.id === 'string' ? entry.id : '',
+      resource: entry.resource,
+      title: typeof entry.title === 'string' ? entry.title : '',
+    }]
+  })
+}
+
+/** OKF v0.2 timestamps are ISO 8601 datetimes with an explicit UTC offset. */
+export function isOkfDatetime(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/i.test(value.trim()) &&
+    !Number.isNaN(Date.parse(value))
+}
+
+function v02Issues(path: string, metadata: Frontmatter): OkfIssue[] {
+  const issues: OkfIssue[] = []
+  const warn = (code: OkfIssue['code'], message: string) => issues.push({ path, severity: 'warning', code, message })
+  const checkDatetime = (field: string, value: unknown) => {
+    if (value === undefined || value === null || value === '') return
+    if (typeof value !== 'string' || !isOkfDatetime(value)) {
+      warn('invalid-timestamp', `${field} should be an ISO 8601 datetime with a UTC offset, such as 2026-06-30T14:00:00Z.`)
+    }
+  }
+
+  checkDatetime('timestamp', metadata.timestamp)
+  if (metadata.generated) {
+    if (!metadata.generated.by.trim()) warn('invalid-trust', 'generated needs a by actor, such as human:<id> or <agent>/<version>.')
+    checkDatetime('generated.at', metadata.generated.at)
+  } else if (metadata.extra.generated !== undefined) {
+    warn('invalid-trust', 'generated should be a { by, at } mapping.')
+  }
+  if (metadata.extra.verified !== undefined) {
+    warn('invalid-trust', 'verified should be a { by, at } mapping or a list of them.')
+  }
+  metadata.verified.forEach((entry, index) => {
+    if (!entry.by.trim()) warn('invalid-trust', `verified entry ${index + 1} needs a by actor.`)
+    checkDatetime(`verified entry ${index + 1} at`, entry.at)
+  })
+  // Many vaults already use status for workflow states (active, queued). OKF
+  // treats unknown values as soft guidance, so they read as stable without a warning.
+  checkDatetime('stale_after', metadata.staleAfter)
+
+  const sources = metadata.extra.sources
+  if (sources !== undefined) {
+    if (!Array.isArray(sources)) {
+      warn('invalid-sources', 'sources should be a list of { resource, id, title } entries.')
+    } else {
+      sources.forEach((entry, index) => {
+        if (!isPlainRecord(entry) || typeof entry.resource !== 'string' || !entry.resource.trim()) {
+          warn('invalid-sources', `sources entry ${index + 1} needs a resource.`)
+          return
+        }
+        checkDatetime(`sources entry ${index + 1} last_modified`, entry.last_modified)
+        if (isPlainRecord(entry.usage_window)) {
+          checkDatetime(`sources entry ${index + 1} usage_window.from`, entry.usage_window.from)
+          checkDatetime(`sources entry ${index + 1} usage_window.to`, entry.usage_window.to)
+        }
+      })
+    }
+  }
+  const usageWindow = metadata.extra.usage_window
+  if (isPlainRecord(usageWindow)) {
+    checkDatetime('usage_window.from', usageWindow.from)
+    checkDatetime('usage_window.to', usageWindow.to)
+  }
+
+  if (metadata.type.trim().toLowerCase() === 'attested computation') {
+    const runtime = metadata.extra.runtime
+    if (typeof runtime !== 'string' || !runtime.trim()) {
+      warn('invalid-computation', 'Attested Computation concepts require a runtime, such as bigquery or python.')
+    }
   }
   return issues
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export function validateDocument(path: string, raw: string): OkfIssue[] {
@@ -223,7 +347,10 @@ export async function buildConceptCatalog(provider: VaultProvider, entries?: Fil
         description: parsed.frontmatter.description,
         resource: parsed.frontmatter.resource,
         tags: parsed.frontmatter.tags,
-        timestamp: parsed.frontmatter.timestamp,
+        lastChanged: lastChanged(parsed.frontmatter),
+        status: lifecycleStatus(parsed.frontmatter),
+        trust: trustTier(parsed.frontmatter),
+        stale: isStale(parsed.frontmatter),
         links: parsed.error ? [] : extractLinks(parsed.body, entry.path),
         conformant: parsed.hasFrontmatter && !parsed.error && !!parsed.frontmatter.type.trim(),
       }
@@ -359,6 +486,10 @@ function validateIndex(path: string, raw: string): OkfIssue[] {
       parsed.frontmatter.description ||
       parsed.frontmatter.resource ||
       parsed.frontmatter.tags.length > 0 ||
+      parsed.frontmatter.generated ||
+      parsed.frontmatter.verified.length > 0 ||
+      parsed.frontmatter.status ||
+      parsed.frontmatter.staleAfter ||
       parsed.frontmatter.timestamp
     const unsupportedKeys = Object.keys(parsed.frontmatter.extra).filter((key) => key !== 'okf_version')
     if (standardFieldsPresent || unsupportedKeys.length > 0) {

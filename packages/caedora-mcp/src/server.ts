@@ -102,7 +102,7 @@ export function buildServer({ provider, readOnly = false }: BuildServerOptions):
   )
   server.tool(
     'lint_bundle',
-    'Validate OKF v0.1 conformance and report invalid metadata, reserved files, and broken links.',
+    'Validate OKF v0.2 conformance and report invalid metadata, reserved files, and broken links.',
     validateBundleSchema,
     async (args) =>
       textResult(

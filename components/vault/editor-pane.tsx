@@ -26,6 +26,8 @@ import { useAutosave, type SyncStatus } from '@/lib/autosave'
 import {
   combine,
   emptyFrontmatter,
+  HUMAN_ACTOR,
+  markGenerated,
   parseFrontmatter,
   type Frontmatter,
 } from '@/lib/frontmatter'
@@ -234,10 +236,7 @@ export function EditorPane({
     setLiveBody(next)
     setHasLocalChanges(true)
     setBodyRevision((revision) => revision + 1)
-    setMetadata((currentMetadata) => ({
-      ...currentMetadata,
-      timestamp: new Date().toISOString(),
-    }))
+    setMetadata((currentMetadata) => markGenerated(currentMetadata, HUMAN_ACTOR))
   }
 
   if (!path) {
@@ -315,7 +314,7 @@ export function EditorPane({
               setLiveBody(body)
               setHasLocalChanges(true)
               setBodyRevision((revision) => revision + 1)
-              setMetadata((current) => ({ ...current, timestamp: new Date().toISOString() }))
+              setMetadata((current) => markGenerated(current, HUMAN_ACTOR))
             }}
           />
         ) : showRendered ? (
@@ -355,10 +354,7 @@ export function EditorPane({
             setLiveBody(body)
             setHasLocalChanges(true)
             if (!reserved) {
-              setMetadata((current) => ({
-                ...current,
-                timestamp: new Date().toISOString(),
-              }))
+              setMetadata((current) => markGenerated(current, HUMAN_ACTOR))
             }
           }}
         />
@@ -379,10 +375,10 @@ export function EditorPane({
   )
 }
 
-/** Changes when any concept's timestamp changes, so dashboards re-read their Datasets. */
+/** Changes when any concept's last change time changes, so dashboards re-read their Datasets. */
 function catalogStamp(catalog: Record<string, OkfConceptSummary>): string {
   return Object.values(catalog)
-    .map((concept) => concept.timestamp)
+    .map((concept) => concept.lastChanged)
     .sort()
     .join('|')
 }

@@ -1,8 +1,13 @@
-import { parseFrontmatter } from './frontmatter'
+import { lastChanged, parseFrontmatter } from './frontmatter'
 import {
   conceptId,
   extractLinks,
   isConceptPath,
+  isStale,
+  lifecycleStatus,
+  trustTier,
+  type LifecycleStatus,
+  type TrustTier,
   validateDocument as validateOkfDocument,
   type OkfIssue as CoreOkfIssue,
   type OkfLink,
@@ -56,7 +61,11 @@ export interface OkfConceptSummary {
   description: string
   type: string
   tags: string[]
-  timestamp: string
+  /** generated.at, or the legacy v0.1 timestamp. */
+  lastChanged: string
+  status: LifecycleStatus
+  trust: TrustTier
+  stale: boolean
   links: OkfLink[]
   conformant: boolean
   /** Concept body flattened to plain text, used for full text search. */
@@ -84,7 +93,10 @@ export async function loadConceptCatalog(
           description: metadata.description,
           type: metadata.type || 'Unknown',
           tags: metadata.tags,
-          timestamp: metadata.timestamp,
+          lastChanged: lastChanged(metadata),
+          status: lifecycleStatus(metadata),
+          trust: trustTier(metadata),
+          stale: isStale(metadata),
           links: parsed.error ? [] : extractLinks(parsed.body, entry.path),
           conformant:
             parsed.hasFrontmatter &&

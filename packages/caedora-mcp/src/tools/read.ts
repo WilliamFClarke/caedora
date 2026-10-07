@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { parseFrontmatter } from '../lib/frontmatter.js'
-import { conceptId, isConceptPath } from '../lib/okf.js'
+import { lastChanged, parseFrontmatter } from '../lib/frontmatter.js'
+import { conceptId, isConceptPath, isStale, lifecycleStatus, trustTier } from '../lib/okf.js'
 import { listFilesRecursive, type VaultProvider } from '../providers/types.js'
 
 export const listConceptsSchema = {
@@ -27,7 +27,10 @@ export async function listConcepts(
       title: parsed.frontmatter.title,
       description: parsed.frontmatter.description,
       tags: parsed.frontmatter.tags,
-      timestamp: parsed.frontmatter.timestamp,
+      lastChanged: lastChanged(parsed.frontmatter),
+      status: lifecycleStatus(parsed.frontmatter),
+      trust: trustTier(parsed.frontmatter),
+      stale: isStale(parsed.frontmatter),
       conformant: parsed.hasFrontmatter && !parsed.error && !!parsed.frontmatter.type.trim(),
       size: entry.size,
       lastModified: entry.lastModified,
@@ -51,6 +54,9 @@ export async function readConcept(
     id: conceptId(path),
     path,
     metadata: parsed.frontmatter,
+    status: lifecycleStatus(parsed.frontmatter),
+    trust: trustTier(parsed.frontmatter),
+    stale: isStale(parsed.frontmatter),
     body: parsed.body,
     conformant: parsed.hasFrontmatter && !parsed.error && !!parsed.frontmatter.type.trim(),
     parseError: parsed.error,

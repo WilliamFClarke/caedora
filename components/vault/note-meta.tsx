@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import {
+  BadgeCheck,
   ChevronDown,
   ExternalLink,
   Link2,
@@ -13,8 +14,23 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { normalizeTag, type Frontmatter } from '@/lib/frontmatter'
-import type { OkfConceptSummary } from '@/lib/okf'
+import {
+  HUMAN_ACTOR,
+  lastChanged,
+  markGenerated,
+  normalizeTag,
+  type Frontmatter,
+} from '@/lib/frontmatter'
+import {
+  conceptSources,
+  isStale,
+  lastVerified,
+  lifecycleStatus,
+  resolveBundleLink,
+  trustTier,
+  type OkfConceptSummary,
+  type TrustTier,
+} from '@/lib/okf'
 import { cn } from '@/lib/utils'
 
 const STANDARD_FRONTMATTER_KEYS = new Set([
@@ -23,8 +39,21 @@ const STANDARD_FRONTMATTER_KEYS = new Set([
   'description',
   'resource',
   'tags',
+  'generated',
+  'verified',
+  'status',
+  'stale_after',
   'timestamp',
 ])
+
+const TRUST_LABELS: Record<TrustTier, string> = {
+  unverified: 'Unverified',
+  'machine-confirmed': 'Machine confirmed',
+  'human-reviewed': 'Human reviewed',
+}
+
+const SELECT_CLASS =
+  'border-input dark:bg-input/30 focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-xs shadow-xs outline-none focus-visible:ring-[3px]'
 
 interface NoteMetaProps {
   metadata: Frontmatter
@@ -52,13 +81,23 @@ export function NoteMeta({
   onTogglePin,
 }: NoteMetaProps) {
   const [expanded, setExpanded] = useState(false)
+  /** A content change: records the person as the author of the current version. */
   const update = (patch: Partial<Frontmatter>) => {
-    onMetadataChange({
-      ...metadata,
-      ...patch,
-      timestamp: patch.timestamp ?? new Date().toISOString(),
-    })
+    onMetadataChange(markGenerated({ ...metadata, ...patch }, HUMAN_ACTOR))
   }
+  /** Lifecycle and trust edits describe the content without changing it (OKF v0.2 §5.2). */
+  const updateLifecycle = (patch: Partial<Frontmatter>) => {
+    onMetadataChange({ ...metadata, ...patch })
+  }
+  const status = lifecycleStatus(metadata)
+  // A workflow value such as "active" is kept and offered alongside the OKF lifecycle values.
+  const customStatus = ['', 'draft', 'stable', 'deprecated'].includes(metadata.status.trim().toLowerCase())
+    ? ''
+    : metadata.status
+  const stale = isStale(metadata)
+  const trust = trustTier(metadata)
+  const verifiedAt = lastVerified(metadata)
+  const sources = conceptSources(metadata)
 
   return (
     <section
@@ -85,6 +124,17 @@ export function NoteMeta({
           <div className="mt-3">
             <TagEditor tags={metadata.tags} onChange={(tags) => update({ tags })} />
           </div>
+          {(status !== 'stable' || stale) && (
+            <div role="group" aria-label="Lifecycle" className="mt-3 flex flex-wrap gap-1.5">
+              {status === 'draft' && <Badge variant="secondary">Draft</Badge>}
+              {status === 'deprecated' && <Badge variant="destructive">Deprecated</Badge>}
+              {stale && (
+                <Badge variant="outline" title={`Stale since ${formatDate(metadata.staleAfter)}`}>
+                  Stale
+                </Badge>
+              )}
+            </div>
+          )}
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}
@@ -129,14 +179,85 @@ export function NoteMeta({
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="concept-timestamp">Last meaningful change</Label>
+            <Label htmlFor="concept-status">Status</Label>
+            <select
+              id="concept-status"
+              value={customStatus || status}
+              onChange={(event) =>
+                updateLifecycle({ status: event.target.value === 'stable' ? '' : event.target.value })
+              }
+              className={SELECT_CLASS}
+            >
+              <option value="stable">Stable</option>
+              <option value="draft">Draft</option>
+              <option value="deprecated">Deprecated</option>
+              {customStatus && <option value={customStatus}>{customStatus}</option>}
+            </select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="concept-generated-at">Last meaningful change</Label>
             <Input
-              id="concept-timestamp"
-              value={metadata.timestamp}
-              onChange={(event) => update({ timestamp: event.target.value })}
+              id="concept-generated-at"
+              value={lastChanged(metadata)}
+              onChange={(event) =>
+                updateLifecycle({
+                  generated: { by: metadata.generated?.by || HUMAN_ACTOR, at: event.target.value },
+                  timestamp: '',
+                })
+              }
               placeholder="2026-05-28T14:30:00Z"
               className="font-mono text-xs"
             />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="concept-generated-by">Written by</Label>
+            <Input
+              id="concept-generated-by"
+              value={metadata.generated?.by ?? ''}
+              onChange={(event) =>
+                updateLifecycle({
+                  generated: { by: event.target.value, at: lastChanged(metadata) || new Date().toISOString() },
+                  timestamp: '',
+                })
+              }
+              placeholder={HUMAN_ACTOR}
+              className="font-mono text-xs"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="concept-stale-after">Stale after</Label>
+            <Input
+              id="concept-stale-after"
+              value={metadata.staleAfter}
+              onChange={(event) => updateLifecycle({ staleAfter: event.target.value })}
+              placeholder="2026-12-31T00:00:00Z"
+              className="font-mono text-xs"
+            />
+          </div>
+          <div className="grid gap-1.5 md:col-span-2">
+            <Label>Trust</Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={trust === 'unverified' ? 'outline' : 'secondary'} aria-label="Trust tier">
+                {trust !== 'unverified' && <BadgeCheck />}
+                {TRUST_LABELS[trust]}
+              </Badge>
+              {verifiedAt && (
+                <span className="text-muted-foreground text-xs">Last confirmed {formatDate(verifiedAt)}</span>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="ml-auto"
+                onClick={() =>
+                  updateLifecycle({
+                    verified: [...metadata.verified, { by: HUMAN_ACTOR, at: new Date().toISOString() }],
+                  })
+                }
+              >
+                Mark as reviewed
+              </Button>
+            </div>
           </div>
           <div className="grid gap-1.5 md:col-span-2">
             <Label htmlFor="concept-resource">Canonical resource</Label>
@@ -161,6 +282,19 @@ export function NoteMeta({
               )}
             </div>
           </div>
+          {sources.length > 0 && (
+            <div className="grid gap-1.5 md:col-span-2">
+              <Label>Sources</Label>
+              <ul className="grid gap-1 text-xs">
+                {sources.map((source, index) => (
+                  <li key={`${source.id}-${index}`} className="flex min-w-0 items-center gap-2">
+                    {source.id && <span className="text-muted-foreground font-mono">[{source.id}]</span>}
+                    <SourceLink resource={source.resource} currentPath={currentPath} label={source.title} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <CustomFieldsEditor
             extra={metadata.extra}
             onChange={(extra) => update({ extra })}
@@ -185,6 +319,34 @@ export function NoteMeta({
         </div>
       </div>
     </section>
+  )
+}
+
+function formatDate(value: string): string {
+  const time = Date.parse(value)
+  if (Number.isNaN(time)) return value
+  return new Date(time).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function SourceLink({
+  resource,
+  currentPath,
+  label,
+}: {
+  resource: string
+  currentPath: string
+  label: string
+}) {
+  const external = safeResourceHref(resource)
+  // A source may also be a scope descriptor rather than a path (OKF v0.2 §5.1).
+  const internal = external || /\s/.test(resource.trim()) ? null : resolveBundleLink(currentPath, resource)
+  const href = external ?? (internal ? `/vault/${internal}` : null)
+  const text = label || resource
+  if (!href) return <span className="truncate">{text}</span>
+  return (
+    <a href={href} target="_blank" rel="noreferrer" title={resource} className="truncate underline-offset-2 hover:underline">
+      {text}
+    </a>
   )
 }
 
@@ -401,6 +563,9 @@ function CustomFieldsEditor({
               <Input
                 value={formatExtraValue(value)}
                 onChange={(event) => onChange({ ...extra, [key]: event.target.value })}
+                // Lists and mappings would be flattened to a string, so they are edited in the file.
+                readOnly={typeof value === 'object' && value !== null}
+                title={typeof value === 'object' && value !== null ? 'Structured value. Edit it in the Markdown file.' : undefined}
                 aria-label={`Value for ${key}`}
                 className="font-mono text-xs"
               />
