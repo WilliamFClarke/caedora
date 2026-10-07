@@ -72,6 +72,13 @@ Every component except `text` takes `source`, and optionally `title`,
 | `text` | the text | A note between cards |
 
 Area and line charts take `curve: smooth` (the default), `linear` or `step`.
+Line charts scale their axis to the data so small changes, such as weight or
+a 5k time, stay visible; area and bar charts start at zero.
+
+A chart's `x` and `series`, and a pie's `label`, can be a column or an
+expression worked out for each row. Use `month(date)` or `year(date)` to total
+a log by month or year, and `tax_year(date)` for UK tax years. Month buckets
+work with `ranges` too.
 
 `format` is `currency`, `number`, `integer`, `percent` (a fraction, so 0.62
 shows as 62%), `date` or `text`. When it is left out the format follows the
@@ -105,5 +112,8 @@ total even when accounts were updated on different days. On an `area` chart,
 
 ## Templates
 
-Every template ships with a `dashboard.md`. When a template has none, Caedora
-generates one that shows each of its Datasets as a table.
+Every template ships with a `dashboard.md`. The built in templates each come
+with a dashboard of their own and five years of example rows in their
+Datasets, so it shows something straight away; replace the rows with your own. When a template from
+GitHub has no dashboard, Caedora generates one that shows each of its Datasets
+as a table.

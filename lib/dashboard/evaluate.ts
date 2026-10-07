@@ -223,8 +223,9 @@ export function filterRange<T extends Record<string, string | number>>(
 ): T[] {
   if (!range || range === 'all' || points.length === 0) return points
   const last = String(points[points.length - 1][key])
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(last)) return points
-  const end = new Date(`${last}T00:00:00Z`)
+  // Days (2026-09-30) and months (2026-09) can both be filtered by range.
+  if (!/^\d{4}-\d{2}(-\d{2})?$/.test(last)) return points
+  const end = new Date(`${last.length === 7 ? `${last}-01` : last}T00:00:00Z`)
   let start: Date
   const match = range.match(/^(\d+)\s*([dwmy])$/i)
   if (range.toLowerCase() === 'ytd') {
@@ -240,7 +241,7 @@ export function filterRange<T extends Record<string, string | number>>(
   } else {
     return points
   }
-  const from = start.toISOString().slice(0, 10)
+  const from = start.toISOString().slice(0, last.length)
   return points.filter((point) => String(point[key]) >= from)
 }
 
@@ -292,10 +293,10 @@ function evaluateStat(item: StatItem, dataset: Dataset, rows: DatasetRow[], data
 
 function evaluatePie(item: PieItem, dataset: Dataset, rows: DatasetRow[], data: DashboardData): ItemResult {
   const valueExpr = parseExpression(item.value)
-  const labelPath = item.label.split('.')
+  const labelExpr = parseExpression(item.label)
   const groups = new Map<string, DatasetRow[]>()
   for (const row of rows) {
-    const label = String(readPath(dataset, row, labelPath, data) ?? 'Other')
+    const label = String(rowValue(labelExpr, dataset, row, data) ?? 'Other')
     groups.set(label, [...(groups.get(label) ?? []), row])
   }
   const slices = [...groups]
@@ -316,17 +317,18 @@ function evaluatePie(item: PieItem, dataset: Dataset, rows: DatasetRow[], data: 
 
 function evaluateChart(item: ChartItem, dataset: Dataset, data: DashboardData): ItemResult {
   const yExpr = parseExpression(item.y)
-  const xPath = item.x.split('.')
-  const seriesPath = item.series?.split('.')
+  const xExpr = parseExpression(item.x)
+  const seriesExpr = item.series ? parseExpression(item.series) : null
   const base = selectRows(dataset, { where: item.where }, data)
 
-  const xOf = (row: DatasetRow) => readPath(dataset, row, xPath, data)
+  // x and series are row expressions, so `month(date)` buckets a log by month.
+  const xOf = (row: DatasetRow) => rowValue(xExpr, dataset, row, data)
   const xs = [...new Set(base.map(xOf).filter((value) => value !== null))].sort(compare)
 
   const seriesLabels = new Map<string, string>()
   const seriesKey = (row: DatasetRow): string => {
-    if (!seriesPath) return 'value'
-    const label = String(readPath(dataset, row, seriesPath, data) ?? 'Other')
+    if (!seriesExpr) return 'value'
+    const label = String(rowValue(seriesExpr, dataset, row, data) ?? 'Other')
     let key = [...seriesLabels.entries()].find(([, existing]) => existing === label)?.[0]
     if (!key) {
       key = `s${seriesLabels.size}`
@@ -337,7 +339,7 @@ function evaluateChart(item: ChartItem, dataset: Dataset, data: DashboardData): 
 
   const points = xs.map((x) => {
     const rows = item.snapshots
-      ? latestRows(dataset, base, xPath[0], String(x))
+      ? latestRows(dataset, base, dateColumn(dataset, item.x), String(x))
       : base.filter((row) => xOf(row) === x)
     const groups = new Map<string, DatasetRow[]>()
     for (const row of rows) {
@@ -351,7 +353,7 @@ function evaluateChart(item: ChartItem, dataset: Dataset, data: DashboardData): 
     return point
   })
 
-  const series = seriesPath
+  const series = seriesExpr
     ? [...seriesLabels.entries()].map(([key, label]) => ({ key, label: prettyLabel(label) }))
     : [{ key: 'value', label: 'Total' }]
   for (const point of points) {
@@ -432,6 +434,11 @@ function evaluateList(item: ListItem, dataset: Dataset, rows: DatasetRow[], data
     }),
     detailSpec: detailColumn ? valueSpec(undefined, undefined, detailColumn) : null,
   }
+}
+
+function rowValue(expr: Expr, dataset: Dataset, row: DatasetRow, data: DashboardData): DatasetValue {
+  const value = evaluateRow(expr, rowScope(dataset, row, data))
+  return Array.isArray(value) ? null : value
 }
 
 function evaluateSubQuery(query: SubQuery, data: DashboardData): DatasetValue {

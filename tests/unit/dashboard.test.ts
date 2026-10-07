@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { parseDataset } from '@/lib/dataset'
 import { evaluateItem, filterRange, type DashboardData, type ItemResult } from '@/lib/dashboard/evaluate'
 import { parseExpression, evaluateAggregate, ukTaxYear } from '@/lib/dashboard/expression'
-import { formatValue } from '@/lib/dashboard/format'
+import { formatMonth, formatValue } from '@/lib/dashboard/format'
 import { applyLayoutEdit } from '@/lib/dashboard/layout'
 import { loadDashboardData } from '@/lib/dashboard/load'
 import { parseDashboard, parseItem } from '@/lib/dashboard/spec'
@@ -59,6 +59,31 @@ test.describe('dashboard expressions', () => {
     expect(evaluateAggregate(parseExpression('sum(a) / sum(b)'), rows, TODAY)).toBe(0.125)
     expect(evaluateAggregate(parseExpression('count() * 2 - 1'), rows, TODAY)).toBe(3)
     expect(() => evaluateAggregate(parseExpression('a + 1'), rows, TODAY)).toThrow(/Wrap a in an aggregate/)
+  })
+
+  test('buckets chart rows with expressions such as month(date)', async () => {
+    files.set(
+      'test/log.md',
+      `---\ntype: Dataset\ndataset:\n  columns:\n    date: { type: date }\n    kind: { type: text }\n    minutes: { type: number }\n---\n\n| date | kind | minutes |\n| --- | --- | --- |\n| 2026-08-03 | run | 30 |\n| 2026-08-20 | swim | 40 |\n| 2026-09-02 | run | 50 |\n| 2025-12-30 | run | 20 |\n`
+    )
+    const spec = parseDashboard(
+      '```caedora-dashboard\ndata: { log: log.md }\nrows:\n  - items:\n      - bar: { source: log, x: month(date), y: sum(minutes) }\n      - bar: { source: log, x: year(date), y: count(), series: kind }\n      - pie: { source: log, label: kind, value: sum(minutes) }\n```'
+    )
+    const data = await loadDashboardData(provider, 'test/dashboard.md', spec.data, TODAY)
+    files.delete('test/log.md')
+    const [months, years, pie] = spec.rows[0].items.map((item) => evaluateItem(item, data))
+    expect(months.kind === 'bar' && months.points).toEqual([
+      { x: '2025-12', value: 20 },
+      { x: '2026-08', value: 70 },
+      { x: '2026-09', value: 50 },
+    ])
+    expect(years.kind === 'bar' && years.points).toEqual([
+      { x: 2025, s0: 1, s1: 0 },
+      { x: 2026, s0: 2, s1: 1 },
+    ])
+    expect(pie.kind === 'pie' && pie.slices.map((slice) => slice.label)).toEqual(['Run', 'Swim'])
+    if (months.kind === 'bar') expect(filterRange(months.points, '3m').map((point) => point.x)).toEqual(['2026-08', '2026-09'])
+    expect(formatMonth('2026-09')).toBe('Sept 2026')
   })
 
   test('filters chart points to a time range', () => {
@@ -177,9 +202,19 @@ test.describe('template dashboards', () => {
         expect(errors, path).toEqual([])
       }
 
+      for (const file of templateFiles.filter((file) => /type: Dataset/.test(file.content))) {
+        const dataset = parseDataset(file.path, file.content)
+        expect(dataset.issues, file.path).toEqual([])
+        // A declared schema that fails to parse silently falls back to an inferred one.
+        if (/^dataset:/m.test(file.content)) expect(dataset.inferred, file.path).toBe(false)
+      }
+
       const [dashboard] = dashboards
       const spec = parseDashboard(dashboard.content)
       expect(spec.issues, template.id).toEqual([])
+      // Curated templates ship a designed dashboard, not the generated tables.
+      const kinds = spec.rows.flatMap((row) => row.items.map((item) => item.kind))
+      expect(kinds, template.id).toContain('stat')
       const data = await loadDashboardData(
         { readFile: async (path) => store.get(path) ?? Promise.reject(new Error(path)) },
         dashboard.path,

@@ -12,6 +12,17 @@ import { listFilesRecursive } from './storage'
 import { extractFirstTable, DATASET_TYPE } from './dataset'
 import { generateDefaultDashboard } from './dashboard/generate'
 import { UK_PERSONAL_FINANCE_FILES } from './templates/uk-personal-finance'
+import { FITNESS_PLANNER_FILES } from './templates/fitness-planner'
+import { READING_SYSTEM_FILES } from './templates/reading-system'
+import { DAILY_JOURNAL_FILES } from './templates/daily-journal'
+import { PROJECT_HUB_FILES } from './templates/project-hub'
+import { JOB_SEARCH_FILES } from './templates/job-search'
+import { PERSONAL_CRM_FILES } from './templates/personal-crm'
+import { HOME_OPERATIONS_FILES } from './templates/home-operations'
+import { TRAVEL_PLANNER_FILES } from './templates/travel-planner'
+import { INVESTMENT_TRACKER_FILES } from './templates/investment-tracker'
+import { UK_STUDENT_LOAN_FILES } from './templates/uk-student-loan'
+import { SIDE_BUSINESS_FILES } from './templates/side-business'
 
 export interface TemplateFile {
   path: string
@@ -47,12 +58,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     skills: ['AGENTS.md coaching guidance'],
     conventions: ['workout logs', 'measurement frontmatter', 'nutrition tags'],
     tags: ['fitness', 'health', 'planning'],
-    files: [
-      file('fitness/README.md', '# Fitness planner\n\nUse this folder for training plans, nutrition notes, measurements, and weekly reviews.\n'),
-      file('fitness/workouts/workout-log.md', '---\ntags: [fitness, workout]\nstatus: active\n---\n\n# Workout log\n\n- Warmup:\n- Main work:\n- Accessories:\n- Notes:\n'),
-      file('fitness/measurements.md', '---\ntags: [fitness, measurements]\n---\n\n# Measurements\n\n| Date | Weight | Waist | Notes |\n| --- | --- | --- | --- |\n'),
-      file('fitness/AGENTS.md', '# Fitness coaching guidance\n\nUse workout logs, nutrition notes, and measurements as context. Prefer practical plans and ask before changing goals.\n'),
-    ],
+    files: FITNESS_PLANNER_FILES,
   },
   {
     id: 'reading-system',
@@ -63,12 +69,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     skills: ['AGENTS.md synthesis guidance'],
     conventions: ['source status', 'author frontmatter', 'review tags'],
     tags: ['reading', 'research', 'learning'],
-    files: [
-      file('reading/README.md', '# Reading system\n\nTrack books, articles, source notes, and review queues here.\n'),
-      file('reading/books.md', '---\ntags: [reading, books]\n---\n\n# Books\n\n| Title | Author | Status | Notes |\n| --- | --- | --- | --- |\n'),
-      file('reading/source-notes/template.md', '---\ntags: [reading, source]\nstatus: queued\n---\n\n# Source title\n\n## Key ideas\n\n## Useful quotes\n\n## Follow-up\n'),
-      file('reading/AGENTS.md', '# Reading synthesis guidance\n\nSummarize sources into durable notes, preserve citations, and separate direct quotes from interpretation.\n'),
-    ],
+    files: READING_SYSTEM_FILES,
   },
   {
     id: 'daily-journal',
@@ -79,13 +80,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     skills: ['AGENTS.md reflection guidance'],
     conventions: ['daily note dates', 'weekly reviews', 'decision logs'],
     tags: ['journal', 'review', 'habits'],
-    files: [
-      file('journal/README.md', '# Daily journal\n\nUse this folder for daily notes, weekly reviews, decisions, and small habit loops.\n'),
-      file('journal/daily/template.md', '---\ntags: [journal, daily]\ndate:\n---\n\n# Daily note\n\n## Plan\n\n- \n\n## Notes\n\n## Done\n\n## Follow-up\n'),
-      file('journal/weekly-review.md', '---\ntags: [journal, review]\n---\n\n# Weekly review\n\n## Wins\n\n## Open loops\n\n## Decisions\n\n## Next week\n'),
-      file('journal/decisions.md', '---\ntags: [journal, decisions]\n---\n\n# Decisions\n\n| Date | Decision | Why | Revisit |\n| --- | --- | --- | --- |\n'),
-      file('journal/AGENTS.md', '# Journal guidance\n\nHelp identify patterns across daily notes, preserve uncertainty, and turn repeated open loops into clear next actions.\n'),
-    ],
+    files: DAILY_JOURNAL_FILES,
   },
   {
     id: 'project-hub',
@@ -96,29 +91,18 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     skills: ['AGENTS.md project planning guidance'],
     conventions: ['project status', 'spec templates', 'retrospective notes'],
     tags: ['projects', 'planning', 'work'],
-    files: [
-      file('projects/README.md', '# Project hub\n\nTrack active projects, specs, decisions, milestones, and retrospectives here.\n'),
-      file('projects/projects.md', '---\ntags: [projects, status]\n---\n\n# Projects\n\n| Project | Status | Owner | Due | Next step |\n| --- | --- | --- | --- | --- |\n'),
-      file('projects/templates/project-brief.md', '---\ntags: [projects, brief]\nstatus: proposed\n---\n\n# Project brief\n\n## Outcome\n\n## Scope\n\n## Milestones\n\n## Risks\n'),
-      file('projects/templates/retro.md', '---\ntags: [projects, retro]\n---\n\n# Retrospective\n\n## What changed\n\n## What worked\n\n## What to improve\n\n## Follow-ups\n'),
-      file('projects/AGENTS.md', '# Project planning guidance\n\nUse briefs, milestones, and retrospectives to keep recommendations grounded in current project state and documented decisions.\n'),
-    ],
+    files: PROJECT_HUB_FILES,
   },
   {
     id: 'job-search',
-    name: 'Job search tracker',
-    description: 'Applications, company research, interviews, and follow-up notes.',
+    name: 'Career and job search',
+    description: 'Salary history, applications, interviews and company research, with a career dashboard.',
     category: 'Career',
     repository: 'WilliamFClarke/caedora-template-job-search',
     skills: ['AGENTS.md interview prep guidance'],
-    conventions: ['application status', 'company tags', 'contact logs'],
-    tags: ['career', 'jobs', 'crm'],
-    files: [
-      file('career/job-search/README.md', '# Job search tracker\n\nTrack opportunities, company research, interviews, and follow-ups here.\n'),
-      file('career/job-search/applications.md', '---\ntags: [career, applications]\n---\n\n# Applications\n\n| Company | Role | Status | Next step |\n| --- | --- | --- | --- |\n'),
-      file('career/job-search/company-research/template.md', '---\ntags: [career, company]\nstatus: researching\n---\n\n# Company\n\n## Role fit\n\n## People\n\n## Questions\n'),
-      file('career/job-search/AGENTS.md', '# Job search guidance\n\nUse application status, company notes, and interview history to prepare concise next actions and tailored interview prep.\n'),
-    ],
+    conventions: ['salary history', 'application funnel', 'interview notes'],
+    tags: ['career', 'jobs', 'salary'],
+    files: JOB_SEARCH_FILES,
   },
   {
     id: 'personal-crm',
@@ -129,12 +113,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     skills: ['AGENTS.md relationship context guidance'],
     conventions: ['person notes', 'follow-up dates', 'conversation logs'],
     tags: ['crm', 'people', 'relationships'],
-    files: [
-      file('people/README.md', '# Personal CRM\n\nKeep people notes, conversations, follow-ups, and useful context here.\n'),
-      file('people/templates/person.md', '---\ntags: [people]\nstatus: active\n---\n\n# Person name\n\n## Context\n\n## Conversations\n\n## Follow-ups\n\n## Notes\n'),
-      file('people/follow-ups.md', '---\ntags: [people, follow-up]\n---\n\n# Follow-ups\n\n| Person | Topic | Due | Done |\n| --- | --- | --- | --- |\n'),
-      file('people/AGENTS.md', '# Relationship context guidance\n\nUse people notes respectfully, avoid inventing personal details, and surface follow-ups only from documented context.\n'),
-    ],
+    files: PERSONAL_CRM_FILES,
   },
   {
     id: 'home-operations',
@@ -145,13 +124,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     skills: ['AGENTS.md household operations guidance'],
     conventions: ['maintenance logs', 'inventory tables', 'vendor notes'],
     tags: ['home', 'maintenance', 'operations'],
-    files: [
-      file('home/README.md', '# Home operations\n\nTrack maintenance, household documents, inventory, chores, and vendors here.\n'),
-      file('home/maintenance.md', '---\ntags: [home, maintenance]\n---\n\n# Maintenance\n\n| Date | Area | Work done | Next check |\n| --- | --- | --- | --- |\n'),
-      file('home/inventory.md', '---\ntags: [home, inventory]\n---\n\n# Inventory\n\n| Item | Location | Warranty | Notes |\n| --- | --- | --- | --- |\n'),
-      file('home/vendors.md', '---\ntags: [home, vendors]\n---\n\n# Vendors\n\n| Vendor | Service | Contact | Notes |\n| --- | --- | --- | --- |\n'),
-      file('home/AGENTS.md', '# Household operations guidance\n\nHelp summarize maintenance history, prepare checklists, and keep household recommendations grounded in recorded facts.\n'),
-    ],
+    files: HOME_OPERATIONS_FILES,
   },
   {
     id: 'travel-planner',
@@ -162,13 +135,18 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     skills: ['AGENTS.md travel planning guidance'],
     conventions: ['trip folders', 'reservation tables', 'packing lists'],
     tags: ['travel', 'planning', 'itinerary'],
-    files: [
-      file('travel/README.md', '# Travel planner\n\nPlan trips, itineraries, reservations, packing, and post-trip notes here.\n'),
-      file('travel/trips.md', '---\ntags: [travel, trips]\n---\n\n# Trips\n\n| Trip | Dates | Status | Notes |\n| --- | --- | --- | --- |\n'),
-      file('travel/templates/trip-plan.md', '---\ntags: [travel, trip]\nstatus: planning\n---\n\n# Trip name\n\n## Itinerary\n\n## Reservations\n\n## Packing\n\n## Notes\n'),
-      file('travel/packing-list.md', '---\ntags: [travel, packing]\n---\n\n# Packing list\n\n- Documents\n- Clothes\n- Electronics\n- Health\n'),
-      file('travel/AGENTS.md', '# Travel planning guidance\n\nUse documented dates, preferences, reservations, and constraints before suggesting plans. Do not assume private travel details that are not recorded.\n'),
-    ],
+    files: TRAVEL_PLANNER_FILES,
+  },
+  {
+    id: 'side-business',
+    name: 'Freelance and side business',
+    description: 'Clients, invoices, hours and expenses for freelance work, with a business dashboard.',
+    category: 'Work',
+    repository: 'WilliamFClarke/caedora',
+    skills: ['AGENTS.md business guidance'],
+    conventions: ['invoice log', 'tax year revenue', 'expense categories'],
+    tags: ['business', 'freelance', 'invoices'],
+    files: SIDE_BUSINESS_FILES,
   },
   {
     id: 'uk-personal-finance',
@@ -190,14 +168,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     skills: ['AGENTS.md investment tracking guidance'],
     conventions: ['portfolio snapshots', 'thesis notes', 'allocation reviews'],
     tags: ['finance', 'investments', 'portfolio'],
-    files: [
-      file('finance/investments/README.md', '# Investment tracker\n\nTrack portfolio snapshots, contributions, allocation reviews, watchlists, and investment notes here.\n'),
-      file('finance/investments/portfolio.md', '---\ntags: [finance, investments, portfolio]\n---\n\n# Portfolio\n\n| Date | Account | Asset | Units | Value | Notes |\n| --- | --- | --- | --- | --- | --- |\n'),
-      file('finance/investments/watchlist.md', '---\ntags: [finance, investments, watchlist]\n---\n\n# Watchlist\n\n| Asset | Reason watching | Trigger to review | Notes |\n| --- | --- | --- | --- |\n'),
-      file('finance/investments/templates/investment-thesis.md', '---\ntags: [finance, investments, thesis]\nstatus: draft\n---\n\n# Investment thesis\n\n## What it is\n\n## Why it may be attractive\n\n## Risks\n\n## Review triggers\n\n## Decision log\n'),
-      file('finance/investments/allocation-review.md', '---\ntags: [finance, investments, allocation]\n---\n\n# Allocation review\n\n## Current allocation\n\n| Asset class | Target | Current | Action |\n| --- | --- | --- | --- |\n\n## Notes\n\n## Follow-ups\n'),
-      file('finance/investments/AGENTS.md', '# Investment tracking guidance\n\nHelp organize recorded portfolio notes, contribution history, and review prompts. Do not provide regulated financial advice, price predictions, or personalized buy/sell recommendations.\n'),
-    ],
+    files: INVESTMENT_TRACKER_FILES,
   },
   {
     id: 'uk-student-loan-tracker',
@@ -208,14 +179,7 @@ export const CURATED_TEMPLATES: VaultTemplate[] = [
     skills: ['AGENTS.md UK student loan tracking guidance'],
     conventions: ['statement logs', 'plan details', 'repayment reviews'],
     tags: ['finance', 'student-loan', 'uk'],
-    files: [
-      file('finance/uk-student-loan/README.md', '# UK student loan tracker\n\nTrack plan details, statements, repayments, interest changes, and annual reviews here. Verify current rules with official Student Loans Company or GOV.UK sources before acting.\n'),
-      file('finance/uk-student-loan/plan-details.md', '---\ntags: [finance, student-loan, uk]\n---\n\n# Plan details\n\n| Field | Value | Source/date checked |\n| --- | --- | --- |\n| Plan type |  |  |\n| Repayment status |  |  |\n| Current balance |  |  |\n| Interest rate |  |  |\n| Repayment threshold |  |  |\n| Write-off date estimate |  |  |\n'),
-      file('finance/uk-student-loan/statements.md', '---\ntags: [finance, student-loan, statements]\n---\n\n# Statements\n\n| Statement date | Opening balance | Repayments | Interest | Closing balance | Notes |\n| --- | --- | --- | --- | --- | --- |\n'),
-      file('finance/uk-student-loan/repayments.md', '---\ntags: [finance, student-loan, repayments]\n---\n\n# Repayments\n\n| Date | Source | Amount | Tax year | Notes |\n| --- | --- | --- | --- | --- |\n'),
-      file('finance/uk-student-loan/annual-review.md', '---\ntags: [finance, student-loan, review]\n---\n\n# Annual student loan review\n\n## Balance movement\n\n## Repayments checked\n\n## Interest or threshold changes\n\n## Questions to verify\n\n## Follow-ups\n'),
-      file('finance/uk-student-loan/AGENTS.md', '# UK student loan tracking guidance\n\nUse only recorded statements, plan notes, and user-provided official sources. Do not assume current UK thresholds, rates, or write-off rules; ask the user to verify against official sources before acting.\n'),
-    ],
+    files: UK_STUDENT_LOAN_FILES,
   },
 ]
 
@@ -364,10 +328,6 @@ async function readManifest(repository: string, ref: string) {
     }
   }
   return null
-}
-
-function file(path: string, content: string): TemplateFile {
-  return { path, content }
 }
 
 function normalizeCuratedTemplateFiles(template: VaultTemplate): TemplateFile[] {
