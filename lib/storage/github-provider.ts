@@ -1,6 +1,7 @@
 import { buildDiffResult } from '../diff'
 import { assertValidOkfDocument, isMarkdownPath } from '../okf'
-import type { VaultProvider, FileEntry, CommitEntry, DiffResult } from '../types'
+import type { VaultProvider, FileEntry, CommitEntry, DiffResult, ReadFileOptions, WriteFileOptions } from '../types'
+import { WriteConflictError } from './conflict'
 
 const API = 'https://api.github.com'
 
@@ -43,37 +44,68 @@ export class GitHubProvider implements VaultProvider {
     return `${API}/repos/${this.owner}/${this.repo}`
   }
 
-  async readFile(path: string): Promise<string> {
+  async readFile(path: string, options?: ReadFileOptions): Promise<string> {
     const res = await fetch(`${this.base}/contents/${path}`, {
       headers: apiHeaders(this.token),
+      // GitHub lets browsers cache contents for a minute, which would hide a
+      // commit the file listing has already shown us.
+      ...(options?.fresh ? { cache: 'no-store' as const } : {}),
     })
     if (!res.ok) throw new Error(`GitHub: failed to read ${path} (${res.status})`)
     const data = (await res.json()) as GHContent
     this.shaCache.set(path, data.sha)
-    // `atob` returns a "binary string" of bytes; re-interpret as UTF-8 so
-    // non-ASCII characters (em-dash, emoji, accented letters) round-trip
-    // correctly instead of coming back as mojibake.
-    const binary = atob(data.content.replace(/\n/g, ''))
-    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
-    return new TextDecoder('utf-8').decode(bytes)
+    return decodeContent(data.content)
   }
 
-  async writeFile(path: string, content: string): Promise<void> {
+  async writeFile(path: string, content: string, options?: WriteFileOptions): Promise<void> {
     if (isMarkdownPath(path)) assertValidOkfDocument(path, content)
-    const sha = this.shaCache.get(path)
+    // Other reads (the catalogue, dashboards) refresh the SHA cache, so when
+    // the caller says which text it edited, send that text's own blob SHA.
+    // GitHub then refuses the write if anyone has committed since.
+    let sha =
+      options?.baseContent !== undefined
+        ? await gitBlobSha(options.baseContent)
+        : this.shaCache.get(path)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await this._put(path, content, sha)
+      // 409: the SHA is no longer the file's head, because another writer
+      // committed since. 422: the file exists but we sent no SHA.
+      if (res.status === 409 || res.status === 422) {
+        const remote = await this._readFresh(path)
+        if (remote === null) throw new Error(`GitHub: failed to write ${path} (${res.status})`)
+        // Same text under another SHA (a byte order mark, say): not a conflict.
+        if (options?.baseContent !== undefined && remote === options.baseContent && attempt === 0) {
+          sha = this.shaCache.get(path)
+          continue
+        }
+        throw new WriteConflictError(path, 'GitHub', remote)
+      }
+      if (!res.ok) throw new Error(`GitHub: failed to write ${path} (${res.status})`)
+      const data = (await res.json()) as { content: GHContent }
+      this.shaCache.set(path, data.content.sha)
+      return
+    }
+  }
+
+  private _put(path: string, content: string, sha: string | undefined): Promise<Response> {
     const body: Record<string, unknown> = {
       message: `Update ${path}`,
       content: btoa(unescape(encodeURIComponent(content))),
     }
     if (sha) body.sha = sha
-    const res = await fetch(`${this.base}/contents/${path}`, {
+    return fetch(`${this.base}/contents/${path}`, {
       method: 'PUT',
       headers: apiHeaders(this.token),
       body: JSON.stringify(body),
     })
-    if (!res.ok) throw new Error(`GitHub: failed to write ${path} (${res.status})`)
-    const data = (await res.json()) as { content: GHContent }
-    this.shaCache.set(path, data.content.sha)
+  }
+
+  private async _readFresh(path: string): Promise<string | null> {
+    try {
+      return await this.readFile(path, { fresh: true })
+    } catch {
+      return null
+    }
   }
 
   async deleteFile(path: string): Promise<void> {
@@ -188,6 +220,7 @@ export class GitHubProvider implements VaultProvider {
       name: item.name,
       type: (item.type === 'dir' ? 'dir' : 'file') as 'file' | 'dir',
       size: item.size,
+      version: item.sha,
     }))
   }
 
@@ -253,6 +286,26 @@ export class GitHubProvider implements VaultProvider {
     const data = await res.json() as { default_branch?: string }
     return data.default_branch ?? 'main'
   }
+}
+
+/** Git's id for a file's content: SHA-1 of "blob <bytes>\0" and the bytes. */
+export async function gitBlobSha(text: string): Promise<string> {
+  const bytes = new TextEncoder().encode(text)
+  const header = new TextEncoder().encode(`blob ${bytes.length}\0`)
+  const data = new Uint8Array(header.length + bytes.length)
+  data.set(header)
+  data.set(bytes, header.length)
+  const digest = await crypto.subtle.digest('SHA-1', data)
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+function decodeContent(base64: string): string {
+  // `atob` returns a "binary string" of bytes; re-interpret as UTF-8 so
+  // non-ASCII characters (em-dash, emoji, accented letters) round-trip
+  // correctly instead of coming back as mojibake.
+  const binary = atob(base64.replace(/\n/g, ''))
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+  return new TextDecoder('utf-8').decode(bytes)
 }
 
 function delay(ms: number): Promise<void> {

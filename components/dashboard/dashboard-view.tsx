@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import {
   ArrowDown,
@@ -44,6 +44,7 @@ export function DashboardView({
   description,
   body,
   refreshKey,
+  versions,
   viewToggle,
   datasets = [],
   onBodyChange,
@@ -55,6 +56,8 @@ export function DashboardView({
   body: string
   /** Changes whenever the vault's files change, so Datasets are re-read. */
   refreshKey?: unknown
+  /** Each file's version; when one this dashboard read changes, it is read again. */
+  versions?: Record<string, string>
   viewToggle?: ReactNode
   /** Datasets in the vault, offered by Add element. */
   datasets?: DatasetChoice[]
@@ -67,6 +70,18 @@ export function DashboardView({
   const [adding, setAdding] = useState(false)
   const hasBlock = useMemo(() => findDashboardBlock(body) !== null, [body])
   const sourcesKey = JSON.stringify(spec.data)
+  // Versions of the Datasets behind the data on screen, taken when they were read.
+  const [readVersions, setReadVersions] = useState<string | null>(null)
+  const versionsRef = useRef(versions)
+  versionsRef.current = versions
+  const [versionNonce, setVersionNonce] = useState(0)
+  const currentVersions = data ? versionStamp(Object.keys(data.byPath), versions) : null
+
+  useEffect(() => {
+    if (readVersions !== null && currentVersions !== null && currentVersions !== readVersions) {
+      setVersionNonce((n) => n + 1)
+    }
+  }, [currentVersions, readVersions])
 
   useEffect(() => {
     setEditing(false)
@@ -74,9 +89,15 @@ export function DashboardView({
 
   useEffect(() => {
     let cancelled = false
-    loadDashboardData(provider, path, JSON.parse(sourcesKey) as Record<string, string>)
+    // A version change means GitHub may still serve a cached copy, so skip the cache.
+    const reader = versionNonce > 0
+      ? { readFile: (file: string) => provider.readFile(file, { fresh: true }) }
+      : provider
+    loadDashboardData(reader, path, JSON.parse(sourcesKey) as Record<string, string>)
       .then((loaded) => {
-        if (!cancelled) setData(loaded)
+        if (cancelled) return
+        setData(loaded)
+        setReadVersions(versionStamp(Object.keys(loaded.byPath), versionsRef.current))
       })
       .catch(() => {
         if (!cancelled) setData({ sources: {}, byPath: {}, today: new Date() })
@@ -84,7 +105,7 @@ export function DashboardView({
     return () => {
       cancelled = true
     }
-  }, [provider, path, sourcesKey, refreshKey])
+  }, [provider, path, sourcesKey, refreshKey, versionNonce])
 
   const edit = (change: LayoutEdit) => {
     const next = applyLayoutEdit(body, change)
@@ -505,4 +526,11 @@ function transitionNames(rows: DashboardRow[]): string[][] {
 function itemLabel(result: ItemResult, position: number): string {
   if (result.kind === 'stat' || result.kind === 'progress') return result.label
   return result.title ?? `${result.kind} ${position + 1}`
+}
+
+function versionStamp(paths: string[], versions: Record<string, string> | undefined): string {
+  return [...paths]
+    .sort()
+    .map((file) => `${file}@${versions?.[file] ?? ''}`)
+    .join('|')
 }

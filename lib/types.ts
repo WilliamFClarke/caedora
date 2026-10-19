@@ -6,6 +6,8 @@ export interface FileEntry {
   type: 'file' | 'dir'
   size?: number
   lastModified?: number  // Unix ms timestamp
+  /** Changes whenever the file's content does, e.g. the Git blob SHA on GitHub. */
+  version?: string
   pending?: boolean
 }
 
@@ -36,6 +38,20 @@ export interface DiffResult {
   newContent: string
 }
 
+export interface ReadFileOptions {
+  /** Skip any HTTP cache, because the caller knows the file has just changed. */
+  fresh?: boolean
+}
+
+export interface WriteFileOptions {
+  /**
+   * The text this edit started from. A provider that can tell whether the
+   * file still holds it throws WriteConflictError when someone else changed
+   * it in the meantime, rather than writing over their change.
+   */
+  baseContent?: string
+}
+
 // ─── Vault Provider Interface ─────────────────────────────────────────────────
 // Both LocalGitProvider and GitHubProvider implement this.
 // The UI never needs to know which backend is active.
@@ -47,8 +63,8 @@ export interface VaultProvider {
   isReady(): boolean
 
   // File operations
-  readFile(path: string): Promise<string>
-  writeFile(path: string, content: string): Promise<void>
+  readFile(path: string, options?: ReadFileOptions): Promise<string>
+  writeFile(path: string, content: string, options?: WriteFileOptions): Promise<void>
   deleteFile(path: string): Promise<void>
   listFiles(dir?: string): Promise<FileEntry[]>
 

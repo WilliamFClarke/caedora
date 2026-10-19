@@ -194,6 +194,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
 
   // ── Background auto-refresh ───────────────────────────────────────────────
   // Poll to pick up external changes (other devices, direct GitHub edits).
+  // A new version of the open note, or of a Dataset the open dashboard reads,
+  // makes EditorPane re-read it (see `versions` below).
   // Gated on tab visibility so background tabs don't hammer the API.
   // GitHub: 30 s (each refresh walks the tree — one API call per folder).
   // Local: 10 s (FSAA reads are cheap and instant).
@@ -242,6 +244,18 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     }
     return [...byPath.values()]
   }, [entries, pendingEntries, virtualFolders])
+
+  // GitHub reports a blob SHA per file; other providers fall back to the
+  // modified time. A change tells the open note and dashboard to re-read.
+  const versions = useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const entry of entries) {
+      if (entry.type !== 'file') continue
+      const version = entry.version ?? (entry.lastModified ? String(entry.lastModified) : undefined)
+      if (version) out[entry.path] = version
+    }
+    return out
+  }, [entries])
 
   const onSelect = useCallback(
     (path: string) => {
@@ -492,6 +506,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
                     : undefined
                 }
                 syncNonce={syncNonce}
+                version={selected ? versions[selected] : undefined}
+                versions={versions}
                 isPinned={selected ? pinned.has(selected) : false}
                 onTogglePin={togglePin}
                 onSaveNow={(fn) => { editorSaveRef.current = fn }}
@@ -557,7 +573,8 @@ function sameEntries(a: FileEntry[], b: FileEntry[]): boolean {
       a[i].path !== b[i].path ||
       a[i].type !== b[i].type ||
       a[i].size !== b[i].size ||
-      a[i].lastModified !== b[i].lastModified
+      a[i].lastModified !== b[i].lastModified ||
+      a[i].version !== b[i].version
     ) {
       return false
     }

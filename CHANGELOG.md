@@ -4,6 +4,8 @@ All notable Caedora release changes should be recorded here before tagging.
 
 ## [Unreleased]
 
+- Fixed saves to GitHub vaults failing when another writer had committed to the same file. Caedora now merges changes to different lines and shows a "Changed on GitHub" banner with Reload and Keep mine when they overlap.
+- Open notes and dashboards in GitHub vaults now update by themselves when another writer commits a new version of the note or of a Dataset the dashboard reads.
 - Added OKF folder export for browser vaults, alongside the JSON backup.
 - Added full text search across note content with a Ctrl/Cmd+K dialog, highlighted snippets and `tag:` and `in:` filters.
 
