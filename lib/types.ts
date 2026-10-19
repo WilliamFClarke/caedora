@@ -50,6 +50,8 @@ export interface WriteFileOptions {
    * it in the meantime, rather than writing over their change.
    */
   baseContent?: string
+  /** Commit message, for providers where a write is a commit. */
+  message?: string
 }
 
 // ─── Vault Provider Interface ─────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import type { Dataset, DatasetColumn, DatasetRow, DatasetValue } from '../dataset'
 import { resolveBundleLink } from '../okf'
+import { describeKey } from '../dataset-edit'
 import {
   ExpressionError,
   compare,
@@ -66,6 +67,7 @@ export type ItemResult =
       description?: string
       columns: Array<{ key: string; label: string; spec: ValueSpec }>
       rows: DatasetValue[][]
+      edit?: TableEdit
     }
   | {
       kind: 'progress'
@@ -374,6 +376,58 @@ function evaluateChart(item: ChartItem, dataset: Dataset, data: DashboardData): 
   }
 }
 
+/** What a table lets each row set, and how to find each row again when saving. */
+export interface TableEdit {
+  /** Path of the Dataset the rows come from. */
+  source: string
+  /** Shown columns that can be set, by their position in `columns`. */
+  columns: Array<{ index: number; column: string; values: string[] }>
+  /** Each row's key values, parallel to `rows`; null when the key is not unique. */
+  keys: Array<Record<string, DatasetValue> | null>
+  /** The row described in words, e.g. "buy GOOGL_US_EQ on 2026-10-19". */
+  labels: string[]
+  /** Why rows cannot be edited, such as a Dataset without a key. */
+  problem?: string
+}
+
+function tableEdit(
+  item: TableItem,
+  dataset: Dataset,
+  rows: DatasetRow[],
+  shown: string[]
+): TableEdit | undefined {
+  if (!item.edit) return undefined
+  const columns: TableEdit['columns'] = []
+  const problems: string[] = []
+  for (const [column, values] of Object.entries(item.edit)) {
+    const index = shown.indexOf(column)
+    const schema = dataset.schema.columns.find((entry) => entry.name === column)
+    if (!schema) problems.push(`${dataset.title} has no ${column} column to edit.`)
+    else if (index < 0) problems.push(`Add ${column} to columns to edit it here.`)
+    else if (schema.type === 'enum' && schema.values?.length && values.some((value) => !schema.values!.includes(value))) {
+      problems.push(`${column} can only be set to ${schema.values.join(', ')}.`)
+    } else columns.push({ index, column, values })
+  }
+  const key = dataset.schema.key
+  if (key.length === 0) {
+    problems.push(`Add a key to ${dataset.title} so its rows can be edited here.`)
+  }
+  const counts = new Map<string, number>()
+  const keyOf = (row: DatasetRow) => JSON.stringify(key.map((name) => row[name]))
+  for (const row of dataset.rows) counts.set(keyOf(row), (counts.get(keyOf(row)) ?? 0) + 1)
+  return {
+    source: dataset.path,
+    columns: problems.length > 0 ? [] : columns,
+    keys: rows.map((row) =>
+      key.length > 0 && counts.get(keyOf(row)) === 1
+        ? Object.fromEntries(key.map((name) => [name, row[name]]))
+        : null
+    ),
+    labels: rows.map((row) => describeKey(dataset, Object.fromEntries(key.map((name) => [name, row[name]])))),
+    problem: problems.length > 0 ? problems.join(' ') : undefined,
+  }
+}
+
 function evaluateTable(item: TableItem, dataset: Dataset, rows: DatasetRow[], data: DashboardData): ItemResult {
   const columns = (item.columns ?? dataset.schema.columns.map((column) => column.name)).map((name) => {
     const path = name.split('.').map((part) => part.trim())
@@ -393,6 +447,7 @@ function evaluateTable(item: TableItem, dataset: Dataset, rows: DatasetRow[], da
     description: item.description,
     columns: columns.map(({ key, label, spec }) => ({ key, label, spec })),
     rows: limited.map((row) => columns.map((column) => readPath(dataset, row, column.path, data))),
+    edit: tableEdit(item, dataset, limited, columns.map((column) => column.key)),
   }
 }
 

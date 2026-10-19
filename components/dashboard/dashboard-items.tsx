@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useMemo, useState } from 'react'
+import { useId, useMemo, useState, type ReactNode } from 'react'
 import {
   Area,
   AreaChart,
@@ -18,7 +18,14 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { CircleAlert, TrendingDown, TrendingUp } from 'lucide-react'
+import { Check, ChevronDown, CircleAlert, Loader2, TrendingDown, TrendingUp } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import type { CellEdit } from '@/lib/dataset-edit'
 import { Badge } from '@/components/ui/badge'
 import {
   Card,
@@ -46,7 +53,10 @@ import { cn } from '@/lib/utils'
 
 type Result<K extends ItemResult['kind']> = Extract<ItemResult, { kind: K }>
 
-export function DashboardItemView({ result }: { result: ItemResult }) {
+/** Saves one cell of a Dataset; rejects with a message to show when it cannot. */
+export type EditCell = (source: string, edit: CellEdit) => Promise<void>
+
+export function DashboardItemView({ result, onEditCell }: { result: ItemResult; onEditCell?: EditCell }) {
   switch (result.kind) {
     case 'stat':
       return <StatCard result={result} />
@@ -57,7 +67,7 @@ export function DashboardItemView({ result }: { result: ItemResult }) {
     case 'pie':
       return <PieCard result={result} />
     case 'table':
-      return <TableCard result={result} />
+      return <TableCard result={result} onEditCell={onEditCell} />
     case 'progress':
       return result.gauge ? <GaugeCard result={result} /> : <ProgressCard result={result} />
     case 'list':
@@ -338,7 +348,25 @@ function PieCard({ result }: { result: Result<'pie'> }) {
   )
 }
 
-function TableCard({ result }: { result: Result<'table'> }) {
+function TableCard({ result, onEditCell }: { result: Result<'table'>; onEditCell?: EditCell }) {
+  const [saving, setSaving] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const edit = result.edit && onEditCell ? result.edit : undefined
+
+  const setCell = async (row: number, column: string, value: string) => {
+    const key = edit?.keys[row]
+    if (!edit || !key || !onEditCell) return
+    setSaving(row)
+    setError(null)
+    try {
+      await onEditCell(edit.source, { key, column, value })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That change could not be saved.')
+    } finally {
+      setSaving(null)
+    }
+  }
+
   return (
     <Card data-slot="dashboard-table" className="gap-4">
       {(result.title || result.description) && (
@@ -347,8 +375,61 @@ function TableCard({ result }: { result: Result<'table'> }) {
           {result.description && <CardDescription>{result.description}</CardDescription>}
         </CardHeader>
       )}
-      <CardContent>
-        <DataTable columns={result.columns} rows={result.rows} />
+      <CardContent className="space-y-3">
+        <DataTable
+          columns={result.columns}
+          rows={result.rows}
+          renderCell={
+            edit && edit.columns.length > 0
+              ? (rowIndex, columnIndex, content) => {
+                  const editable = edit.columns.find((entry) => entry.index === columnIndex)
+                  if (!editable) return content
+                  const current = result.rows[rowIndex][columnIndex]
+                  const label = edit.labels[rowIndex]
+                  return (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={!edit.keys[rowIndex] || saving !== null}
+                          aria-label={`Set ${editable.column} for ${label}`}
+                          title={edit.keys[rowIndex] ? undefined : 'Another row has the same key, so this one cannot be edited.'}
+                          className="hover:bg-accent -mx-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 disabled:opacity-60"
+                        >
+                          {content}
+                          {saving === rowIndex ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : (
+                            <ChevronDown className="text-muted-foreground size-3" />
+                          )}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        {editable.values.map((value) => (
+                          <DropdownMenuItem
+                            key={value}
+                            disabled={value === current}
+                            onSelect={() => void setCell(rowIndex, editable.column, value)}
+                          >
+                            <Check className={cn('size-3.5', value !== current && 'invisible')} />
+                            {value}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )
+                }
+              : undefined
+          }
+        />
+        {edit?.problem && (
+          <p className="text-muted-foreground text-xs">{edit.problem}</p>
+        )}
+        {error && (
+          <p role="alert" className="text-destructive text-xs">
+            {error}
+          </p>
+        )}
       </CardContent>
     </Card>
   )
@@ -358,22 +439,27 @@ export function DataTable({
   columns,
   rows,
   sortable = false,
+  renderCell,
 }: {
   columns: Result<'table'>['columns']
   rows: Result<'table'>['rows']
   sortable?: boolean
+  /** Wraps a cell's formatted content, given the row's index in `rows`. */
+  renderCell?: (row: number, column: number, content: ReactNode) => ReactNode
 }) {
   const [sort, setSort] = useState<{ index: number; descending: boolean } | null>(null)
-  const sorted = useMemo(() => {
-    if (!sort) return rows
-    const copy = [...rows].sort((a, b) => {
-      const x = a[sort.index]
-      const y = b[sort.index]
+  // Sorted positions into `rows`, so a cell can be traced back to its row.
+  const order = useMemo(() => {
+    const indexes = rows.map((_, index) => index)
+    if (!sort) return indexes
+    indexes.sort((a, b) => {
+      const x = rows[a][sort.index]
+      const y = rows[b][sort.index]
       if (x === null) return 1
       if (y === null) return -1
       return typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))
     })
-    return sort.descending ? copy.reverse() : copy
+    return sort.descending ? indexes.reverse() : indexes
   }, [rows, sort])
 
   if (rows.length === 0) {
@@ -412,14 +498,15 @@ export function DataTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sorted.map((row, rowIndex) => (
+          {order.map((rowIndex) => (
             <TableRow key={rowIndex}>
-              {row.map((value, index) => {
+              {rows[rowIndex].map((value, index) => {
                 const spec = columns[index].spec
                 const numeric = typeof value === 'number'
+                const content = formatValue(value, spec)
                 return (
                   <TableCell key={columns[index].key} className={cn(numeric && 'text-right tabular-nums')}>
-                    {formatValue(value, spec)}
+                    {renderCell ? renderCell(rowIndex, index, content) : content}
                   </TableCell>
                 )
               })}

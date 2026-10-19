@@ -66,7 +66,7 @@ Every component except `text` takes `source`, and optionally `title`,
 | `line` | as `area` | A line chart |
 | `bar` | as `area`, plus `horizontal` | A bar chart. `horizontal: true` runs the bars sideways, `stacked: true` stacks the series |
 | `pie` | `label`, `value`, `donut` | A donut chart with one slice per value of `label`, sized by `value`. `donut: false` draws a full pie |
-| `table` | `columns`, `sort`, `limit` | A table of rows. `sort: -balance` sorts descending |
+| `table` | `columns`, `sort`, `limit`, `edit` | A table of rows. `sort: -balance` sorts descending. `edit` lets each row set a column from the dashboard, see below |
 | `progress` | `label`, `value`, `max`, `gauge` | A progress bar, or a radial gauge with `gauge: true`. `max` can be a number, an expression or `{ source, where, value }` to read it from another Dataset |
 | `list` | `label`, `detail`, `sort`, `limit` | A simple list of rows |
 | `text` | the text | A note between cards |
@@ -83,6 +83,29 @@ work with `ranges` too.
 `format` is `currency`, `number`, `integer`, `percent` (a fraction, so 0.62
 shows as 62%), `date` or `text`. When it is left out the format follows the
 column, so currency columns show as pounds.
+
+## Editing a row from a table
+
+A `table` can make a column settable from the dashboard, for example to
+approve a planned trade:
+
+```yaml
+- table: { title: Planned moves, source: decisions, columns: [date, ticker, action, amount, status], edit: { status: [approved, rejected] } }
+```
+
+Each row gets a small menu in that column offering the listed values. Choosing
+one reads the newest copy of the Dataset, rewrites that single cell in its
+Markdown table and saves it. Nothing else in the file changes: not the other
+rows, not the table's spacing and not the frontmatter. On a GitHub vault the
+save is its own commit, made with your GitHub account, with a message such as
+"Set status to approved for buy GOOGL_US_EQ on 2026-10-19".
+
+The row is found by the Dataset's `key` (see [Datasets](datasets.md)), so the
+edit still lands on the right row if someone else has added or reordered rows
+since the dashboard loaded. Editing is refused when the Dataset has no key, and
+for any row whose key is shared with another row. The column must be one of
+the table's `columns`, and for an `enum` column the values must be among its
+`values`.
 
 ## Expressions
 

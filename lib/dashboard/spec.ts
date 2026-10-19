@@ -78,6 +78,12 @@ export interface TableItem extends ItemBase {
   columns?: string[]
   sort?: string
   limit?: number
+  /**
+   * Columns each row can set from the dashboard, with the values offered,
+   * e.g. `{ status: [approved, rejected] }`. The row is found by the
+   * Dataset's key and only that cell is rewritten.
+   */
+  edit?: Record<string, string[]>
 }
 
 /** A value read from another source, such as an allowance from a limits Dataset. */
@@ -312,6 +318,7 @@ export function parseItem(
         columns: Array.isArray(body.columns) ? body.columns.map(String) : undefined,
         sort: optionalString(body.sort),
         limit: typeof body.limit === 'number' ? body.limit : undefined,
+        edit: parseTableEdit(body.edit, where, issues),
       }
     case 'progress': {
       const value = require('value')
@@ -374,6 +381,27 @@ function findCode(nodes: RootContent[]): Code | null {
     }
   }
   return null
+}
+
+function parseTableEdit(
+  value: unknown,
+  where: string,
+  issues: string[]
+): Record<string, string[]> | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!isRecord(value)) {
+    issues.push(`${where}: edit must map a column to the values it can be set to.`)
+    return undefined
+  }
+  const out: Record<string, string[]> = {}
+  for (const [column, values] of Object.entries(value)) {
+    if (!Array.isArray(values) || values.length === 0) {
+      issues.push(`${where}: edit.${column} must list the values it can be set to.`)
+      continue
+    }
+    out[column] = values.map(String)
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 function optionalString(value: unknown): string | undefined {

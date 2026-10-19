@@ -4,6 +4,7 @@ All notable Caedora release changes should be recorded here before tagging.
 
 ## [Unreleased]
 
+- Added `edit` to dashboard tables, so a row can set a column such as `status` from the dashboard. Only that cell is rewritten, the row is found by the Dataset's key, and on GitHub each change is its own commit with a message naming the row.
 - Fixed saves to GitHub vaults failing when another writer had committed to the same file. Caedora now merges changes to different lines and shows a "Changed on GitHub" banner with Reload and Keep mine when they overlap.
 - Open notes and dashboards in GitHub vaults now update by themselves when another writer commits a new version of the note or of a Dataset the dashboard reads.
 - Added OKF folder export for browser vaults, alongside the JSON backup.

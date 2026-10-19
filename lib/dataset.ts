@@ -185,9 +185,14 @@ export function parseDatasetSchema(value: unknown): {
   return { schema: { key: key.filter((name) => names.has(name)), columns }, issues }
 }
 
-export function extractFirstTable(markdown: string): MarkdownTable | null {
+/** The first GFM table node in `markdown`, with its source position. */
+export function findFirstTable(markdown: string): Table | null {
   const tree = unified().use(remarkParse).use(remarkGfm).parse(markdown) as Root
-  const table = findTable(tree.children)
+  return findTable(tree.children)
+}
+
+export function extractFirstTable(markdown: string): MarkdownTable | null {
+  const table = findFirstTable(markdown)
   if (!table || table.children.length === 0) return null
   const [header, ...body] = table.children
   const headers = header.children.map((cell) => cellText(cell.children))
