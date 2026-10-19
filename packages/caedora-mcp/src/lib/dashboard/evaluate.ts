@@ -4,6 +4,8 @@ import { describeKey } from '../dataset-edit.js'
 import {
   ExpressionError,
   compare,
+  periodStart,
+  type AggregateContext,
   evaluateAggregate,
   evaluateRow,
   parseExpression,
@@ -15,6 +17,7 @@ import {
 import type {
   ChartCurve,
   ChartItem,
+  ChartRule,
   ChartKind,
   DashboardItem,
   PieItem,
@@ -23,7 +26,9 @@ import type {
   StatItem,
   SubQuery,
   TableItem,
+  TreemapItem,
   ValueFormat,
+  WaterfallItem,
 } from './spec.js'
 
 export interface DashboardData {
@@ -62,12 +67,32 @@ export type ItemResult =
       spec: ValueSpec
     }
   | {
+      kind: 'treemap'
+      title?: string
+      description?: string
+      tiles: Array<{ key: string; label: string; value: number; group: string }>
+      groups: Array<{ key: string; label: string }>
+      total: number
+      spec: ValueSpec
+    }
+  | {
+      kind: 'waterfall'
+      title?: string
+      description?: string
+      steps: Array<{ x: string; start: number; end: number; change: number; total: boolean }>
+      spec: ValueSpec
+    }
+  | {
       kind: 'table'
       title?: string
       description?: string
       columns: Array<{ key: string; label: string; spec: ValueSpec }>
       rows: DatasetValue[][]
       edit?: TableEdit
+      /** Parallel to rows: true where the highlight expression holds. */
+      highlighted?: boolean[]
+      /** Indexes of columns coloured green or red by sign. */
+      signed: number[]
     }
   | {
       kind: 'progress'
@@ -75,6 +100,7 @@ export type ItemResult =
       description?: string
       value: number
       max: number
+      target: number | null
       spec: ValueSpec
       gauge: boolean
     }
@@ -86,10 +112,23 @@ export type ItemResult =
       detailSpec: ValueSpec | null
     }
 
+/** A reference line (value) or band (from, to), resolved to numbers or x values. */
+export interface ChartRuleResult {
+  axis: 'x' | 'y'
+  value?: string | number
+  from?: number
+  to?: number
+  label?: string
+}
+
+/** How a bar is coloured: a gain, a loss, or a highlighted bar. Stored on the point as `tone`. */
+export type BarTone = 'up' | 'down' | 'highlight'
+
 export interface ChartResult {
   kind: ChartKind
   title?: string
   description?: string
+  /** One per x. Bars may carry a `tone`. */
   points: Array<Record<string, string | number>>
   series: Array<{ key: string; label: string }>
   stacked: boolean
@@ -97,6 +136,7 @@ export interface ChartResult {
   spec: ValueSpec
   curve: ChartCurve
   horizontal: boolean
+  rules: ChartRuleResult[]
 }
 
 export function evaluateItem(item: DashboardItem, data: DashboardData): ItemResult {
@@ -117,6 +157,10 @@ export function evaluateItem(item: DashboardItem, data: DashboardData): ItemResu
         return evaluateChart(item, source, data)
       case 'pie':
         return evaluatePie(item, source, rows, data)
+      case 'treemap':
+        return evaluateTreemap(item, source, rows, data)
+      case 'waterfall':
+        return evaluateWaterfall(item, source, rows, data)
       case 'table':
         return evaluateTable(item, source, rows, data)
       case 'progress':
@@ -256,7 +300,8 @@ export function rangeLabel(range: string): string {
 
 function evaluateStat(item: StatItem, dataset: Dataset, rows: DatasetRow[], data: DashboardData): ItemResult {
   const expr = parseExpression(item.value)
-  const value = aggregateRows(expr, dataset, rows, data)
+  const context = itemContext(item, dataset, data)
+  const value = aggregateRows(expr, dataset, rows, data, context)
   let trend: { delta: number; ratio: number | null } | null = null
 
   if (item.trend && item.latest) {
@@ -264,7 +309,7 @@ function evaluateStat(item: StatItem, dataset: Dataset, rows: DatasetRow[], data
     const dates = [...new Set(dataset.rows.map((row) => row[date]).filter((v): v is string => typeof v === 'string'))].sort()
     const previous = dates[dates.length - 2]
     if (previous) {
-      const before = aggregateRows(expr, dataset, selectRows(dataset, item, data, previous), data)
+      const before = aggregateRows(expr, dataset, selectRows(dataset, item, data, previous), data, context)
       const now = toNumber(value)
       const then = toNumber(before)
       if (now !== null && then !== null) {
@@ -278,7 +323,7 @@ function evaluateStat(item: StatItem, dataset: Dataset, rows: DatasetRow[], data
     const date = dateColumn(dataset, item.latest)
     const dates = [...new Set(dataset.rows.map((row) => row[date]).filter((v): v is string => typeof v === 'string'))].sort()
     sparkline = dates.map(
-      (cutoff) => toNumber(aggregateRows(expr, dataset, selectRows(dataset, item, data, cutoff), data)) ?? 0
+      (cutoff) => toNumber(aggregateRows(expr, dataset, selectRows(dataset, item, data, cutoff), data, context)) ?? 0
     )
   }
 
@@ -287,7 +332,7 @@ function evaluateStat(item: StatItem, dataset: Dataset, rows: DatasetRow[], data
     label: item.label,
     description: item.description,
     value,
-    spec: valueSpec(item.format, item.currency, guessColumn(dataset, expr, data)),
+    spec: valueSpec(item.format ?? impliedFormat(expr), item.currency, guessColumn(dataset, expr, data)),
     trend,
     sparkline,
   }
@@ -302,7 +347,10 @@ function evaluatePie(item: PieItem, dataset: Dataset, rows: DatasetRow[], data: 
     groups.set(label, [...(groups.get(label) ?? []), row])
   }
   const slices = [...groups]
-    .map(([label, groupRows]) => ({ label: prettyLabel(label), value: toNumber(aggregateRows(valueExpr, dataset, groupRows, data)) ?? 0 }))
+    .map(([label, groupRows]) => ({
+      label: prettyLabel(label),
+      value: toNumber(aggregateRows(valueExpr, dataset, groupRows, data, { whole: scopesOf(dataset, rows, data) })) ?? 0,
+    }))
     .filter((slice) => slice.value > 0)
     .sort((a, b) => b.value - a.value)
     .map((slice, index) => ({ ...slice, key: `s${index}` }))
@@ -318,7 +366,13 @@ function evaluatePie(item: PieItem, dataset: Dataset, rows: DatasetRow[], data: 
 }
 
 function evaluateChart(item: ChartItem, dataset: Dataset, data: DashboardData): ItemResult {
-  const yExpr = parseExpression(item.y)
+  const measures = (item.measures ?? [{ value: item.y }]).map((measure, index) => {
+    const parsed = parseExpression(measure.value)
+    // drawdown() is worked out along the line, from the value at each point.
+    const drawdown = parsed.kind === 'call' && parsed.name === 'drawdown'
+    const expr = drawdown ? unwrapMeasure(parsed) : parsed
+    return { key: item.measures ? `m${index}` : 'value', label: measure.label, expr, drawdown, source: parsed }
+  })
   const xExpr = parseExpression(item.x)
   const seriesExpr = item.series ? parseExpression(item.series) : null
   const base = selectRows(dataset, { where: item.where }, data)
@@ -329,7 +383,7 @@ function evaluateChart(item: ChartItem, dataset: Dataset, data: DashboardData): 
 
   const seriesLabels = new Map<string, string>()
   const seriesKey = (row: DatasetRow): string => {
-    if (!seriesExpr) return 'value'
+    if (!seriesExpr) return measures[0].key
     const label = String(rowValue(seriesExpr, dataset, row, data) ?? 'Other')
     let key = [...seriesLabels.entries()].find(([, existing]) => existing === label)?.[0]
     if (!key) {
@@ -339,27 +393,65 @@ function evaluateChart(item: ChartItem, dataset: Dataset, data: DashboardData): 
     return key
   }
 
-  const points = xs.map((x) => {
+  const highlightExpr = item.highlight ? parseExpression(item.highlight) : null
+  const highlighted = new Set<number>()
+  const points = xs.map((x, index) => {
     const rows = item.snapshots
       ? latestRows(dataset, base, dateColumn(dataset, item.x), String(x))
       : base.filter((row) => xOf(row) === x)
+    const point: Record<string, string | number> = { x: x as string | number }
+    if (highlightExpr && rows.some((row) => truthy(rowValue(highlightExpr, dataset, row, data)))) highlighted.add(index)
+    // share() at a point is this series' part of everything at that point,
+    // or of the whole chart when there is only one series.
+    const whole = { whole: scopesOf(dataset, seriesExpr ? rows : base, data) }
+    if (!seriesExpr) {
+      for (const measure of measures) {
+        point[measure.key] = toNumber(aggregateRows(measure.expr, dataset, rows, data, whole)) ?? 0
+      }
+      return point
+    }
     const groups = new Map<string, DatasetRow[]>()
     for (const row of rows) {
       const key = seriesKey(row)
       groups.set(key, [...(groups.get(key) ?? []), row])
     }
-    const point: Record<string, string | number> = { x: x as string | number }
     for (const [key, groupRows] of groups) {
-      point[key] = toNumber(aggregateRows(yExpr, dataset, groupRows, data)) ?? 0
+      point[key] = toNumber(aggregateRows(measures[0].expr, dataset, groupRows, data, whole)) ?? 0
     }
     return point
   })
 
   const series = seriesExpr
     ? [...seriesLabels.entries()].map(([key, label]) => ({ key, label: prettyLabel(label) }))
-    : [{ key: 'value', label: 'Total' }]
+    : measures.map((measure) => ({
+        key: measure.key,
+        label: measure.label ?? (item.measures ? measureLabel(dataset, measure.source, data) : 'Total'),
+      }))
   for (const point of points) {
     for (const { key } of series) if (!(key in point)) point[key] = 0
+  }
+
+  const drawdown = measures.some((measure) => measure.drawdown)
+  for (const { key } of series) {
+    const measure = seriesExpr ? measures[0] : measures.find((entry) => entry.key === key)
+    if (measure?.drawdown) applyDrawdown(points, key)
+    else if (item.rebase) applyRebase(points, key)
+  }
+
+  let spec = valueSpec(item.format ?? impliedFormat(measures[0].source), item.currency, guessColumn(dataset, measures[0].expr, data))
+  if (drawdown && !item.format) spec = { ...spec, format: 'percent' }
+  else if (item.rebase && !item.format) spec = { ...spec, format: 'number' }
+
+  if (item.kind === 'bar' && series.length === 1) {
+    const key = series[0].key
+    const signed =
+      item.colour !== false &&
+      ['currency', 'percent', 'percent-points'].includes(spec.format) &&
+      points.some((point) => Number(point[key]) < 0)
+    points.forEach((point, index) => {
+      if (highlighted.has(index)) point.tone = 'highlight'
+      else if (signed) point.tone = Number(point[key]) < 0 ? 'down' : 'up'
+    })
   }
 
   return {
@@ -370,9 +462,121 @@ function evaluateChart(item: ChartItem, dataset: Dataset, data: DashboardData): 
     series,
     stacked: item.stacked ?? false,
     ranges: item.ranges ?? [],
-    spec: valueSpec(item.format, item.currency, guessColumn(dataset, yExpr, data)),
+    spec,
     curve: item.curve ?? 'smooth',
     horizontal: item.horizontal ?? false,
+    rules: (item.rules ?? []).map((rule) => resolveRule(rule, dataset, base, data)),
+  }
+}
+
+/** drawdown(sum(value)) and drawdown(value) both chart the drop from sum(value)'s peak. */
+function unwrapMeasure(expr: Extract<Expr, { kind: 'call' }>): Expr {
+  const [arg] = expr.args
+  if (!arg) throw new ExpressionError('drawdown() needs a value, such as drawdown(total_value).')
+  return arg.kind === 'column' ? { kind: 'call', name: 'sum', args: [arg] } : arg
+}
+
+/** Each point as a fraction below the highest value so far. */
+function applyDrawdown(points: Array<Record<string, string | number>>, key: string) {
+  let peak = -Infinity
+  for (const point of points) {
+    const value = Number(point[key])
+    peak = Math.max(peak, value)
+    point[key] = peak > 0 ? value / peak - 1 : 0
+  }
+}
+
+/** Each point relative to the series' first non-zero value, which shows as 100. */
+function applyRebase(points: Array<Record<string, string | number>>, key: string) {
+  const first = points.map((point) => Number(point[key])).find((value) => value !== 0)
+  if (!first) return
+  for (const point of points) point[key] = (Number(point[key]) / first) * 100
+}
+
+/** "sum(total_value)" reads as the column's label, "Total value". */
+function measureLabel(dataset: Dataset, expr: Expr, data: DashboardData): string {
+  const column = guessColumn(dataset, expr, data)
+  return column ? column.label ?? prettyLabel(column.name) : 'Value'
+}
+
+function resolveRule(rule: ChartRule, dataset: Dataset, rows: DatasetRow[], data: DashboardData): ChartRuleResult {
+  const number = (value: string) => {
+    if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value)
+    const result = toNumber(aggregateRows(parseExpression(value), dataset, rows, data))
+    if (result === null) throw new ExpressionError(`The rule ${value} did not give a number.`)
+    return result
+  }
+  if (rule.axis === 'x') {
+    const value = rule.value!
+    return { axis: 'x', value: /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : value, label: rule.label }
+  }
+  if (rule.value !== undefined) return { axis: 'y', value: number(rule.value), label: rule.label }
+  return { axis: 'y', from: number(rule.from!), to: number(rule.to!), label: rule.label }
+}
+
+function evaluateTreemap(item: TreemapItem, dataset: Dataset, rows: DatasetRow[], data: DashboardData): ItemResult {
+  const valueExpr = parseExpression(item.value)
+  const labelExpr = parseExpression(item.label)
+  const groupExpr = item.group ? parseExpression(item.group) : null
+  const tiles = new Map<string, { label: string; group: string; rows: DatasetRow[] }>()
+  for (const row of rows) {
+    const label = String(rowValue(labelExpr, dataset, row, data) ?? 'Other')
+    const group = groupExpr ? String(rowValue(groupExpr, dataset, row, data) ?? 'Other') : ''
+    const id = JSON.stringify([group, label])
+    const tile = tiles.get(id) ?? { label, group, rows: [] }
+    tile.rows.push(row)
+    tiles.set(id, tile)
+  }
+  const whole = { whole: scopesOf(dataset, rows, data) }
+  const groupKeys = new Map<string, string>()
+  const sized = [...tiles.values()]
+    .map((tile) => ({
+      label: prettyLabel(tile.label),
+      group: tile.group,
+      value: toNumber(aggregateRows(valueExpr, dataset, tile.rows, data, whole)) ?? 0,
+    }))
+    .filter((tile) => tile.value > 0)
+    .sort((a, b) => b.value - a.value)
+  for (const tile of sized) if (!groupKeys.has(tile.group)) groupKeys.set(tile.group, `g${groupKeys.size}`)
+  return {
+    kind: 'treemap',
+    title: item.title,
+    description: item.description,
+    tiles: sized.map((tile, index) => ({ key: `t${index}`, label: tile.label, value: tile.value, group: groupKeys.get(tile.group)! })),
+    groups: [...groupKeys.entries()].map(([label, key]) => ({ key, label: label ? prettyLabel(label) : 'Total' })),
+    total: sized.reduce((sum, tile) => sum + tile.value, 0),
+    spec: valueSpec(item.format ?? impliedFormat(valueExpr), item.currency, guessColumn(dataset, valueExpr, data)),
+  }
+}
+
+function evaluateWaterfall(item: WaterfallItem, dataset: Dataset, rows: DatasetRow[], data: DashboardData): ItemResult {
+  const yExpr = parseExpression(item.y)
+  const xExpr = parseExpression(item.x)
+  const ordered = sortRows(dataset, rows, item.sort, data)
+  const groups = new Map<string, DatasetRow[]>()
+  for (const row of ordered) {
+    const x = rowValue(xExpr, dataset, row, data)
+    if (x === null) continue
+    const key = String(x)
+    groups.set(key, [...(groups.get(key) ?? []), row])
+  }
+  let keys = [...groups.keys()]
+  // Months and dates run in order unless a sort says otherwise.
+  if (!item.sort && keys.every((key) => /^\d{4}-\d{2}(-\d{2})?$/.test(key))) keys = keys.sort()
+  let running = 0
+  const steps: Array<{ x: string; start: number; end: number; change: number; total: boolean }> = keys.map((x) => {
+    const change = toNumber(aggregateRows(yExpr, dataset, groups.get(x)!, data)) ?? 0
+    const step = { x, start: running, end: running + change, change, total: false }
+    running = step.end
+    return step
+  })
+  if (item.total !== false) steps.push({ x: item.total ?? 'Total', start: 0, end: running, change: running, total: true })
+  return {
+    kind: 'waterfall',
+    title: item.title,
+    description: item.description,
+    steps,
+    spec: valueSpec(item.format, item.currency, guessColumn(dataset, yExpr, data)),
   }
 }
 
@@ -441,6 +645,7 @@ function evaluateTable(item: TableItem, dataset: Dataset, rows: DatasetRow[], da
   })
   const sorted = sortRows(dataset, rows, item.sort, data)
   const limited = item.limit ? sorted.slice(0, item.limit) : sorted
+  const highlightExpr = item.highlight ? parseExpression(item.highlight) : null
   return {
     kind: 'table',
     title: item.title,
@@ -448,25 +653,53 @@ function evaluateTable(item: TableItem, dataset: Dataset, rows: DatasetRow[], da
     columns: columns.map(({ key, label, spec }) => ({ key, label, spec })),
     rows: limited.map((row) => columns.map((column) => readPath(dataset, row, column.path, data))),
     edit: tableEdit(item, dataset, limited, columns.map((column) => column.key)),
+    highlighted: highlightExpr ? limited.map((row) => truthy(rowValue(highlightExpr, dataset, row, data))) : undefined,
+    signed: signedColumns(item, dataset, columns),
   }
+}
+
+/**
+ * Columns shown green when positive and red when negative: those listed in
+ * `colour`, or by default the currency and percent columns with a negative
+ * value anywhere in the Dataset, such as a profit and loss column.
+ */
+function signedColumns(
+  item: TableItem,
+  dataset: Dataset,
+  columns: Array<{ key: string; path: string[]; spec: ValueSpec }>
+): number[] {
+  if (item.colour === false) return []
+  if (item.colour) {
+    return columns.flatMap((column, index) => (item.colour as string[]).includes(column.key) ? [index] : [])
+  }
+  return columns.flatMap((column, index) => {
+    if (column.path.length !== 1 || !['currency', 'percent-points'].includes(column.spec.format)) return []
+    const name = column.path[0]
+    return dataset.rows.some((row) => (toNumber(row[name] ?? null) ?? 0) < 0) ? [index] : []
+  })
 }
 
 function evaluateProgress(item: ProgressItem, dataset: Dataset, rows: DatasetRow[], data: DashboardData): ItemResult {
   const valueExpr = parseExpression(item.value)
-  const value = toNumber(aggregateRows(valueExpr, dataset, rows, data)) ?? 0
-  const max = toNumber(
-    typeof item.max === 'string'
-      ? aggregateRows(parseExpression(item.max), dataset, rows, data)
-      : evaluateSubQuery(item.max, data)
-  )
+  const context = itemContext(item, dataset, data)
+  const value = toNumber(aggregateRows(valueExpr, dataset, rows, data, context)) ?? 0
+  const bound = (value: string | SubQuery) =>
+    toNumber(
+      typeof value === 'string'
+        ? aggregateRows(parseExpression(value), dataset, rows, data, context)
+        : evaluateSubQuery(value, data)
+    )
+  const max = bound(item.max)
   if (max === null || max <= 0) throw new ExpressionError(`max for ${item.label} must be a positive number.`)
+  const target = item.target === undefined ? null : bound(item.target)
   return {
     kind: 'progress',
     label: item.label,
     description: item.description,
     value,
     max,
-    spec: valueSpec(item.format, item.currency, guessColumn(dataset, valueExpr, data)),
+    target,
+    spec: valueSpec(item.format ?? impliedFormat(valueExpr), item.currency, guessColumn(dataset, valueExpr, data)),
     gauge: item.gauge ?? false,
   }
 }
@@ -491,6 +724,10 @@ function evaluateList(item: ListItem, dataset: Dataset, rows: DatasetRow[], data
   }
 }
 
+function scopesOf(dataset: Dataset, rows: DatasetRow[], data: DashboardData) {
+  return rows.map((row) => rowScope(dataset, row, data))
+}
+
 function rowValue(expr: Expr, dataset: Dataset, row: DatasetRow, data: DashboardData): DatasetValue {
   const value = evaluateRow(expr, rowScope(dataset, row, data))
   return Array.isArray(value) ? null : value
@@ -503,12 +740,76 @@ function evaluateSubQuery(query: SubQuery, data: DashboardData): DatasetValue {
   return aggregateRows(parseExpression(query.value), source, selectRows(source, query, data), data)
 }
 
-function aggregateRows(expr: Expr, dataset: Dataset, rows: DatasetRow[], data: DashboardData): DatasetValue {
+function aggregateRows(
+  expr: Expr,
+  dataset: Dataset,
+  rows: DatasetRow[],
+  data: DashboardData,
+  context?: AggregateContext
+): DatasetValue {
   return evaluateAggregate(
     expr,
     rows.map((row) => rowScope(dataset, row, data)),
-    data.today
+    data.today,
+    context
   )
+}
+
+/**
+ * What share(), change() and drawdown() compare with for a stat or progress
+ * bar: the item's rows without `where`, and its rows at earlier dates.
+ */
+function itemContext(
+  item: { where?: string; latest?: string | true },
+  dataset: Dataset,
+  data: DashboardData
+): AggregateContext {
+  const scopes = (rows: DatasetRow[]) => rows.map((row) => rowScope(dataset, row, data))
+  const timeline = () => {
+    const date = item.latest ? dateColumn(dataset, item.latest) : firstDateColumn(dataset)
+    if (!date) return null
+    const rows = selectRows(dataset, { where: item.where }, data)
+    const dates = [...new Set(rows.map((row) => row[date]).filter((v): v is string => typeof v === 'string'))].sort()
+    return { date, rows, dates }
+  }
+  return {
+    whole: scopes(selectRows(dataset, { latest: item.latest }, data)),
+    before: (period) => {
+      const line = timeline()
+      if (!line) throw new ExpressionError(`${dataset.title} has no date column to compare with.`)
+      const last = line.dates[line.dates.length - 1]
+      if (!last) return null
+      const cutoff = periodStart(last, period)
+      if (item.latest) {
+        const rows = latestRows(dataset, line.rows, line.date, cutoff)
+        return rows.length > 0 ? scopes(rows) : null
+      }
+      // A log of flows, such as deposits: the total up to the cutoff.
+      return scopes(line.rows.filter((row) => typeof row[line.date] === 'string' && (row[line.date] as string) <= cutoff))
+    },
+    history: () => {
+      const line = timeline()
+      if (!line) throw new ExpressionError(`${dataset.title} has no date column for drawdown().`)
+      return line.dates.map((cutoff) =>
+        scopes(
+          item.latest
+            ? latestRows(dataset, line.rows, line.date, cutoff)
+            : line.rows.filter((row) => row[line.date] === cutoff)
+        )
+      )
+    },
+  }
+}
+
+function firstDateColumn(dataset: Dataset): string | null {
+  return dataset.schema.columns.find((column) => column.type === 'date')?.name ?? null
+}
+
+/** share(), change_pct() and drawdown() give fractions, so they read as percentages. */
+function impliedFormat(expr: Expr): ValueFormat | undefined {
+  if (expr.kind === 'call' && ['share', 'change_pct', 'drawdown'].includes(expr.name)) return 'percent'
+  if (expr.kind === 'unary') return impliedFormat(expr.arg)
+  return undefined
 }
 
 function sortRows(dataset: Dataset, rows: DatasetRow[], sort: string | undefined, data: DashboardData): DatasetRow[] {
@@ -516,10 +817,9 @@ function sortRows(dataset: Dataset, rows: DatasetRow[], sort: string | undefined
   const descending = sort.startsWith('-') || /\s+desc$/i.test(sort)
   const name = sort.replace(/^[-+]/, '').replace(/\s+(asc|desc)$/i, '').trim()
   const path = name.split('.')
-  const sorted = [...rows].sort((a, b) =>
-    compare(readPath(dataset, a, path, data), readPath(dataset, b, path, data))
-  )
-  return descending ? sorted.reverse() : sorted
+  // Ties keep the file's order whichever way the sort runs.
+  const direction = descending ? -1 : 1
+  return [...rows].sort((a, b) => direction * compare(readPath(dataset, a, path, data), readPath(dataset, b, path, data)))
 }
 
 function valueSpec(format: ValueFormat | undefined, currency: string | undefined, column: DatasetColumn | null): ValueSpec {
