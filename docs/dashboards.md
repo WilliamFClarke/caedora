@@ -107,6 +107,26 @@ for any row whose key is shared with another row. The column must be one of
 the table's `columns`, and for an `enum` column the values must be among its
 `values`.
 
+## How current the data is
+
+Under the title, a dashboard says how old its data is, such as "Data from 2
+hours ago". The time is the oldest `generated.at` among the Datasets it reads,
+including the ones that ref columns point at, because a dashboard is only as
+current as its oldest source. Hover over the line to see each Dataset's time.
+
+When a Dataset has a `stale_after` time that has passed, the line turns amber
+and names it, for example "Holdings is out of date." A producer such as a sync
+workflow can write `stale_after` each time it runs, set to when the next run
+should have happened:
+
+```yaml
+generated: { by: t212-sync, at: 2026-10-19T18:28:40Z }
+stale_after: 2026-10-20T20:00:00Z
+```
+
+In a GitHub vault the line updates by itself when a new commit to a Dataset
+arrives.
+
 ## Expressions
 
 - Values are aggregates: `sum(balance)`, `avg(rate)`, `min(fixed_until)`,

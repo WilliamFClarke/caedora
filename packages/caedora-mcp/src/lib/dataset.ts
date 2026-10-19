@@ -64,6 +64,10 @@ export interface Dataset {
   inferred: boolean
   rows: DatasetRow[]
   issues: DatasetIssue[]
+  /** generated.at: when the producer last wrote the rows. */
+  generatedAt?: string
+  /** stale_after: when the rows should be treated as out of date. */
+  staleAfter?: string
 }
 
 export interface MarkdownTable {
@@ -88,6 +92,10 @@ export function parseDataset(path: string, raw: string): Dataset {
   const title = parsed.frontmatter.title || path.split('/').pop()?.replace(/\.md$/i, '') || path
   const issues: DatasetIssue[] = []
   const table = extractFirstTable(parsed.body)
+  const stamps = {
+    ...(parsed.frontmatter.generated?.at ? { generatedAt: parsed.frontmatter.generated.at } : {}),
+    ...(parsed.frontmatter.staleAfter ? { staleAfter: parsed.frontmatter.staleAfter } : {}),
+  }
 
   const declared = parseDatasetSchema(parsed.frontmatter.extra.dataset)
   issues.push(...declared.issues)
@@ -101,6 +109,7 @@ export function parseDataset(path: string, raw: string): Dataset {
       inferred: declared.schema === null,
       rows: [],
       issues,
+      ...stamps,
     }
   }
 
@@ -139,7 +148,7 @@ export function parseDataset(path: string, raw: string): Dataset {
     })
   }
 
-  return { path, title, schema, inferred: declared.schema === null, rows, issues }
+  return { path, title, schema, inferred: declared.schema === null, rows, issues, ...stamps }
 }
 
 export function parseDatasetSchema(value: unknown): {

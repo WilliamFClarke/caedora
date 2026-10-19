@@ -21,6 +21,7 @@ import { describeCellEdit, setDatasetCell } from '@/lib/dataset-edit'
 import { isWriteConflict } from '@/lib/storage/conflict'
 import { ElementBuilder, type DatasetChoice } from './element-builder'
 import { ViewHeader } from './view-header'
+import { DataFreshness } from './data-freshness'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { evaluateItem, type DashboardData, type ItemResult } from '@/lib/dashboard/evaluate'
@@ -146,6 +147,7 @@ export function DashboardView({
         <ViewHeader
           title={title}
           description={description}
+          meta={data && <DataFreshness data={data} />}
           actions={
             <>
               {onBodyChange && (
