@@ -20,6 +20,8 @@ export interface AppSettings {
    *   - Local: how often a git commit is batched (disk writes still happen at ~1 s)
    */
   syncIntervalMs: number
+  /** Whether full text search and the link map include folders hidden in the sidebar. */
+  searchHiddenFolders: boolean
   localLlm: LocalLlmSettings
   ai: AiSettings
   desktopTransparencyEnabled: boolean
@@ -75,6 +77,7 @@ export const SYNC_INTERVAL_OPTIONS = [
 export const DEFAULT_SETTINGS: AppSettings = {
   syncMode: 'auto',
   syncIntervalMs: 30_000,
+  searchHiddenFolders: true,
   desktopTransparencyEnabled: true,
   appearancePalette: 'default',
   customPaletteHex: '#5b8cff',
