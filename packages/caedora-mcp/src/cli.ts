@@ -5,17 +5,24 @@ import { buildServer } from './server.js'
 import { LocalNodeProvider } from './providers/local-node.js'
 import { GitHubNodeProvider } from './providers/github.js'
 import type { VaultProvider } from './providers/types.js'
+import { lintCommand, rebuildIndexesCommand } from './commands.js'
+
+const COMMANDS = ['lint', 'rebuild-indexes'] as const
+type Command = (typeof COMMANDS)[number]
 
 interface ParsedArgs {
+  command?: Command
   bundle?: string
   github?: string
   pat?: string
   readOnly: boolean
+  json: boolean
   help: boolean
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
-  const out: ParsedArgs = { readOnly: false, help: false }
+  const out: ParsedArgs = { readOnly: false, json: false, help: false }
+  if ((COMMANDS as readonly string[]).includes(argv[0])) out.command = argv.shift() as Command
   for (let index = 0; index < argv.length; index++) {
     switch (argv[index]) {
       case '--bundle':
@@ -30,6 +37,9 @@ function parseArgs(argv: string[]): ParsedArgs {
         break
       case '--read-only':
         out.readOnly = true
+        break
+      case '--json':
+        out.json = true
         break
       case '-h':
       case '--help':
@@ -52,6 +62,13 @@ Usage:
   caedora-mcp --bundle <path>
   caedora-mcp --github <owner>/<repo> --pat <token>
   caedora-mcp --bundle <path> --read-only
+  caedora-mcp lint --bundle <path> [--json]
+  caedora-mcp rebuild-indexes --bundle <path>
+
+Commands:
+  lint                 Check the bundle and exit non zero on invalid
+                       frontmatter, broken links or Dataset problems.
+  rebuild-indexes      Regenerate every index.md, then exit.
 
 Options:
   --bundle <path>      Serve a local OKF bundle.
@@ -59,6 +76,7 @@ Options:
   --github owner/repo  Serve a GitHub-hosted OKF bundle.
   --pat <token>        GitHub personal access token. Falls back to GITHUB_TOKEN.
   --read-only          Disable all write tools.
+  --json               Print the lint report as JSON.
   -h, --help           Show this help.
 
 The server speaks stdio. Example MCP configuration:
@@ -100,6 +118,13 @@ async function main(): Promise<void> {
     console.error('Must provide either --bundle <path> or --github owner/repo')
     printHelp()
     process.exit(2)
+  }
+
+  if (args.command === 'lint' || args.command === 'rebuild-indexes') {
+    const result =
+      args.command === 'lint' ? await lintCommand(provider, { json: args.json }) : await rebuildIndexesCommand(provider)
+    console.log(result.output)
+    process.exit(result.exitCode)
   }
 
   const server = buildServer({ provider, readOnly: args.readOnly })

@@ -58,3 +58,20 @@ existing table works once its concept has `type: Dataset`.
 
 Problems such as a date in the wrong format or a missing column appear as
 warnings in the OKF indicator. They never block saving.
+
+`caedora-mcp lint --bundle <path>` runs the same checks from a script or a
+GitHub Actions workflow, and exits with code 1 when a Dataset has a problem.
+
+## Agents and scripts
+
+caedora-mcp reads and writes Datasets for AI assistants, using the same parser
+and expressions as Caedora:
+
+- `read_dataset` returns the typed rows.
+- `query_dataset` filters, aggregates and groups them.
+- `upsert_rows` and `update_row` change rows by `key`, checking each value
+  against the schema and rewriting only the cells involved.
+
+A Dataset that agents edit needs a `key`, such as `key: [date, ticker, action]`,
+so each row can be found again. See the
+[caedora-mcp README](../packages/caedora-mcp/README.md) for the full list.

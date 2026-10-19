@@ -29,7 +29,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/tools/write.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/tools/write.test.js dist-test/tools/datasets.test.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
