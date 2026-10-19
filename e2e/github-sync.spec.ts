@@ -136,6 +136,9 @@ test('an open note shows a new commit without an edit or a click on Sync', async
   const github = vault()
   await openGitHubVault(page, github, 'strategy/plan.md')
   await expect(editorBody(page).getByText('Keep VWRP above its floor.')).toBeVisible()
+  // The file listing carries the version that shows a note has changed. Commit
+  // only once it has landed, as the sync would to a vault that has been open a while.
+  await expect(page.locator('[data-sidebar="content"]').getByText('ISA plan', { exact: true })).toBeVisible()
 
   github.commit('strategy/plan.md', PLAN.replace('No company above 15 percent.', 'No company above 12 percent.'))
   await pollVault(page)
