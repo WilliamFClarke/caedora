@@ -27,6 +27,9 @@ import {
 import { appendBundleLog } from '@/lib/bundle-log'
 import { usePinned } from '@/hooks/use-pinned'
 import { useFolderAppearance } from '@/hooks/use-folder-appearance'
+import { useHiddenFolders } from '@/hooks/use-hidden-folders'
+import { isInHiddenFolder } from '@/lib/hidden-folders'
+import { useSettings } from '@/lib/settings-context'
 import type { FolderAppearance } from '@/lib/folder-appearance'
 import type { FileEntry, VaultProvider } from '@/lib/types'
 import {
@@ -65,6 +68,22 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     renameFolderAppearance,
     removeFolderAppearance,
   } = useFolderAppearance(activeVaultId)
+  const {
+    hiddenFolders,
+    hideFolder,
+    showFolder,
+    setShowHidden,
+    renameHiddenFolder,
+    removeHiddenFolder,
+  } = useHiddenFolders(activeVaultId)
+  const { settings } = useSettings()
+  // Search and the link map leave hidden folders out only when asked to.
+  const searchableCatalog = useMemo(() => {
+    if (settings.searchHiddenFolders) return conceptCatalog
+    return Object.fromEntries(
+      Object.entries(conceptCatalog).filter(([path]) => !isInHiddenFolder(path, hiddenFolders))
+    )
+  }, [conceptCatalog, hiddenFolders, settings.searchHiddenFolders])
   const didAutoSelect = useRef(false)
   const didAutoSeed = useRef(false)
   const initialPathRef = useRef(initialPath)
@@ -365,6 +384,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       await provider.renamePath(from, to)
       renamePinned(from, to)
       renameFolderAppearance(from, to)
+      renameHiddenFolder(from, to)
       setPendingEntries((prev) => renamePendingEntries(prev, from, to))
       if (!provider.writesAreCommits) {
         await provider.commit(`Rename ${from} to ${to}`, [to])
@@ -396,7 +416,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         syncUrl(newSelected, 'replace')
       }
     },
-    [provider, virtualFolders, selected, syncUrl, renamePinned, renameFolderAppearance]
+    [provider, virtualFolders, selected, syncUrl, renamePinned, renameFolderAppearance, renameHiddenFolder]
   )
 
   const onDeletePath = useCallback(
@@ -421,6 +441,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       await provider.deletePath(path)
       removePinned(path)
       removeFolderAppearance(path)
+      removeHiddenFolder(path)
       setPendingEntries((prev) => removePendingEntries(prev, path))
       if (!provider.writesAreCommits) {
         await provider.commit(`Delete ${path}`, [])
@@ -435,7 +456,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         syncUrl(null, 'replace')
       }
     },
-    [provider, virtualFolders, selected, syncUrl, removePinned, removeFolderAppearance]
+    [provider, virtualFolders, selected, syncUrl, removePinned, removeFolderAppearance, removeHiddenFolder]
   )
 
   const onSync = useCallback(async () => {
@@ -480,6 +501,10 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         folderAppearances={folderAppearances}
         onSetFolderAppearance={setFolderAppearance}
         onSetManyFolderAppearances={setManyFolderAppearances}
+        hiddenFolders={hiddenFolders}
+        onHideFolder={hideFolder}
+        onShowFolder={showFolder}
+        onShowHiddenChange={setShowHidden}
         onTemplateImported={onTemplateImported}
         onTemplateImportFailed={onTemplateImportFailed}
         onTemplateImportSettled={onTemplateImportSettled}
@@ -528,7 +553,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
           <LinkGraphPanel
             open={linkGraphOpen}
             currentPath={selected}
-            conceptCatalog={conceptCatalog}
+            conceptCatalog={searchableCatalog}
             onOpenConcept={onSelect}
             onClose={() => setLinkGraphOpen(false)}
           />
@@ -542,7 +567,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       <SearchDialog
         open={searchDialogOpen}
         onOpenChange={setSearchDialogOpen}
-        conceptCatalog={conceptCatalog}
+        conceptCatalog={searchableCatalog}
         onSelect={onSelect}
       />
     </SidebarProvider>

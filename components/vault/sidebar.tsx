@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  Eye,
+  EyeOff,
   Check,
   ChevronRight,
   ChevronsUpDown,
@@ -45,6 +47,12 @@ import { isLockedPath } from '@/lib/vault-index'
 import type { OkfConceptSummary } from '@/lib/okf'
 import { conceptMatches } from '@/lib/search'
 import { cn } from '@/lib/utils'
+import {
+  isFolderHidden,
+  isFolderHiddenItself,
+  isInHiddenFolder,
+  type HiddenFolders,
+} from '@/lib/hidden-folders'
 import {
   FOLDER_COLORS,
   FOLDER_ICONS,
@@ -112,6 +120,10 @@ interface AppSidebarProps {
   folderAppearances: Record<string, FolderAppearance>
   onSetFolderAppearance: (path: string, appearance: FolderAppearance) => void
   onSetManyFolderAppearances: (appearances: Record<string, FolderAppearance>) => void
+  hiddenFolders: HiddenFolders
+  onHideFolder: (path: string) => void
+  onShowFolder: (path: string) => void
+  onShowHiddenChange: (show: boolean) => void
   onTemplateImported: (paths: string[]) => void
   onTemplateImportFailed: (paths: string[]) => void
   onTemplateImportSettled: (paths: string[]) => void
@@ -231,6 +243,10 @@ export function AppSidebar({
   folderAppearances,
   onSetFolderAppearance,
   onSetManyFolderAppearances,
+  hiddenFolders,
+  onHideFolder,
+  onShowFolder,
+  onShowHiddenChange,
   onTemplateImported,
   onTemplateImportFailed,
   onTemplateImportSettled,
@@ -277,6 +293,10 @@ export function AppSidebar({
   }, [provider])
 
   const tree = useMemo(() => buildTree(entries), [entries])
+  const hiddenCount = useMemo(
+    () => treeFolders(tree).filter((path) => isFolderHiddenItself(path, hiddenFolders)).length,
+    [tree, hiddenFolders]
+  )
   const lowered = search.trim().toLowerCase()
   const matches = useMemo(() => {
     if (!lowered) return null
@@ -321,6 +341,9 @@ export function AppSidebar({
     onCreateFile,
     onCreateFolder,
     folderAppearances,
+    hiddenFolders,
+    onHideFolder,
+    onShowFolder,
     onRenamePath,
     onDeletePath,
     conceptCatalog,
@@ -518,6 +541,19 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter>
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={hiddenFolders.showHidden}
+            onClick={() => onShowHiddenChange(!hiddenFolders.showHidden)}
+            className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition group-data-[collapsible=icon]:hidden"
+          >
+            {hiddenFolders.showHidden ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+            <span className="flex-1 text-left">Show hidden folders</span>
+            <span className="font-mono text-[10px]">{hiddenCount}</span>
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setAiOpen(true)}
@@ -697,6 +733,9 @@ interface TreeRowProps {
   ) => Promise<void>
   onCreateFolder: (parent: string, name: string, appearance: FolderAppearance) => void
   folderAppearances: Record<string, FolderAppearance>
+  hiddenFolders: HiddenFolders
+  onHideFolder: (path: string) => void
+  onShowFolder: (path: string) => void
   onRenamePath: (from: string, to: string) => Promise<void>
   onDeletePath: (path: string) => Promise<void>
   conceptCatalog: Record<string, OkfConceptSummary>
@@ -831,7 +870,10 @@ function useRenameFromMenu(setRenaming: (path: string | null) => void) {
 }
 
 function TreeRow(props: TreeRowProps) {
-  const { node, matches } = props
+  const { node, matches, hiddenFolders } = props
+  if (node.type === 'dir' && !hiddenFolders.showHidden && isFolderHidden(node.path, hiddenFolders)) {
+    return null
+  }
   if (matches && !containsMatch(node, matches)) return null
   if (node.type === 'dir') return <FolderRow {...props} />
   return <FileRow {...props} />
@@ -845,10 +887,15 @@ function FolderRow(props: TreeRowProps) {
     setCreating,
     setCustomizingFolder,
     folderAppearances,
+    hiddenFolders,
+    onHideFolder,
+    onShowFolder,
     onRenamePath,
     onDeletePath,
   } = props
   const [open, setOpen] = useState(true)
+  const hidden = isFolderHidden(node.path, hiddenFolders)
+  const hiddenItself = isFolderHiddenItself(node.path, hiddenFolders)
   const isRenaming = renaming === node.path
   const { startRename, keepRenameFocus } = useRenameFromMenu(setRenaming)
   const appearance = folderAppearances[node.path] ?? suggestedFolderAppearance(node.path)
@@ -865,7 +912,10 @@ function FolderRow(props: TreeRowProps) {
           <ContextMenuTrigger asChild>
             <div className="relative">
               <CollapsibleTrigger asChild>
-                <SidebarMenuButton className={cn(node.pending && 'opacity-55')}>
+                <SidebarMenuButton
+                  className={cn((node.pending || hidden) && 'opacity-55')}
+                  data-hidden={hidden || undefined}
+                >
                   <ChevronRight className="transition-transform" />
                   <Icon style={{ color: folderColorValue(appearance.color) }} />
                   {isRenaming ? (
@@ -924,6 +974,17 @@ function FolderRow(props: TreeRowProps) {
               <Palette />
               Set icon and colour
             </ContextMenuItem>
+            {hiddenItself ? (
+              <ContextMenuItem onSelect={() => onShowFolder(node.path)}>
+                <Eye />
+                Show folder
+              </ContextMenuItem>
+            ) : (
+              <ContextMenuItem onSelect={() => onHideFolder(node.path)}>
+                <EyeOff />
+                Hide folder
+              </ContextMenuItem>
+            )}
             <ContextMenuItem
               variant="destructive"
               onSelect={() => {
@@ -963,7 +1024,9 @@ function FileRow(props: TreeRowProps) {
     onRenamePath,
     onDeletePath,
     conceptCatalog,
+    hiddenFolders,
   } = props
+  const hidden = isInHiddenFolder(node.path, hiddenFolders)
   const isRenaming = renaming === node.path
   const { startRename, keepRenameFocus } = useRenameFromMenu(setRenaming)
   const isSel = selected === node.path
@@ -982,7 +1045,7 @@ function FileRow(props: TreeRowProps) {
             className={cn(
               'pr-7',
               isIndex && 'h-7 gap-1.5 rounded-sm text-xs text-muted-foreground',
-              node.pending && 'opacity-55'
+              (node.pending || hidden) && 'opacity-55'
             )}
             onClick={() => {
               if (!isRenaming) onSelect(node.path)
@@ -1484,6 +1547,12 @@ function MoveDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function treeFolders(node: TreeNodeT): string[] {
+  return node.children
+    .filter((child) => child.type === 'dir')
+    .flatMap((child) => [child.path, ...treeFolders(child)])
 }
 
 function containsMatch(node: TreeNodeT, matches: Set<string>): boolean {
