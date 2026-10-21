@@ -4,6 +4,8 @@ All notable Caedora release changes should be recorded here before tagging.
 
 ## [Unreleased]
 
+- Added portfolio features to dashboards: several values on one chart, reference lines and bands, a target marker on progress bars, `share()`, `change()` and `change_pct()` over a period, `drawdown()`, `rebase: true`, green and red for gains and losses with `highlight` for rows and bars, treemaps, waterfalls and joining two Datasets on a column.
+- Descending table and list sorts now keep rows with equal values in file order.
 - Dashboards now show how old their data is, such as "Data from 2 hours ago", from the oldest `generated.at` of the Datasets they read, with a warning when a Dataset is past its `stale_after` time.
 - Added Dataset tools to caedora-mcp: `read_dataset`, `query_dataset` (using the dashboard expression language), `upsert_rows` and `update_row`, which check values against the schema and change only the cells involved, and `log_entry`. AGENTS.md files are now served as MCP resources and an `agent_instructions` prompt.
 - Added `caedora-mcp lint --bundle <path>`, which exits non zero on invalid frontmatter, broken links or Dataset problems, and `caedora-mcp rebuild-indexes --bundle <path>`.

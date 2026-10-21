@@ -27,6 +27,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { evaluateItem, type DashboardData, type ItemResult } from '@/lib/dashboard/evaluate'
 import { applyLayoutEdit, type LayoutEdit } from '@/lib/dashboard/layout'
 import { loadDashboardData } from '@/lib/dashboard/load'
+import { withJoins } from '@/lib/dashboard/join'
 import { findDashboardBlock, parseDashboard, type DashboardRow } from '@/lib/dashboard/spec'
 import type { VaultProvider } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -69,7 +70,10 @@ export function DashboardView({
   onBodyChange?: (body: string) => void
 }) {
   const spec = useMemo(() => parseDashboard(body), [body])
-  const [data, setData] = useState<DashboardData | null>(null)
+  const [loaded, setData] = useState<DashboardData | null>(null)
+  const joinsKey = JSON.stringify(spec.joins)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const data = useMemo(() => loaded && withJoins(loaded, spec.joins), [loaded, joinsKey])
   const [editing, setEditing] = useState(false)
   const [adding, setAdding] = useState(false)
   const hasBlock = useMemo(() => findDashboardBlock(body) !== null, [body])
