@@ -260,6 +260,33 @@ function GeneralSettings() {
             ))}
           </ItemActions>
         </Item>
+        <Separator />
+        <Item>
+          <ItemContent>
+            <ItemTitle>Search hidden folders</ItemTitle>
+            <ItemDescription>
+              Include folders hidden in the sidebar in full text search and the link map.
+            </ItemDescription>
+          </ItemContent>
+          <ItemActions>
+            <button
+              type="button"
+              onClick={() =>
+                updateSettings({ searchHiddenFolders: !settings.searchHiddenFolders })
+              }
+              className="text-muted-foreground hover:text-foreground"
+              role="switch"
+              aria-checked={settings.searchHiddenFolders}
+              aria-label="Search hidden folders"
+            >
+              {settings.searchHiddenFolders ? (
+                <ToggleRight className="text-primary size-7" />
+              ) : (
+                <ToggleLeft className="size-7" />
+              )}
+            </button>
+          </ItemActions>
+        </Item>
         {settings.syncMode === 'manual' && (
           <>
             <Separator />

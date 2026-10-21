@@ -4,6 +4,7 @@ All notable Caedora release changes should be recorded here before tagging.
 
 ## [Unreleased]
 
+- Added Hide folder to the folder menu in the sidebar, with a Show hidden folders switch at the bottom of the sidebar. Dot folders such as `.github` are hidden by default, and a setting leaves hidden folders out of search and the link map.
 - Added OKF folder export for browser vaults, alongside the JSON backup.
 - Added full text search across note content with a Ctrl/Cmd+K dialog, highlighted snippets and `tag:` and `in:` filters.
 

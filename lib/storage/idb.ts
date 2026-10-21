@@ -30,6 +30,7 @@ import { openDB, type IDBPDatabase } from 'idb'
 import type { PersistedVaultState } from '../types'
 import { DEFAULT_SETTINGS, type AppSettings } from '../settings'
 import type { FolderAppearance } from '../folder-appearance'
+import { NO_HIDDEN_FOLDERS, type HiddenFolders } from '../hidden-folders'
 import { deleteBrowserBundle, listBrowserBundles } from './browser-provider'
 
 const DB_NAME = 'caedora'
@@ -40,6 +41,7 @@ const META_STORE = 'vault-meta'
 const PINNED_STORE = 'pinned'
 const SETTINGS_STORE = 'app-settings'
 const FOLDER_APPEARANCE_PREFIX = 'folderAppearance:'
+const HIDDEN_FOLDERS_PREFIX = 'hiddenFolders:'
 const GITHUB_APP_SESSION_KEY = 'githubAppSession'
 
 export interface StoredGitHubAppSession {
@@ -246,6 +248,29 @@ export async function loadFolderAppearances(
     )
   } catch {
     return {}
+  }
+}
+
+// Hidden sidebar folders, stored the same way as folder appearance.
+
+export async function loadHiddenFolders(vaultKey: string): Promise<HiddenFolders> {
+  try {
+    const db = await getDB()
+    const stored = (await db.get(META_STORE, `${HIDDEN_FOLDERS_PREFIX}${vaultKey}`)) as
+      | Partial<HiddenFolders>
+      | undefined
+    return { ...NO_HIDDEN_FOLDERS, ...stored }
+  } catch {
+    return NO_HIDDEN_FOLDERS
+  }
+}
+
+export async function saveHiddenFolders(vaultKey: string, state: HiddenFolders): Promise<void> {
+  try {
+    const db = await getDB()
+    await db.put(META_STORE, state, `${HIDDEN_FOLDERS_PREFIX}${vaultKey}`)
+  } catch {
+    // ignore
   }
 }
 
