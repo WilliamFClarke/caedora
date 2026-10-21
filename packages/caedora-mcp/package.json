@@ -29,11 +29,13 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/tools/write.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/tools/write.test.js dist-test/tools/datasets.test.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "@types/mdast": "^4.0.4",
+    "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "unified": "^11.0.5",
     "yaml": "^2.9.0",
