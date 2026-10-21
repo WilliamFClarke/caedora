@@ -67,7 +67,7 @@ export class GitHubProvider implements VaultProvider {
         ? await gitBlobSha(options.baseContent)
         : this.shaCache.get(path)
     for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await this._put(path, content, sha)
+      const res = await this._put(path, content, sha, options?.message)
       // 409: the SHA is no longer the file's head, because another writer
       // committed since. 422: the file exists but we sent no SHA.
       if (res.status === 409 || res.status === 422) {
@@ -87,9 +87,14 @@ export class GitHubProvider implements VaultProvider {
     }
   }
 
-  private _put(path: string, content: string, sha: string | undefined): Promise<Response> {
+  private _put(
+    path: string,
+    content: string,
+    sha: string | undefined,
+    message = `Update ${path}`
+  ): Promise<Response> {
     const body: Record<string, unknown> = {
-      message: `Update ${path}`,
+      message,
       content: btoa(unescape(encodeURIComponent(content))),
     }
     if (sha) body.sha = sha
