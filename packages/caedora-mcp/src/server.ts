@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import type { VaultProvider } from './providers/types.js'
 import { rebuildIndexes } from './lib/okf.js'
@@ -40,6 +40,25 @@ import {
   recordQuerySchema,
   validateBundleSchema,
 } from './tools/operations.js'
+import {
+  logEntry,
+  logEntrySchema,
+  queryDataset,
+  queryDatasetSchema,
+  readDataset,
+  readDatasetSchema,
+  updateRow,
+  updateRowSchema,
+  upsertRows,
+  upsertRowsSchema,
+} from './tools/datasets.js'
+import {
+  AGENTS_URI_PREFIX,
+  agentInstructionsFor,
+  agentInstructionsSchema,
+  isAgentsPath,
+  listAgentInstructions,
+} from './tools/agents.js'
 
 export interface BuildServerOptions {
   provider: VaultProvider
@@ -113,7 +132,81 @@ export function buildServer({ provider, readOnly = false }: BuildServerOptions):
       )
   )
 
+  server.tool(
+    'read_dataset',
+    'Read a Dataset concept and return its schema, key, generated stamp and typed rows.',
+    readDatasetSchema,
+    async (args) => textResult(await readDataset(provider, args))
+  )
+  server.tool(
+    'query_dataset',
+    'Filter, aggregate and group a Dataset with the same expressions Caedora dashboards use.',
+    queryDatasetSchema,
+    async (args) => textResult(await queryDataset(provider, args))
+  )
+
+  server.registerResource(
+    'agent_instructions',
+    new ResourceTemplate(`${AGENTS_URI_PREFIX}{+path}`, {
+      list: async () => ({
+        resources: (await listAgentInstructions(provider)).map((file) => ({
+          uri: file.uri,
+          name: file.path,
+          title: file.title,
+          description: file.description,
+          mimeType: 'text/markdown',
+        })),
+      }),
+    }),
+    {
+      title: 'Agent instructions',
+      description: 'The vault root and folder AGENTS.md files.',
+      mimeType: 'text/markdown',
+    },
+    async (uri, { path }) => {
+      const file = String(path)
+      if (!isAgentsPath(file)) throw new Error(`${file} is not an AGENTS.md file.`)
+      return { contents: [{ uri: uri.href, mimeType: 'text/markdown', text: await provider.readFile(file) }] }
+    }
+  )
+  server.registerPrompt(
+    'agent_instructions',
+    {
+      title: 'Agent instructions',
+      description: 'The root AGENTS.md and every folder AGENTS.md that applies to a path, root first.',
+      argsSchema: agentInstructionsSchema,
+    },
+    async ({ path }) => {
+      const files = await agentInstructionsFor(provider, path)
+      const text = files.length
+        ? files.map((file) => `<!-- ${file.path} -->\n${file.text.trim()}`).join('\n\n')
+        : 'This vault has no AGENTS.md files.'
+      return {
+        description: files.length ? `Instructions from ${files.map((file) => file.path).join(', ')}` : undefined,
+        messages: [{ role: 'user', content: { type: 'text', text } }],
+      }
+    }
+  )
+
   if (!readOnly) {
+    server.tool(
+      'upsert_rows',
+      'Add rows to a Dataset, or update the cells given for rows whose key already exists. Values are checked against the schema and only those cells change.',
+      upsertRowsSchema,
+      async (args) => textResult(await upsertRows(provider, args))
+    )
+    server.tool(
+      'update_row',
+      'Set fields of the one Dataset row whose key matches. Only those cells change.',
+      updateRowSchema,
+      async (args) => textResult(await updateRow(provider, args))
+    )
+    server.tool(
+      'log_entry',
+      'Append a one line entry to log.md, under today\'s date, in the format Caedora writes.',
+      logEntrySchema,
+      async (args) => textResult(await logEntry(provider, args))
+    )
     server.tool(
       'create_concept',
       'Create a conformant OKF concept and update bundle indexes and log.',

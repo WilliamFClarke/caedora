@@ -10,7 +10,9 @@ import {
   GitBranch,
   Loader2,
   Network,
+  TriangleAlert,
 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Editor } from './editor'
 import dynamic from 'next/dynamic'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -60,6 +62,10 @@ interface EditorPaneProps {
   lastModified?: number
   /** Bumped by VaultShell when the user clicks Sync; forces a re-read. */
   syncNonce?: number
+  /** The open file's version from the last listing; a change means someone else wrote it. */
+  version?: string
+  /** Every file's version, so a dashboard can re-read the Datasets that changed. */
+  versions?: Record<string, string>
   isPinned: boolean
   onTogglePin: (path: string) => void
   /** Called with a stable saveNow fn so the parent can trigger a flush (e.g. Sync button). */
@@ -98,6 +104,8 @@ export function EditorPane({
   path,
   lastModified,
   syncNonce = 0,
+  version,
+  versions,
   isPinned,
   onTogglePin,
   onSaveNow,
@@ -115,11 +123,14 @@ export function EditorPane({
   const [metadata, setMetadata] = useState<Frontmatter>(emptyFrontmatter())
   const [hasLocalChanges, setHasLocalChanges] = useState(false)
   const [bodyRevision, setBodyRevision] = useState(0)
+  /** Bumped whenever the file is (re)loaded from the provider. */
+  const [loadRevision, setLoadRevision] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [branch, setBranch] = useState<string>('')
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [, forceTick] = useState(0)
   const [showSource, setShowSource] = useState(false)
+  const conflictPendingRef = useRef(false)
 
   useEffect(() => {
     setShowSource(false)
@@ -145,6 +156,9 @@ export function EditorPane({
       setBodyRevision((revision) => revision + 1)
       return
     }
+    // Sync re-reads the open note; while a conflict waits on the person, the
+    // banner decides what happens to their edit instead.
+    if (conflictPendingRef.current) return
     setLoadError(null)
     provider
       .readFile(path)
@@ -158,6 +172,7 @@ export function EditorPane({
         setMetadata(parsed.frontmatter)
         setHasLocalChanges(false)
         setBodyRevision((revision) => revision + 1)
+        setLoadRevision((revision) => revision + 1)
         setSavedAt(lastModified ?? Date.now())
       })
       .catch((e) => {
@@ -167,7 +182,9 @@ export function EditorPane({
     return () => {
       cancelled = true
     }
-  }, [provider, path, lastModified, syncNonce])
+    // lastModified only seeds the "saved" time; changes on disk arrive via `version`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, path, syncNonce])
 
   useEffect(() => {
     const id = setInterval(() => forceTick((t) => t + 1), 30_000)
@@ -200,14 +217,32 @@ export function EditorPane({
   const writeDebounceMs = isGitHub ? settings.syncIntervalMs : 1_000
   const commitDebounceMs = settings.syncIntervalMs
 
-  const { status, saveNow } = useAutosave({
+  const applyRemote = (content: string) => {
+    if (!path) return
+    const parsed = parseFrontmatter(content)
+    const body = isReservedPath(path) && !parsed.hasFrontmatter ? content : parsed.body
+    setLoaded({ path, body, frontmatter: parsed.frontmatter, raw: content })
+    setLiveBody(body)
+    setMetadata(parsed.frontmatter)
+    setHasLocalChanges(false)
+    setBodyRevision((revision) => revision + 1)
+    setLoadRevision((revision) => revision + 1)
+    setSavedAt(Date.now())
+  }
+
+  const { status, saveNow, conflict, reloadRemote, keepMine, checkRemote } = useAutosave({
     provider,
     path,
     content: saveableContent,
+    remoteContent: loaded?.path === path ? loaded.raw : null,
+    revision: loadRevision,
+    onRemoteContent: applyRemote,
     writeDebounceMs,
     commitDebounceMs,
     disabled: autoSaveDisabled,
   })
+
+  conflictPendingRef.current = conflict?.path === path
 
   useEffect(() => {
     onSaveNow?.(saveNow)
@@ -216,6 +251,15 @@ export function EditorPane({
   useEffect(() => {
     if (status === 'saved') setSavedAt(Date.now())
   }, [status])
+
+  // The listing saw a new version of the open file: someone else committed it.
+  const seenVersion = useRef<{ path: string | null; version?: string }>({ path: null })
+  useEffect(() => {
+    const previous = seenVersion.current
+    seenVersion.current = { path, version }
+    if (previous.path !== path || previous.version === undefined) return
+    if (version !== undefined && version !== previous.version) void checkRemote()
+  }, [path, version, checkRemote])
 
   const words = useMemo(() => countWords(liveBody ?? ''), [liveBody])
   const links = useMemo(
@@ -296,6 +340,13 @@ export function EditorPane({
 
   return (
     <div className="flex h-full min-w-0 flex-col">
+      {conflict && (
+        <ConflictBanner
+          source={conflict.source}
+          onReload={reloadRemote}
+          onKeepMine={() => void keepMine()}
+        />
+      )}
       <div className="min-h-0 flex-1 overflow-hidden">
         {showRendered && renderedView === 'Dashboard' ? (
           <DashboardView
@@ -305,6 +356,7 @@ export function EditorPane({
             description={metadata.description}
             body={liveBody ?? loaded.body}
             refreshKey={`${syncNonce}:${catalogStamp(conceptCatalog)}`}
+            versions={versions}
             viewToggle={viewToggle}
             datasets={Object.values(conceptCatalog)
               .filter((concept) => concept.type.toLowerCase() === 'dataset')
@@ -561,6 +613,40 @@ function useCompactStatusBar(ref: React.RefObject<HTMLDivElement | null>) {
   return level
 }
 
+function ConflictBanner({
+  source,
+  onReload,
+  onKeepMine,
+}: {
+  source: string
+  onReload: () => void
+  onKeepMine: () => void
+}) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm"
+    >
+      <TriangleAlert className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+      <div className="min-w-0 flex-1">
+        <p className="font-medium">Changed on {source}</p>
+        <p className="text-muted-foreground text-xs">
+          Someone else changed the same part of this file. Reload to see their version and lose
+          your unsaved edit, or keep yours and replace theirs.
+        </p>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        <Button type="button" size="sm" variant="outline" className="h-7" onClick={onReload}>
+          Reload
+        </Button>
+        <Button type="button" size="sm" className="h-7" onClick={onKeepMine}>
+          Keep mine
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function SavedPill({ status }: { status: SyncStatus }) {
   const base =
     'flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide'
@@ -577,6 +663,14 @@ function SavedPill({ status }: { status: SyncStatus }) {
       <span className={cn(base, 'border-amber-500/40 text-amber-600 dark:text-amber-400')}>
         <CircleDot className="size-2.5" />
         Unsaved
+      </span>
+    )
+  }
+  if (status === 'conflict') {
+    return (
+      <span className={cn(base, 'border-amber-500/40 text-amber-600 dark:text-amber-400')}>
+        <TriangleAlert className="size-2.5" />
+        Not saved
       </span>
     )
   }

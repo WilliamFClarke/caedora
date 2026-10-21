@@ -1,12 +1,13 @@
 'use client'
 
-import { useId, useMemo, useState } from 'react'
+import { useId, useMemo, useState, type ReactNode } from 'react'
 import {
   Area,
   AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Label,
   Line,
   LineChart,
@@ -15,10 +16,20 @@ import {
   PolarAngleAxis,
   RadialBar,
   RadialBarChart,
+  ReferenceArea,
+  ReferenceLine,
+  Treemap,
   XAxis,
   YAxis,
 } from 'recharts'
-import { CircleAlert, TrendingDown, TrendingUp } from 'lucide-react'
+import { Check, ChevronDown, CircleAlert, Loader2, TrendingDown, TrendingUp } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import type { CellEdit } from '@/lib/dataset-edit'
 import { Badge } from '@/components/ui/badge'
 import {
   Card,
@@ -40,13 +51,16 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { filterRange, rangeLabel, type ChartResult, type ItemResult } from '@/lib/dashboard/evaluate'
+import { filterRange, rangeLabel, type BarTone, type ChartResult, type ItemResult } from '@/lib/dashboard/evaluate'
 import { formatDate, formatMonth, formatValue } from '@/lib/dashboard/format'
 import { cn } from '@/lib/utils'
 
 type Result<K extends ItemResult['kind']> = Extract<ItemResult, { kind: K }>
 
-export function DashboardItemView({ result }: { result: ItemResult }) {
+/** Saves one cell of a Dataset; rejects with a message to show when it cannot. */
+export type EditCell = (source: string, edit: CellEdit) => Promise<void>
+
+export function DashboardItemView({ result, onEditCell }: { result: ItemResult; onEditCell?: EditCell }) {
   switch (result.kind) {
     case 'stat':
       return <StatCard result={result} />
@@ -56,8 +70,12 @@ export function DashboardItemView({ result }: { result: ItemResult }) {
       return <ChartCard result={result} />
     case 'pie':
       return <PieCard result={result} />
+    case 'treemap':
+      return <TreemapCard result={result} />
+    case 'waterfall':
+      return <WaterfallCard result={result} />
     case 'table':
-      return <TableCard result={result} />
+      return <TableCard result={result} onEditCell={onEditCell} />
     case 'progress':
       return result.gauge ? <GaugeCard result={result} /> : <ProgressCard result={result} />
     case 'list':
@@ -195,6 +213,7 @@ function ChartCard({ result }: { result: ChartResult }) {
         }
       />
       {result.series.length > 1 && <ChartLegend content={<ChartLegendContent />} />}
+      {chartRules(result, formatX, formatY)}
     </>
   )
 
@@ -229,7 +248,12 @@ function ChartCard({ result }: { result: ChartResult }) {
               <BarChart data={points} layout={sideways ? 'vertical' : 'horizontal'} stackOffset="sign" margin={{ left: 4, right: 12 }}>
                 {shared}
                 {result.series.map((series) => (
-                  <Bar key={series.key} dataKey={series.key} fill={`var(--color-${series.key})`} stackId={stackId} radius={result.stacked ? 0 : 4} />
+                  <Bar key={series.key} dataKey={series.key} fill={`var(--color-${series.key})`} stackId={stackId} radius={result.stacked ? 0 : 4}>
+                    {points.some((point) => point.tone) &&
+                      points.map((point) => (
+                        <Cell key={String(point.x)} fill={toneColour(point.tone as BarTone | undefined, series.key)} data-tone={point.tone} />
+                      ))}
+                  </Bar>
                 ))}
               </BarChart>
             ) : result.kind === 'line' ? (
@@ -262,6 +286,194 @@ function ChartCard({ result }: { result: ChartResult }) {
                 ))}
               </AreaChart>
             )}
+          </ChartContainer>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+const TONES: Record<BarTone, string> = { up: 'var(--gain)', down: 'var(--loss)', highlight: 'var(--highlight)' }
+
+function toneColour(tone: BarTone | undefined, key: string): string {
+  return tone ? TONES[tone] : `var(--color-${key})`
+}
+
+/** Reference lines and bands. Sideways bars swap the axes, so a y rule runs down the chart. */
+function chartRules(
+  result: ChartResult,
+  formatX: (value: unknown) => string,
+  formatY: (value: unknown) => string
+): ReactNode {
+  const sideways = result.kind === 'bar' && result.horizontal
+  return result.rules.map((rule, index) => {
+    const valueAxis = sideways ? 'x' : 'y'
+    const label = (text: string) => (
+      <Label value={text} position={sideways ? 'insideTopRight' : 'insideTopLeft'} className="fill-muted-foreground text-[11px]" />
+    )
+    if (rule.from !== undefined && rule.to !== undefined) {
+      const band = { [`${valueAxis}1`]: rule.from, [`${valueAxis}2`]: rule.to }
+      return (
+        <ReferenceArea key={index} {...band} fill="var(--muted-foreground)" fillOpacity={0.08} stroke="none" ifOverflow="extendDomain">
+          {label(rule.label ?? `${formatY(rule.from)} to ${formatY(rule.to)}`)}
+        </ReferenceArea>
+      )
+    }
+    const along = rule.axis === 'x' ? (sideways ? 'y' : 'x') : valueAxis
+    const position = { [along]: rule.value }
+    return (
+      <ReferenceLine
+        key={index}
+        {...position}
+        stroke="var(--muted-foreground)"
+        strokeDasharray="4 4"
+        ifOverflow="extendDomain"
+        data-slot="dashboard-rule"
+      >
+        {label(rule.label ?? (rule.axis === 'x' ? formatX(rule.value) : formatY(rule.value)))}
+      </ReferenceLine>
+    )
+  })
+}
+
+/** A treemap: tiles sized by value, coloured by group, with the share of the whole on each. */
+function TreemapCard({ result }: { result: Result<'treemap'> }) {
+  const config = useMemo(() => seriesConfig(result.groups), [result.groups])
+  const tiles = result.tiles.map((tile) => ({ ...tile, name: tile.label, fill: `var(--color-${tile.group})` }))
+  return (
+    <Card data-slot="dashboard-treemap" className="@container/card">
+      <CardHeader>
+        {result.title && <CardTitle>{result.title}</CardTitle>}
+        {result.description && <CardDescription>{result.description}</CardDescription>}
+      </CardHeader>
+      <CardContent className="px-2 sm:px-6">
+        {tiles.length === 0 ? (
+          <p className="text-muted-foreground py-12 text-center text-sm">Nothing to show yet.</p>
+        ) : (
+          <ChartContainer config={config} className="aspect-auto h-[280px] w-full">
+            <Treemap
+              data={tiles}
+              dataKey="value"
+              nameKey="name"
+              isAnimationActive={false}
+              content={<TreemapTile total={result.total} spec={result.spec} />}
+            >
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    hideLabel
+                    formatter={(value, _name, item) => (
+                      <div className="flex w-full items-center justify-between gap-3">
+                        <span className="text-muted-foreground">{item.payload?.name}</span>
+                        <span className="text-foreground font-mono font-medium tabular-nums">
+                          {formatValue(Number(value), result.spec)}
+                        </span>
+                      </div>
+                    )}
+                  />
+                }
+              />
+            </Treemap>
+          </ChartContainer>
+        )}
+        {result.groups.length > 1 && (
+          <ul className="text-muted-foreground mt-3 flex flex-wrap justify-center gap-4 text-xs">
+            {result.groups.map((group) => (
+              <li key={group.key} className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-[2px]" style={{ backgroundColor: `var(--color-${group.key})` }} />
+                {group.label}
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function TreemapTile(props: {
+  total: number
+  spec: Result<'treemap'>['spec']
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  name?: string
+  value?: number
+  fill?: string
+  depth?: number
+}) {
+  const { x = 0, y = 0, width = 0, height = 0, name, value = 0, fill, depth, total } = props
+  if (depth === 0) return null
+  const roomy = width > 64 && height > 36
+  return (
+    <g role="img" aria-label={`${name}: ${formatValue(value, props.spec)}`} data-slot="dashboard-treemap-tile">
+      <rect x={x} y={y} width={width} height={height} rx={4} fill={fill} stroke="var(--card)" strokeWidth={2} />
+      {roomy && (
+        <text x={x + 8} y={y + 18} className="fill-white text-xs font-medium" style={{ pointerEvents: 'none' }}>
+          {name}
+          <tspan x={x + 8} dy="1.3em" className="fill-white/80 text-[11px] font-normal">
+            {total > 0 ? `${((value / total) * 100).toFixed(1)}%` : ''}
+          </tspan>
+        </text>
+      )}
+    </g>
+  )
+}
+
+/** A waterfall: each bar rises or falls from the running total, ending with the total. */
+function WaterfallCard({ result }: { result: Result<'waterfall'> }) {
+  const points = result.steps.map((step) => ({
+    x: step.x,
+    range: [Math.min(step.start, step.end), Math.max(step.start, step.end)],
+    change: step.change,
+    tone: step.total ? 'total' : step.change < 0 ? 'down' : 'up',
+  }))
+  const formatY = (value: unknown) => formatValue(Number(value), result.spec, { compact: true })
+  const formatX = (value: unknown) =>
+    /^\d{4}-\d{2}$/.test(String(value)) ? formatMonth(String(value), 'short') : String(value)
+  return (
+    <Card data-slot="dashboard-waterfall" className="@container/card">
+      <CardHeader>
+        {result.title && <CardTitle>{result.title}</CardTitle>}
+        {result.description && <CardDescription>{result.description}</CardDescription>}
+      </CardHeader>
+      <CardContent className="px-2 pt-2 sm:px-6">
+        {points.length === 0 ? (
+          <p className="text-muted-foreground py-12 text-center text-sm">Nothing to show yet.</p>
+        ) : (
+          <ChartContainer config={{ range: { label: 'Change', color: 'var(--chart-1)' } }} className="aspect-auto h-[250px] w-full">
+            <BarChart data={points} margin={{ left: 4, right: 12 }}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="x" tickLine={false} axisLine={false} tickMargin={8} tickFormatter={formatX} />
+              <YAxis tickLine={false} axisLine={false} width={64} tickFormatter={formatY} />
+              <ReferenceLine y={0} stroke="var(--border)" />
+              <ChartTooltip
+                cursor
+                content={
+                  <ChartTooltipContent
+                    hideIndicator
+                    labelFormatter={(_, payload) => formatX(payload?.[0]?.payload?.x)}
+                    formatter={(_value, _name, item) => (
+                      <span className="text-foreground font-mono font-medium tabular-nums">
+                        {item.payload?.tone === 'total'
+                          ? formatValue(Number(item.payload?.change), result.spec)
+                          : `${Number(item.payload?.change) >= 0 ? '+' : ''}${formatValue(Number(item.payload?.change), result.spec)}`}
+                      </span>
+                    )}
+                  />
+                }
+              />
+              <Bar dataKey="range" radius={4} isAnimationActive={false}>
+                {points.map((point) => (
+                  <Cell
+                    key={point.x}
+                    data-tone={point.tone}
+                    fill={point.tone === 'total' ? 'var(--chart-1)' : point.tone === 'down' ? 'var(--loss)' : 'var(--gain)'}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
           </ChartContainer>
         )}
       </CardContent>
@@ -338,7 +550,25 @@ function PieCard({ result }: { result: Result<'pie'> }) {
   )
 }
 
-function TableCard({ result }: { result: Result<'table'> }) {
+function TableCard({ result, onEditCell }: { result: Result<'table'>; onEditCell?: EditCell }) {
+  const [saving, setSaving] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const edit = result.edit && onEditCell ? result.edit : undefined
+
+  const setCell = async (row: number, column: string, value: string) => {
+    const key = edit?.keys[row]
+    if (!edit || !key || !onEditCell) return
+    setSaving(row)
+    setError(null)
+    try {
+      await onEditCell(edit.source, { key, column, value })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That change could not be saved.')
+    } finally {
+      setSaving(null)
+    }
+  }
+
   return (
     <Card data-slot="dashboard-table" className="gap-4">
       {(result.title || result.description) && (
@@ -347,8 +577,63 @@ function TableCard({ result }: { result: Result<'table'> }) {
           {result.description && <CardDescription>{result.description}</CardDescription>}
         </CardHeader>
       )}
-      <CardContent>
-        <DataTable columns={result.columns} rows={result.rows} />
+      <CardContent className="space-y-3">
+        <DataTable
+          columns={result.columns}
+          rows={result.rows}
+          highlighted={result.highlighted}
+          signed={result.signed}
+          renderCell={
+            edit && edit.columns.length > 0
+              ? (rowIndex, columnIndex, content) => {
+                  const editable = edit.columns.find((entry) => entry.index === columnIndex)
+                  if (!editable) return content
+                  const current = result.rows[rowIndex][columnIndex]
+                  const label = edit.labels[rowIndex]
+                  return (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={!edit.keys[rowIndex] || saving !== null}
+                          aria-label={`Set ${editable.column} for ${label}`}
+                          title={edit.keys[rowIndex] ? undefined : 'Another row has the same key, so this one cannot be edited.'}
+                          className="hover:bg-accent -mx-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 disabled:opacity-60"
+                        >
+                          {content}
+                          {saving === rowIndex ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : (
+                            <ChevronDown className="text-muted-foreground size-3" />
+                          )}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        {editable.values.map((value) => (
+                          <DropdownMenuItem
+                            key={value}
+                            disabled={value === current}
+                            onSelect={() => void setCell(rowIndex, editable.column, value)}
+                          >
+                            <Check className={cn('size-3.5', value !== current && 'invisible')} />
+                            {value}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )
+                }
+              : undefined
+          }
+        />
+        {edit?.problem && (
+          <p className="text-muted-foreground text-xs">{edit.problem}</p>
+        )}
+        {error && (
+          <p role="alert" className="text-destructive text-xs">
+            {error}
+          </p>
+        )}
       </CardContent>
     </Card>
   )
@@ -358,22 +643,33 @@ export function DataTable({
   columns,
   rows,
   sortable = false,
+  highlighted,
+  signed = [],
+  renderCell,
 }: {
   columns: Result<'table'>['columns']
   rows: Result<'table'>['rows']
   sortable?: boolean
+  /** Parallel to rows: rows to pick out, such as holdings above a cap. */
+  highlighted?: boolean[]
+  /** Columns shown green when positive and red when negative. */
+  signed?: number[]
+  /** Wraps a cell's formatted content, given the row's index in `rows`. */
+  renderCell?: (row: number, column: number, content: ReactNode) => ReactNode
 }) {
   const [sort, setSort] = useState<{ index: number; descending: boolean } | null>(null)
-  const sorted = useMemo(() => {
-    if (!sort) return rows
-    const copy = [...rows].sort((a, b) => {
-      const x = a[sort.index]
-      const y = b[sort.index]
+  // Sorted positions into `rows`, so a cell can be traced back to its row.
+  const order = useMemo(() => {
+    const indexes = rows.map((_, index) => index)
+    if (!sort) return indexes
+    indexes.sort((a, b) => {
+      const x = rows[a][sort.index]
+      const y = rows[b][sort.index]
       if (x === null) return 1
       if (y === null) return -1
       return typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))
     })
-    return sort.descending ? copy.reverse() : copy
+    return sort.descending ? indexes.reverse() : indexes
   }, [rows, sort])
 
   if (rows.length === 0) {
@@ -412,14 +708,24 @@ export function DataTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sorted.map((row, rowIndex) => (
-            <TableRow key={rowIndex}>
-              {row.map((value, index) => {
+          {order.map((rowIndex) => (
+            <TableRow
+              key={rowIndex}
+              data-highlighted={highlighted?.[rowIndex] || undefined}
+              className={cn(highlighted?.[rowIndex] && 'bg-highlight/15 hover:bg-highlight/25')}
+            >
+              {rows[rowIndex].map((value, index) => {
                 const spec = columns[index].spec
                 const numeric = typeof value === 'number'
+                const content = formatValue(value, spec)
+                const tone = numeric && signed.includes(index) && value !== 0 ? (value > 0 ? 'gain' : 'loss') : undefined
                 return (
-                  <TableCell key={columns[index].key} className={cn(numeric && 'text-right tabular-nums')}>
-                    {formatValue(value, spec)}
+                  <TableCell
+                    key={columns[index].key}
+                    data-tone={tone}
+                    className={cn(numeric && 'text-right tabular-nums', tone === 'gain' && 'text-gain', tone === 'loss' && 'text-loss')}
+                  >
+                    {renderCell ? renderCell(rowIndex, index, content) : content}
                   </TableCell>
                 )
               })}
@@ -433,6 +739,7 @@ export function DataTable({
 
 function ProgressCard({ result }: { result: Result<'progress'> }) {
   const percent = Math.min(100, Math.max(0, (result.value / result.max) * 100))
+  const targetPercent = result.target === null ? null : Math.min(100, Math.max(0, (result.target / result.max) * 100))
   return (
     <Card data-slot="dashboard-progress" className="@container/card shadow-xs">
       <CardHeader>
@@ -443,10 +750,21 @@ function ProgressCard({ result }: { result: Result<'progress'> }) {
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-2">
-        <Progress value={percent} aria-label={`${result.label}: ${percent.toFixed(0)}%`} />
+        <div className="relative">
+          <Progress value={percent} aria-label={`${result.label}: ${percent.toFixed(0)}%`} />
+          {targetPercent !== null && (
+            <span
+              aria-hidden
+              data-slot="dashboard-progress-target"
+              className="bg-foreground absolute -top-1 h-4 w-0.5 rounded-full"
+              style={{ left: `calc(${targetPercent}% - 1px)` }}
+            />
+          )}
+        </div>
         <p className="text-muted-foreground text-sm">
           {formatValue(Math.max(0, result.max - result.value), result.spec)} left of{' '}
           {formatValue(result.max, result.spec)}
+          {result.target !== null ? `. Target ${formatValue(result.target, result.spec)}` : ''}
           {result.description ? `. ${result.description}` : ''}
         </p>
       </CardContent>
@@ -480,6 +798,7 @@ function GaugeCard({ result }: { result: Result<'progress'> }) {
       </CardContent>
       <CardFooter className="text-muted-foreground justify-center text-sm tabular-nums">
         {formatValue(result.value, result.spec)} used, {formatValue(Math.max(0, result.max - result.value), result.spec)} left
+        {result.target !== null && `, target ${formatValue(result.target, result.spec)}`}
       </CardFooter>
     </Card>
   )

@@ -3,6 +3,7 @@ import remarkParse from 'remark-parse'
 import { OKF_VERSION, lastChanged, parseFrontmatter, type Frontmatter } from './frontmatter.js'
 import { titleFromPath } from './conventions.js'
 import { listFilesRecursive, type FileEntry, type VaultProvider } from '../providers/types.js'
+import { describeDatasetIssue, isDatasetFrontmatter, validateDatasetDocument } from './dataset.js'
 
 export { OKF_VERSION }
 export const INDEX_FILENAME = 'index.md'
@@ -39,6 +40,7 @@ export interface OkfIssue {
     | 'invalid-index'
     | 'invalid-log'
     | 'broken-link'
+    | 'invalid-dataset'
   message: string
 }
 
@@ -268,7 +270,32 @@ export function validateDocument(path: string, raw: string): OkfIssue[] {
   const filename = basename(path).toLowerCase()
   if (filename === INDEX_FILENAME) return validateIndex(path, raw)
   if (filename === LOG_FILENAME) return validateLog(path, raw)
-  return validateConcept(path, raw)
+  const issues = validateConcept(path, raw)
+  if (issues.some((issue) => issue.severity === 'error')) return issues
+  if (!isDatasetFrontmatter(parseFrontmatter(raw).frontmatter)) return issues
+  return [...issues, ...datasetIssues(path, raw)]
+}
+
+const MAX_DATASET_ISSUES = 5
+
+/** Schema problems in a Dataset's table. They are warnings, never errors. */
+function datasetIssues(path: string, raw: string): OkfIssue[] {
+  const found = validateDatasetDocument(path, raw)
+  const shown = found.slice(0, MAX_DATASET_ISSUES).map((issue): OkfIssue => ({
+    path,
+    severity: 'warning',
+    code: 'invalid-dataset',
+    message: describeDatasetIssue(issue),
+  }))
+  if (found.length > MAX_DATASET_ISSUES) {
+    shown.push({
+      path,
+      severity: 'warning',
+      code: 'invalid-dataset',
+      message: `${found.length - MAX_DATASET_ISSUES} more dataset warnings.`,
+    })
+  }
+  return shown
 }
 
 export function assertValidOkfDocument(path: string, raw: string): void {
@@ -409,7 +436,9 @@ export function insertNewestEntry(log: string, date: string, entry: string): str
     return `# Vault Update Log\n\n${heading}\n${entry}\n`
   }
   const titleEnd = titleMatch.index + titleMatch[0].length
-  return `${normalized.slice(0, titleEnd)}\n\n${heading}\n${entry}\n${normalized.slice(titleEnd).replace(/^\s*/, '')}\n`
+  const older = normalized.slice(titleEnd).replace(/^\s*/, '')
+  // A blank line keeps the older date's heading apart from today's entries.
+  return `${normalized.slice(0, titleEnd)}\n\n${heading}\n${entry}\n${older ? `\n${older}\n` : ''}`
 }
 
 function renderIndex(

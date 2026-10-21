@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import {
   ArrowDown,
@@ -15,14 +15,19 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
-import { DashboardItemView } from './dashboard-items'
+import { DashboardItemView, type EditCell } from './dashboard-items'
+import { parseDataset } from '@/lib/dataset'
+import { describeCellEdit, setDatasetCell } from '@/lib/dataset-edit'
+import { isWriteConflict } from '@/lib/storage/conflict'
 import { ElementBuilder, type DatasetChoice } from './element-builder'
 import { ViewHeader } from './view-header'
+import { DataFreshness } from './data-freshness'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { evaluateItem, type DashboardData, type ItemResult } from '@/lib/dashboard/evaluate'
 import { applyLayoutEdit, type LayoutEdit } from '@/lib/dashboard/layout'
 import { loadDashboardData } from '@/lib/dashboard/load'
+import { withJoins } from '@/lib/dashboard/join'
 import { findDashboardBlock, parseDashboard, type DashboardRow } from '@/lib/dashboard/spec'
 import type { VaultProvider } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -44,6 +49,7 @@ export function DashboardView({
   description,
   body,
   refreshKey,
+  versions,
   viewToggle,
   datasets = [],
   onBodyChange,
@@ -55,6 +61,8 @@ export function DashboardView({
   body: string
   /** Changes whenever the vault's files change, so Datasets are re-read. */
   refreshKey?: unknown
+  /** Each file's version; when one this dashboard read changes, it is read again. */
+  versions?: Record<string, string>
   viewToggle?: ReactNode
   /** Datasets in the vault, offered by Add element. */
   datasets?: DatasetChoice[]
@@ -62,11 +70,26 @@ export function DashboardView({
   onBodyChange?: (body: string) => void
 }) {
   const spec = useMemo(() => parseDashboard(body), [body])
-  const [data, setData] = useState<DashboardData | null>(null)
+  const [loaded, setData] = useState<DashboardData | null>(null)
+  const joinsKey = JSON.stringify(spec.joins)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const data = useMemo(() => loaded && withJoins(loaded, spec.joins), [loaded, joinsKey])
   const [editing, setEditing] = useState(false)
   const [adding, setAdding] = useState(false)
   const hasBlock = useMemo(() => findDashboardBlock(body) !== null, [body])
   const sourcesKey = JSON.stringify(spec.data)
+  // Versions of the Datasets behind the data on screen, taken when they were read.
+  const [readVersions, setReadVersions] = useState<string | null>(null)
+  const versionsRef = useRef(versions)
+  versionsRef.current = versions
+  const [versionNonce, setVersionNonce] = useState(0)
+  const currentVersions = data ? versionStamp(Object.keys(data.byPath), versions) : null
+
+  useEffect(() => {
+    if (readVersions !== null && currentVersions !== null && currentVersions !== readVersions) {
+      setVersionNonce((n) => n + 1)
+    }
+  }, [currentVersions, readVersions])
 
   useEffect(() => {
     setEditing(false)
@@ -74,9 +97,15 @@ export function DashboardView({
 
   useEffect(() => {
     let cancelled = false
-    loadDashboardData(provider, path, JSON.parse(sourcesKey) as Record<string, string>)
+    // A version change means GitHub may still serve a cached copy, so skip the cache.
+    const reader = versionNonce > 0
+      ? { readFile: (file: string) => provider.readFile(file, { fresh: true }) }
+      : provider
+    loadDashboardData(reader, path, JSON.parse(sourcesKey) as Record<string, string>)
       .then((loaded) => {
-        if (!cancelled) setData(loaded)
+        if (cancelled) return
+        setData(loaded)
+        setReadVersions(versionStamp(Object.keys(loaded.byPath), versionsRef.current))
       })
       .catch(() => {
         if (!cancelled) setData({ sources: {}, byPath: {}, today: new Date() })
@@ -84,7 +113,26 @@ export function DashboardView({
     return () => {
       cancelled = true
     }
-  }, [provider, path, sourcesKey, refreshKey])
+  }, [provider, path, sourcesKey, refreshKey, versionNonce])
+
+  // Sets one cell of a Dataset from a table, as its own commit, then re-reads.
+  const editCell: EditCell = async (source, change) => {
+    let message = ''
+    for (let attempt = 0; ; attempt++) {
+      const raw = await provider.readFile(source, { fresh: true })
+      const next = setDatasetCell(source, raw, change)
+      message = describeCellEdit(parseDataset(source, raw), change)
+      try {
+        await provider.writeFile(source, next, { baseContent: raw, message })
+        break
+      } catch (error) {
+        // Someone else committed in between: apply the same one cell change to theirs.
+        if (!isWriteConflict(error) || attempt > 0) throw error
+      }
+    }
+    if (!provider.writesAreCommits) await provider.commit(message, [source])
+    setVersionNonce((n) => n + 1)
+  }
 
   const edit = (change: LayoutEdit) => {
     const next = applyLayoutEdit(body, change)
@@ -103,6 +151,7 @@ export function DashboardView({
         <ViewHeader
           title={title}
           description={description}
+          meta={data && <DataFreshness data={data} />}
           actions={
             <>
               {onBodyChange && (
@@ -159,7 +208,9 @@ export function DashboardView({
         ) : editing ? (
           <LayoutEditor rows={spec.rows} data={data} onEdit={edit} />
         ) : (
-          spec.rows.map((row) => <DashboardRowView key={row.index} row={row} data={data} />)
+          spec.rows.map((row) => (
+            <DashboardRowView key={row.index} row={row} data={data} onEditCell={editCell} />
+          ))
         )}
       </div>
       {onBodyChange && (
@@ -182,12 +233,20 @@ function useRowResults(row: DashboardRow, data: DashboardData): ItemResult[] {
   return useMemo(() => row.items.map((item) => evaluateItem(item, data)), [row, data])
 }
 
-function DashboardRowView({ row, data }: { row: DashboardRow; data: DashboardData }) {
+function DashboardRowView({
+  row,
+  data,
+  onEditCell,
+}: {
+  row: DashboardRow
+  data: DashboardData
+  onEditCell?: EditCell
+}) {
   const results = useRowResults(row, data)
   return (
     <div className={cn('grid gap-4', GRID[row.columns] ?? GRID[1])}>
       {results.map((result, index) => (
-        <DashboardItemView key={row.itemIndexes[index]} result={result} />
+        <DashboardItemView key={row.itemIndexes[index]} result={result} onEditCell={onEditCell} />
       ))}
     </div>
   )
@@ -505,4 +564,11 @@ function transitionNames(rows: DashboardRow[]): string[][] {
 function itemLabel(result: ItemResult, position: number): string {
   if (result.kind === 'stat' || result.kind === 'progress') return result.label
   return result.title ?? `${result.kind} ${position + 1}`
+}
+
+function versionStamp(paths: string[], versions: Record<string, string> | undefined): string {
+  return [...paths]
+    .sort()
+    .map((file) => `${file}@${versions?.[file] ?? ''}`)
+    .join('|')
 }
