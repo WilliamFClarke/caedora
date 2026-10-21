@@ -20,6 +20,23 @@ type BinaryOp = '+' | '-' | '*' | '/' | '=' | '!=' | '>' | '>=' | '<' | '<=' | '
 
 export const AGGREGATES = new Set(['sum', 'avg', 'min', 'max', 'count', 'first', 'last'])
 
+/** Aggregates that compare the rows with other rows, such as the whole or an earlier date. */
+export const RELATIVE_AGGREGATES = new Set(['share', 'change', 'change_pct', 'drawdown'])
+
+/**
+ * What relative aggregates compare with. A component fills in what it can:
+ * a stat knows its dates, so change() works there, while a chart point only
+ * knows the other points.
+ */
+export interface AggregateContext {
+  /** The rows that make up the whole, which share() divides by. */
+  whole?: ExpressionScope[]
+  /** The rows as they stood `period` (such as 1m or ytd) before the latest date. */
+  before?: (period: string) => ExpressionScope[] | null
+  /** The rows at each date, oldest first, for drawdown(). */
+  history?: () => ExpressionScope[][]
+}
+
 export interface ExpressionScope {
   /** Reads a (possibly dotted) column path from the current row. */
   column(path: string[]): DatasetValue
@@ -194,7 +211,7 @@ export function evaluateRow(expr: Expr, scope: ExpressionScope): DatasetValue | 
     case 'binary':
       return evaluateBinary(expr.op, () => evaluateRow(expr.left, scope), () => evaluateRow(expr.right, scope))
     case 'call':
-      if (AGGREGATES.has(expr.name)) {
+      if (AGGREGATES.has(expr.name) || RELATIVE_AGGREGATES.has(expr.name)) {
         throw new ExpressionError(`${expr.name}() can only be used in a value, not per row.`)
       }
       return callScalar(expr.name, expr.args.map((arg) => scalar(evaluateRow(arg, scope))), scope.today)
@@ -205,8 +222,10 @@ export function evaluateRow(expr: Expr, scope: ExpressionScope): DatasetValue | 
 export function evaluateAggregate(
   expr: Expr,
   rows: ExpressionScope[],
-  today: Date
+  today: Date,
+  context: AggregateContext = {}
 ): DatasetValue {
+  const recurse = (inner: Expr, scopes = rows) => evaluateAggregate(inner, scopes, today, context)
   switch (expr.kind) {
     case 'number':
     case 'string':
@@ -218,20 +237,21 @@ export function evaluateAggregate(
     case 'list':
       throw new ExpressionError('Lists can only be used with "in".')
     case 'unary': {
-      const value = evaluateAggregate(expr.arg, rows, today)
+      const value = recurse(expr.arg)
       return expr.op === 'not' ? !truthy(value) : negate(value)
     }
     case 'binary':
       return scalar(
         evaluateBinary(
           expr.op,
-          () => evaluateAggregate(expr.left, rows, today),
-          () => evaluateAggregate(expr.right, rows, today)
+          () => recurse(expr.left),
+          () => recurse(expr.right)
         )
       )
     case 'call': {
+      if (RELATIVE_AGGREGATES.has(expr.name)) return evaluateRelative(expr, rows, today, context)
       if (!AGGREGATES.has(expr.name)) {
-        return callScalar(expr.name, expr.args.map((arg) => evaluateAggregate(arg, rows, today)), today)
+        return callScalar(expr.name, expr.args.map((arg) => recurse(arg)), today)
       }
       if (expr.name === 'count' && expr.args.length === 0) return rows.length
       if (expr.args.length !== 1) throw new ExpressionError(`${expr.name}() takes one argument.`)
@@ -239,6 +259,83 @@ export function evaluateAggregate(
       return aggregate(expr.name, values)
     }
   }
+}
+
+/**
+ * share(x) is this part's fraction of the whole. change(x, 1m) and
+ * change_pct(x, 1m) compare with an earlier date. drawdown(x) is how far x
+ * is below its highest point, as a fraction. A plain column is summed, so
+ * share(value) means share(sum(value)).
+ */
+function evaluateRelative(
+  expr: Extract<Expr, { kind: 'call' }>,
+  rows: ExpressionScope[],
+  today: Date,
+  context: AggregateContext
+): DatasetValue {
+  const [arg, period] = expr.args
+  if (!arg) throw new ExpressionError(`${expr.name}() needs a value, such as ${expr.name}(value).`)
+  const measured: Expr = arg.kind === 'column' ? { kind: 'call', name: 'sum', args: [arg] } : arg
+  const measure = (scopes: ExpressionScope[]) => toNumber(evaluateAggregate(measured, scopes, today, context))
+
+  switch (expr.name) {
+    case 'share': {
+      const part = measure(rows)
+      const whole = measure(context.whole ?? rows)
+      return part === null || whole === null || whole === 0 ? null : part / whole
+    }
+    case 'change':
+    case 'change_pct': {
+      const span = period?.kind === 'string' ? period.value : period?.kind === 'column' ? period.path.join('.') : null
+      if (!span || !isPeriod(span)) {
+        throw new ExpressionError(`${expr.name}() needs a period such as 1m, 3m, 1y or ytd.`)
+      }
+      if (!context.before) {
+        throw new ExpressionError(`${expr.name}() needs dates to compare, so use it in a stat or progress bar.`)
+      }
+      const now = measure(rows)
+      const earlier = context.before(span.toLowerCase())
+      const then = earlier ? measure(earlier) : null
+      if (now === null || then === null) return null
+      if (expr.name === 'change') return roundMoney(now - then)
+      return then === 0 ? null : (now - then) / Math.abs(then)
+    }
+    case 'drawdown': {
+      const history = context.history?.() ?? [rows]
+      const values = history.map(measure).filter((value): value is number => value !== null)
+      if (values.length === 0) return null
+      const peak = Math.max(...values)
+      return peak <= 0 ? null : values[values.length - 1] / peak - 1
+    }
+  }
+  throw new ExpressionError(`Unknown aggregate ${expr.name}().`)
+}
+
+/** 1d, 2w, 3m, 1y, ytd or mtd. */
+export function isPeriod(value: string): boolean {
+  return /^(\d+\s*[dwmy]|ytd|mtd)$/i.test(value.trim())
+}
+
+/** The date `period` before `end` (YYYY-MM-DD): the last day before the year or month for ytd and mtd. */
+export function periodStart(end: string, period: string): string {
+  const date = new Date(`${end}T00:00:00Z`)
+  const lowered = period.trim().toLowerCase()
+  if (lowered === 'ytd') return `${date.getUTCFullYear() - 1}-12-31`
+  if (lowered === 'mtd') return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 0)).toISOString().slice(0, 10)
+  const match = lowered.match(/^(\d+)\s*([dwmy])$/)
+  if (!match) throw new ExpressionError(`${period} is not a period such as 1m or ytd.`)
+  const amount = Number(match[1])
+  if (match[2] === 'd') date.setUTCDate(date.getUTCDate() - amount)
+  if (match[2] === 'w') date.setUTCDate(date.getUTCDate() - amount * 7)
+  if (match[2] === 'm' || match[2] === 'y') {
+    // 31 March less a month is 28 or 29 February, not 3 March.
+    const months = date.getUTCFullYear() * 12 + date.getUTCMonth() - (match[2] === 'm' ? amount : amount * 12)
+    const year = Math.floor(months / 12)
+    const month = months % 12
+    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+    return new Date(Date.UTC(year, month, Math.min(date.getUTCDate(), lastDay))).toISOString().slice(0, 10)
+  }
+  return date.toISOString().slice(0, 10)
 }
 
 export function aggregate(name: string, values: DatasetValue[]): DatasetValue {
@@ -414,6 +511,13 @@ function tokenize(source: string): Token[] {
     }
     if (/\d/.test(char) || (char === '.' && /\d/.test(source[index + 1] ?? ''))) {
       const match = source.slice(index).match(/^\d*\.?\d+(?:_\d+)*/)!
+      // 3m or 1y right after a number is a period, as in change(value, 3m).
+      const period = source.slice(index).match(/^\d+[dwmy](?![\w.])/i)
+      if (period) {
+        tokens.push({ type: 'string', value: period[0].toLowerCase() })
+        index += period[0].length
+        continue
+      }
       tokens.push({ type: 'number', value: Number(match[0].replace(/_/g, '')) })
       index += match[0].length
       continue

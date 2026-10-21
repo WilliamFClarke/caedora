@@ -26,11 +26,12 @@ import {
   sourceFor,
   type Aggregate,
   type BuilderForm,
+  type ItemKind,
 } from '@/lib/dashboard/builder'
 import { evaluateItem, type DashboardData } from '@/lib/dashboard/evaluate'
 import type { LayoutEdit } from '@/lib/dashboard/layout'
 import { loadDashboardData } from '@/lib/dashboard/load'
-import { parseItem, type DashboardRow, type ItemKind } from '@/lib/dashboard/spec'
+import { parseItem, type DashboardRow } from '@/lib/dashboard/spec'
 import type { VaultProvider } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
