@@ -1,6 +1,9 @@
 import type { Dataset, DatasetColumnType } from '../dataset'
 import { prettyLabel } from './evaluate'
-import type { ItemKind } from './spec'
+import type { ItemKind as SpecItemKind } from './spec'
+
+/** Elements the builder can make. Treemaps and waterfalls are written in YAML. */
+export type ItemKind = Exclude<SpecItemKind, 'treemap' | 'waterfall'>
 
 /**
  * The "Add element" panel works on a flat form, then turns it into the same
