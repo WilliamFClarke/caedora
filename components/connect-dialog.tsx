@@ -25,6 +25,7 @@ import {
   listVaults,
   removeVault,
   saveGitHubAppSession,
+  refreshGitHubAppSession,
 } from '@/lib/storage'
 import { getDesktopApi } from '@/lib/desktop'
 import {
@@ -867,20 +868,7 @@ async function refreshGitHubSessionIfNeeded(
     return session
   }
 
-  const response = await fetch('/api/github/refresh', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken: session.refreshToken }),
-  })
-
-  if (!response.ok) return null
-  const data = await response.json() as GitHubAppSession
-  const refreshed = {
-    accessToken: data.accessToken,
-    refreshToken: data.refreshToken ?? session.refreshToken,
-    expiresAt: data.expiresAt ?? session.expiresAt,
-  }
-  await saveGitHubAppSession(refreshed)
+  const refreshed = await refreshGitHubAppSession(session)
   return refreshed
 }
 

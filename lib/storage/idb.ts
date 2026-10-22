@@ -202,6 +202,40 @@ export async function loadGitHubAppSession(): Promise<StoredGitHubAppSession | n
   }
 }
 
+/**
+ * Replace a consumed refresh token with its successor on every record that
+ * holds it. Vaults connected in one GitHub sign in share a token chain, and
+ * GitHub refresh tokens work once, so a record left behind would be dead.
+ */
+export async function rotateGitHubAppCredentials(
+  consumedRefreshToken: string,
+  next: Omit<StoredGitHubAppSession, 'updatedAt'>
+): Promise<void> {
+  const db = await getDB()
+  const tx = db.transaction([VAULTS_STORE, META_STORE], 'readwrite')
+  const vaults = tx.objectStore(VAULTS_STORE)
+  for (const key of await vaults.getAllKeys()) {
+    const state = (await vaults.get(key)) as PersistedVaultState | undefined
+    if (state?.githubAuth === 'app' && state.githubRefreshToken === consumedRefreshToken) {
+      await vaults.put(
+        {
+          ...state,
+          githubPat: next.accessToken,
+          githubRefreshToken: next.refreshToken,
+          githubTokenExpiresAt: next.expiresAt,
+        },
+        key
+      )
+    }
+  }
+  const meta = tx.objectStore(META_STORE)
+  const session = (await meta.get(GITHUB_APP_SESSION_KEY)) as StoredGitHubAppSession | undefined
+  if (session?.refreshToken === consumedRefreshToken) {
+    await meta.put({ ...next, updatedAt: Date.now() }, GITHUB_APP_SESSION_KEY)
+  }
+  await tx.done
+}
+
 /** Load the active vault (or the most recent if none flagged). */
 export async function loadActiveVault(): Promise<PersistedVaultState | null> {
   const activeId = await getActiveVaultId()

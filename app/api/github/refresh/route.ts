@@ -39,9 +39,15 @@ export async function POST(request: NextRequest) {
 
   const data = await response.json().catch(() => ({})) as GithubRefreshResponse
   if (!response.ok || !data.access_token) {
+    // GitHub answers a spent or revoked refresh token with 200 and an error
+    // code, so retrying cannot help and the person has to connect again.
+    const permanent = data.error === 'bad_refresh_token' || data.error === 'invalid_grant'
     return noStoreJson(
-      { error: data.error_description || data.error || 'Could not refresh GitHub token.' },
-      { status: response.ok ? 400 : response.status }
+      {
+        error: data.error_description || data.error || 'Could not refresh GitHub token.',
+        permanent,
+      },
+      { status: permanent ? 401 : response.ok ? 400 : response.status }
     )
   }
 

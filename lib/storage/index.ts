@@ -2,10 +2,14 @@ import {
   loadActiveVault,
   upsertVault,
   getVault,
+  vaultId,
+  loadGitHubAppSession,
+  rotateGitHubAppCredentials,
 } from './idb'
 import { LocalGitProvider } from './local-provider'
 import { ElectronLocalProvider } from './electron-provider'
 import { GitHubProvider } from './github-provider'
+import { GitHubAuth, GitHubAuthExpiredError, type GitHubCredentials } from './github-auth'
 import { BrowserBundleProvider } from './browser-provider'
 import { getDesktopApi } from '../desktop'
 import type { VaultProvider, FileEntry, PersistedVaultState } from '../types'
@@ -29,6 +33,7 @@ export {
 export { LocalGitProvider } from './local-provider'
 export { ElectronLocalProvider } from './electron-provider'
 export { GitHubProvider } from './github-provider'
+export { GitHubAuthExpiredError } from './github-auth'
 export {
   BrowserBundleProvider,
   browserStoragePersistence,
@@ -87,13 +92,7 @@ export async function createProviderFromPersistedState(): Promise<{
     state.githubOwner &&
     state.githubRepo
   ) {
-    const githubState = await refreshGitHubAppStateIfNeeded(state)
-    const provider = new GitHubProvider(
-      githubState.githubPat!,
-      githubState.githubOwner!,
-      githubState.githubRepo!
-    )
-    return { provider, needsPermission: false }
+    return { provider: createGitHubProvider(state), needsPermission: false }
   }
 
   if (state.type === 'browser' && state.browserBundleId && state.browserBundleName) {
@@ -180,14 +179,9 @@ export async function createProviderFromStoredVault(id: string): Promise<{
   }
 
   if (state.type === 'github' && state.githubPat && state.githubOwner && state.githubRepo) {
-    const githubState = await refreshGitHubAppStateIfNeeded(state)
-    const provider = new GitHubProvider(
-      githubState.githubPat!,
-      githubState.githubOwner!,
-      githubState.githubRepo!
-    )
-    await upsertVault(githubState)
-    return { provider, needsPermission: false, state: githubState }
+    const provider = createGitHubProvider(state)
+    await upsertVault(state)
+    return { provider, needsPermission: false, state }
   }
 
   if (state.type === 'browser' && state.browserBundleId && state.browserBundleName) {
@@ -232,35 +226,89 @@ export async function listFilesRecursive(
   return out
 }
 
-async function refreshGitHubAppStateIfNeeded(
-  state: PersistedVaultState
-): Promise<PersistedVaultState> {
-  if (
-    state.githubAuth !== 'app' ||
-    !state.githubRefreshToken ||
-    !state.githubTokenExpiresAt ||
-    state.githubTokenExpiresAt - Date.now() > 60_000
-  ) {
-    return state
+/**
+ * A provider for a stored GitHub vault. App connections get a token source
+ * that renews expiring tokens, on use and after a 401, and saves each new pair.
+ */
+export function createGitHubProvider(state: PersistedVaultState): GitHubProvider {
+  const owner = state.githubOwner!
+  const repo = state.githubRepo!
+  if (state.githubAuth !== 'app' || !state.githubRefreshToken) {
+    return new GitHubProvider(state.githubPat!, owner, repo)
   }
+  const id = vaultId(state)
+  const auth = new GitHubAuth(
+    {
+      accessToken: state.githubPat!,
+      refreshToken: state.githubRefreshToken,
+      expiresAt: state.githubTokenExpiresAt,
+    },
+    {
+      load: async () => {
+        const saved = await getVault(id)
+        return saved?.githubPat
+          ? {
+              accessToken: saved.githubPat,
+              refreshToken: saved.githubRefreshToken,
+              expiresAt: saved.githubTokenExpiresAt,
+            }
+          : null
+      },
+      save: (next, consumed) => rotateGitHubAppCredentials(consumed, next),
+      exchange: exchangeGitHubRefreshToken,
+      withLock: withRefreshLock,
+    }
+  )
+  return new GitHubProvider(auth, owner, repo)
+}
 
+
+/**
+ * Renew the saved GitHub sign in used to browse repositories. Goes through the
+ * same lock and rotation as vault providers so the two never spend one token.
+ */
+export async function refreshGitHubAppSession(
+  session: GitHubCredentials
+): Promise<GitHubCredentials | null> {
+  if (!session.refreshToken) return null
+  const consumed = session.refreshToken
+  const auth = new GitHubAuth(session, {
+    load: async () => (await loadGitHubAppSession()) ?? session,
+    save: (next, old) => rotateGitHubAppCredentials(old, next),
+    exchange: exchangeGitHubRefreshToken,
+    withLock: withRefreshLock,
+  })
+  try {
+    const token = await auth.refresh(session.accessToken)
+    if (!token) return null
+  } catch {
+    return null
+  }
+  return (await loadGitHubAppSession()) ?? null
+}
+
+/** Web Locks keep two tabs from spending the same single use refresh token. */
+async function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  if (typeof navigator === 'undefined' || !navigator.locks) return fn()
+  return await navigator.locks.request('caedora-github-refresh', fn)
+}
+
+async function exchangeGitHubRefreshToken(refreshToken: string): Promise<GitHubCredentials> {
   const response = await fetch('/api/github/refresh', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken: state.githubRefreshToken }),
+    body: JSON.stringify({ refreshToken }),
   })
-  if (!response.ok) return state
-
-  const data = await response.json() as {
-    accessToken: string
-    refreshToken?: string
-    expiresAt?: number
+  const data = (await response.json().catch(() => ({}))) as GitHubCredentials & {
+    permanent?: boolean
   }
-
+  if (!response.ok || !data.accessToken) {
+    if (data.permanent) throw new GitHubAuthExpiredError()
+    throw new Error(`Could not refresh GitHub token (${response.status})`)
+  }
   return {
-    ...state,
-    githubPat: data.accessToken,
-    githubRefreshToken: data.refreshToken ?? state.githubRefreshToken,
-    githubTokenExpiresAt: data.expiresAt ?? state.githubTokenExpiresAt,
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+    expiresAt: data.expiresAt,
   }
 }

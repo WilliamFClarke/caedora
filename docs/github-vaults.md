@@ -36,3 +36,21 @@ a minute, so a new commit can take a little longer to appear.
   edit, in which case the next save merges the two as described above.
 - An open dashboard reads its Datasets again when any of them changes, so its
   numbers update after a sync workflow runs without clicking Sync.
+
+## Staying connected
+
+A GitHub App connection uses an access token that lasts eight hours and a
+refresh token that works once. Each refresh returns a new pair, and the old
+refresh token stops working straight away.
+
+- Caedora renews the token shortly before it expires, and once more if GitHub
+  answers a request with 401, then repeats the request.
+- The new pair is saved to every stored vault that shared the old one, because
+  vaults connected in the same GitHub sign in share a token chain.
+- Refreshing runs under a Web Lock, so two tabs never spend the same refresh
+  token. A tab that waited for the lock uses the pair the other tab saved.
+- If GitHub refuses the refresh token, the vault shows "GitHub connection
+  expired" with a Reconnect GitHub button instead of a bare 401.
+
+Tokens stay in this browser's IndexedDB. The refresh route only forwards the
+refresh token to GitHub along with the app secret and stores nothing.
