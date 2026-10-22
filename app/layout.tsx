@@ -38,8 +38,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
+  modal,
 }: Readonly<{
   children: React.ReactNode
+  modal: React.ReactNode
 }>) {
   const app = (
     <ThemeProvider
@@ -48,7 +50,10 @@ export default function RootLayout({
       enableSystem
       disableTransitionOnChange
     >
-      <VaultProviderWrapper>{children}</VaultProviderWrapper>
+      <VaultProviderWrapper>
+        {children}
+        {modal}
+      </VaultProviderWrapper>
     </ThemeProvider>
   )
 

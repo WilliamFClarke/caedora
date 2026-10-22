@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/item'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { ConnectDialog } from '@/components/connect-dialog'
 import { caedoraClerkAppearance } from '@/components/account/clerk-appearance'
 import { ACCOUNT_URL } from '@/lib/accounts'
@@ -57,7 +58,7 @@ const accountSections: Array<{
   { id: 'billing', label: 'Billing', Icon: CreditCard },
 ]
 
-export function AccountPageClient() {
+export function AccountPageClient({ variant = 'page' }: { variant?: 'page' | 'modal' }) {
   const router = useRouter()
   const [section, setSection] = useState<AccountSection>('profile')
   const [connectGitHubOpen, setConnectGitHubOpen] = useState(false)
@@ -71,6 +72,82 @@ export function AccountPageClient() {
   useEffect(() => {
     setIsDesktop(Boolean(getDesktopApi()))
   }, [])
+
+  const content = (
+    <div className="mx-auto max-w-4xl">
+      <div className="mb-5">
+        <h2 className="text-xl font-semibold">{title}</h2>
+        <p className="text-muted-foreground mt-1 text-sm">{sectionDescription(section)}</p>
+      </div>
+
+      {section === 'profile' &&
+        (clerkConfigured ? <ProfileSettings isDesktop={isDesktop} /> : <UnconfiguredAccountSettings />)}
+      {section === 'security' &&
+        (clerkConfigured ? <SecuritySettings /> : <UnconfiguredAccountSettings />)}
+      {section === 'github' && (
+        <GitHubAccountSettings onOpenGitHub={() => setConnectGitHubOpen(true)} />
+      )}
+      {section === 'data' && <DataAndPrivacySettings clerkConfigured={clerkConfigured} />}
+      {section === 'billing' && <BillingSettings />}
+    </div>
+  )
+
+  const nav = (
+    <aside className="border-border bg-muted/20 min-w-0 overflow-hidden border-b px-3 py-3 md:border-r md:border-b-0 md:p-4">
+      <div className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1 md:flex-col md:items-stretch md:overflow-visible md:pb-0">
+        {accountSections.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setSection(id)}
+            className={cn(
+              'flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-sm transition-colors md:w-full',
+              section === id
+                ? 'bg-accent text-foreground'
+                : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+            )}
+          >
+            <Icon className="size-3.5" />
+            {label}
+          </button>
+        ))}
+      </div>
+    </aside>
+  )
+
+  const connectDialog = (
+    <ConnectDialog
+      open={connectGitHubOpen}
+      onOpenChange={setConnectGitHubOpen}
+      mode="open"
+      showSavedVaults={false}
+      initialSource="github"
+    />
+  )
+
+  if (variant === 'modal') {
+    return (
+      <>
+        <Dialog open onOpenChange={(open) => !open && router.back()}>
+          <DialogContent className="flex h-[100dvh] max-h-none w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none p-0 sm:h-[calc(100dvh-1rem)] sm:w-[calc(100vw-1rem)] sm:rounded-lg md:h-[88vh] md:w-[96vw] md:max-w-[1100px] [&>button]:top-3 [&>button]:right-3 sm:[&>button]:top-4 sm:[&>button]:right-4">
+            <div className="border-border border-b px-4 py-3 pr-12 sm:px-6">
+              <DialogTitle className="text-lg font-semibold">Account settings</DialogTitle>
+              <DialogDescription className="text-muted-foreground hidden text-sm sm:block">
+                Manage identity, GitHub access, billing, and privacy controls.
+              </DialogDescription>
+            </div>
+            <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] md:grid-cols-[240px_1fr] md:grid-rows-none">
+              {nav}
+              <section className="min-h-0 min-w-0 overflow-y-auto px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-8">
+                {content}
+              </section>
+            </div>
+          </DialogContent>
+        </Dialog>
+        {connectDialog}
+      </>
+    )
+  }
 
   return (
     <>
@@ -97,63 +174,14 @@ export function AccountPageClient() {
         </div>
 
         <div className="mx-auto grid min-h-[calc(100dvh-3.75rem)] max-w-7xl grid-rows-[auto_1fr] md:grid-cols-[280px_1fr] md:grid-rows-none">
-          <aside className="border-border bg-muted/20 min-w-0 overflow-hidden border-b px-3 py-3 md:border-r md:border-b-0 md:p-4">
-            <div className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1 md:flex-col md:items-stretch md:overflow-visible md:pb-0">
-              {accountSections.map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setSection(id)}
-                  className={cn(
-                    'flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-sm transition-colors md:w-full',
-                    section === id
-                      ? 'bg-accent text-foreground'
-                      : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
-                  )}
-                >
-                  <Icon className="size-3.5" />
-                  {label}
-                </button>
-              ))}
-            </div>
-          </aside>
-
+          {nav}
           <section className="min-w-0 px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-8">
-            <div className="mx-auto max-w-4xl">
-              <div className="mb-5">
-                <h2 className="text-xl font-semibold">{title}</h2>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  {sectionDescription(section)}
-                </p>
-              </div>
-
-              {section === 'profile' &&
-                (clerkConfigured ? (
-                  <ProfileSettings isDesktop={isDesktop} />
-                ) : (
-                  <UnconfiguredAccountSettings />
-                ))}
-              {section === 'security' &&
-                (clerkConfigured ? <SecuritySettings /> : <UnconfiguredAccountSettings />)}
-              {section === 'github' && (
-                <GitHubAccountSettings onOpenGitHub={() => setConnectGitHubOpen(true)} />
-              )}
-              {section === 'data' && (
-                <DataAndPrivacySettings clerkConfigured={clerkConfigured} />
-              )}
-              {section === 'billing' && <BillingSettings />}
-            </div>
+            {content}
           </section>
         </div>
       </main>
 
-      <ConnectDialog
-        open={connectGitHubOpen}
-        onOpenChange={setConnectGitHubOpen}
-        mode="open"
-        showSavedVaults={false}
-        initialSource="github"
-      />
+      {connectDialog}
     </>
   )
 }
