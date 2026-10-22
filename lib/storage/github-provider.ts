@@ -5,6 +5,20 @@ import { WriteConflictError } from './conflict'
 
 const API = 'https://api.github.com'
 
+/**
+ * Where the provider gets its token. A plain token string never changes; a
+ * GitHub App connection hands out tokens that expire and renews them on demand.
+ */
+export interface GitHubTokenSource {
+  getToken(): Promise<string>
+  /** Called after a 401. Returns a new token, or null when none can be had. */
+  refresh(rejectedToken: string): Promise<string | null>
+}
+
+function staticTokenSource(token: string): GitHubTokenSource {
+  return { getToken: async () => token, refresh: async () => null }
+}
+
 function apiHeaders(token: string): HeadersInit {
   return {
     Authorization: `Bearer ${token}`,
@@ -30,11 +44,29 @@ export class GitHubProvider implements VaultProvider {
   /** SHA cache so writes don't need an extra GET. path → blob SHA */
   private shaCache = new Map<string, string>()
 
+  private tokens: GitHubTokenSource
+
   constructor(
-    private token: string,
+    token: string | GitHubTokenSource,
     public readonly owner: string,
     public readonly repo: string
-  ) {}
+  ) {
+    this.tokens = typeof token === 'string' ? staticTokenSource(token) : token
+  }
+
+  /**
+   * fetch with the current token. A 401 means the token expired or was
+   * rotated, so renew it once and retry before giving up.
+   */
+  private async gh(url: string, init: RequestInit = {}): Promise<Response> {
+    const send = (token: string) =>
+      fetch(url, { ...init, headers: { ...apiHeaders(token), ...init.headers } })
+    const token = await this.tokens.getToken()
+    const res = await send(token)
+    if (res.status !== 401) return res
+    const renewed = await this.tokens.refresh(token)
+    return renewed ? send(renewed) : res
+  }
 
   isReady(): boolean {
     return true
@@ -45,8 +77,7 @@ export class GitHubProvider implements VaultProvider {
   }
 
   async readFile(path: string, options?: ReadFileOptions): Promise<string> {
-    const res = await fetch(`${this.base}/contents/${path}`, {
-      headers: apiHeaders(this.token),
+    const res = await this.gh(`${this.base}/contents/${path}`, {
       // GitHub lets browsers cache contents for a minute, which would hide a
       // commit the file listing has already shown us.
       ...(options?.fresh ? { cache: 'no-store' as const } : {}),
@@ -98,9 +129,8 @@ export class GitHubProvider implements VaultProvider {
       content: btoa(unescape(encodeURIComponent(content))),
     }
     if (sha) body.sha = sha
-    return fetch(`${this.base}/contents/${path}`, {
+    return this.gh(`${this.base}/contents/${path}`, {
       method: 'PUT',
-      headers: apiHeaders(this.token),
       body: JSON.stringify(body),
     })
   }
@@ -127,9 +157,8 @@ export class GitHubProvider implements VaultProvider {
         }
         throw err
       }
-      const res = await fetch(`${this.base}/contents/${path}`, {
+      const res = await this.gh(`${this.base}/contents/${path}`, {
         method: 'DELETE',
-        headers: apiHeaders(this.token),
         body: JSON.stringify({ message: `Delete ${path}`, sha }),
       })
       if (res.ok) {
@@ -196,9 +225,7 @@ export class GitHubProvider implements VaultProvider {
   }
 
   private async _fetchSha(path: string): Promise<string> {
-    const res = await fetch(`${this.base}/contents/${path}`, {
-      headers: apiHeaders(this.token),
-    })
+    const res = await this.gh(`${this.base}/contents/${path}`)
     if (!res.ok) throw new Error(`GitHub: failed to get SHA for ${path} (${res.status})`)
     const data = (await res.json()) as GHContent
     this.shaCache.set(path, data.sha)
@@ -209,7 +236,7 @@ export class GitHubProvider implements VaultProvider {
     const url = dir
       ? `${this.base}/contents/${dir}`
       : `${this.base}/contents`
-    const res = await fetch(url, { headers: apiHeaders(this.token) })
+    const res = await this.gh(url)
     if (res.status === 404) {
       // Two benign causes both yield 404:
       //  - the folder genuinely doesn't exist yet (user hasn't created it)
@@ -238,7 +265,7 @@ export class GitHubProvider implements VaultProvider {
     const url = new URL(`${this.base}/commits`)
     if (path) url.searchParams.set('path', path)
     url.searchParams.set('per_page', String(Math.min(limit, 100)))
-    const res = await fetch(url.toString(), { headers: apiHeaders(this.token) })
+    const res = await this.gh(url.toString())
     if (!res.ok) throw new Error(`GitHub: failed to fetch log (${res.status})`)
     const commits = await res.json() as Array<{
       sha: string
@@ -258,9 +285,7 @@ export class GitHubProvider implements VaultProvider {
   }
 
   async diff(oid: string, path: string): Promise<DiffResult> {
-    const res = await fetch(`${this.base}/commits/${oid}`, {
-      headers: apiHeaders(this.token),
-    })
+    const res = await this.gh(`${this.base}/commits/${oid}`)
     if (!res.ok) return buildDiffResult('', '', path)
     const commit = await res.json() as { files?: Array<{ filename: string; patch?: string }> }
     const file = commit.files?.find((f) => f.filename === path)
@@ -286,7 +311,7 @@ export class GitHubProvider implements VaultProvider {
   }
 
   async currentBranch(): Promise<string> {
-    const res = await fetch(this.base, { headers: apiHeaders(this.token) })
+    const res = await this.gh(this.base)
     if (!res.ok) return 'main'
     const data = await res.json() as { default_branch?: string }
     return data.default_branch ?? 'main'

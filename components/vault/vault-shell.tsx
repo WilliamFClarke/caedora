@@ -9,7 +9,9 @@ import { LinkGraphPanel } from './link-graph-panel'
 import { AssistantSidebarLoader } from '@/components/assistant/assistant-sidebar-loader'
 import { SettingsDialog, type SettingsSection } from '@/components/settings-dialog'
 import { useVault } from '@/lib/vault-context'
-import { listFilesRecursive } from '@/lib/storage'
+import { Button } from '@/components/ui/button'
+import { ConnectDialog } from '@/components/connect-dialog'
+import { GitHubAuthExpiredError, listFilesRecursive } from '@/lib/storage'
 import { getActiveVaultId } from '@/lib/storage/idb'
 import { seedEmptyBundle, WELCOME_PATH } from '@/lib/vault-create'
 import { rebuildBundleIndexes, isLockedPath } from '@/lib/vault-index'
@@ -49,6 +51,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [pendingEntries, setPendingEntries] = useState<Record<string, FileEntry>>({})
   const [selected, setSelected] = useState<string | null>(initialPath)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [authExpired, setAuthExpired] = useState(false)
+  const [reconnectOpen, setReconnectOpen] = useState(false)
   const [virtualFolders, setVirtualFolders] = useState<Set<string>>(new Set())
   const [seeding, setSeeding] = useState(false)
   const [syncNonce, setSyncNonce] = useState(0)
@@ -162,6 +166,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       setEntries((prev) => (sameEntries(prev, mdEntries) ? prev : mdEntries))
       setPendingEntries((prev) => pruneVisiblePending(prev, mdEntries))
       setLoadError(null)
+      setAuthExpired(false)
 
       // Prune virtual folders that now exist as real paths
       setVirtualFolders((prev) => {
@@ -189,6 +194,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load concepts')
+      setAuthExpired(e instanceof GitHubAuthExpiredError)
     }
   }, [provider, syncUrl])
 
@@ -518,8 +524,13 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         <div className="caedora-vault-workspace relative flex h-full min-w-0 flex-1 overflow-hidden bg-card">
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             {loadError ? (
-              <div className="flex h-full items-center justify-center">
+              <div className="flex h-full flex-col items-center justify-center gap-3">
                 <p className="text-destructive text-sm">{loadError}</p>
+                {authExpired ? (
+                  <Button size="sm" onClick={() => setReconnectOpen(true)}>
+                    Reconnect GitHub
+                  </Button>
+                ) : null}
               </div>
             ) : (
               <EditorPane
@@ -559,6 +570,12 @@ export function VaultShell({ initialPath }: VaultShellProps) {
           />
         </div>
       </SidebarInset>
+      <ConnectDialog
+        open={reconnectOpen}
+        onOpenChange={setReconnectOpen}
+        mode="open"
+        initialSource="github"
+      />
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}

@@ -15,6 +15,8 @@ export interface FakeCommit {
 export class FakeGitHub {
   readonly files = new Map<string, string>()
   readonly commits: FakeCommit[] = []
+  /** When set, any other bearer token gets a 401, as an expired one does. */
+  requireToken?: string
 
   constructor(
     readonly owner: string,
@@ -44,6 +46,10 @@ export class FakeGitHub {
     const request = route.request()
     const url = new URL(request.url())
     const base = `/repos/${this.owner}/${this.repo}`
+    const token = request.headers()['authorization']?.replace('Bearer ', '')
+    if (this.requireToken !== undefined && token !== this.requireToken) {
+      return route.fulfill({ status: 401, json: { message: 'Bad credentials' } })
+    }
     if (url.pathname === base) {
       return route.fulfill({ json: { default_branch: 'main' } })
     }
@@ -121,11 +127,16 @@ function sha(text: string): string {
  * Opens `path` from a GitHub vault served by `github`. The vault is stored in
  * IndexedDB the way the connect flow leaves it, with autosave every second.
  */
-export async function openGitHubVault(page: Page, github: FakeGitHub, path: string) {
+export async function openGitHubVault(
+  page: Page,
+  github: FakeGitHub,
+  path: string,
+  credentials: Record<string, unknown> = { githubAuth: 'pat', githubPat: 'test-token' }
+) {
   await github.install(page)
   await page.goto('/')
   await page.evaluate(
-    async ({ owner, repo }) => {
+    async ({ owner, repo, credentials }) => {
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
         const open = indexedDB.open('caedora', 4)
         open.onupgradeneeded = () => {
@@ -139,7 +150,7 @@ export async function openGitHubVault(page: Page, github: FakeGitHub, path: stri
       const id = `github:${owner}/${repo}`
       const tx = db.transaction(['vaults', 'vault-meta', 'app-settings'], 'readwrite')
       tx.objectStore('vaults').put(
-        { type: 'github', githubAuth: 'pat', githubPat: 'test-token', githubOwner: owner, githubRepo: repo, lastOpenedAt: Date.now() },
+        { type: 'github', ...credentials, githubOwner: owner, githubRepo: repo, lastOpenedAt: Date.now() },
         id
       )
       tx.objectStore('vault-meta').put(id, 'activeVaultId')
@@ -150,7 +161,7 @@ export async function openGitHubVault(page: Page, github: FakeGitHub, path: stri
       })
       db.close()
     },
-    { owner: github.owner, repo: github.repo }
+    { owner: github.owner, repo: github.repo, credentials }
   )
   await page.goto(`/vault/${path}`)
   await expect(page.getByRole('main')).toBeVisible({ timeout: 30_000 })

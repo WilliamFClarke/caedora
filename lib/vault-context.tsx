@@ -16,10 +16,11 @@ import {
   setActiveVaultId,
   LocalGitProvider,
   GitHubProvider,
+  createGitHubProvider,
   BrowserBundleProvider,
 } from './storage'
 import { ElectronLocalProvider } from './storage/electron-provider'
-import type { VaultContextValue, VaultProvider, VaultStatus } from './types'
+import type { PersistedVaultState, VaultContextValue, VaultProvider, VaultStatus } from './types'
 
 const defaultContext: VaultContextValue = {
   provider: null,
@@ -158,7 +159,7 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
     }) => {
       setStatus({ state: 'connecting' })
       try {
-        await saveVaultState({
+        const state: PersistedVaultState = {
           type: 'github',
           githubAuth: 'app',
           githubPat: connection.accessToken,
@@ -167,8 +168,9 @@ export function VaultContextProvider({ children }: { children: ReactNode }) {
           githubOwner: connection.owner,
           githubRepo: connection.repo,
           lastOpenedAt: Date.now(),
-        })
-        const p = new GitHubProvider(connection.accessToken, connection.owner, connection.repo)
+        }
+        await saveVaultState(state)
+        const p = createGitHubProvider(state)
         setProvider(p)
         setStatus({ state: 'ready', providerType: 'github' })
         return true
