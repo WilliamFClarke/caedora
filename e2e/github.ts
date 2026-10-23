@@ -17,6 +17,14 @@ export class FakeGitHub {
   readonly commits: FakeCommit[] = []
   /** When set, any other bearer token gets a 401, as an expired one does. */
   requireToken?: string
+  private gate?: Promise<void>
+
+  /** Holds every response back until the returned function is called, so a test can see the loading state. */
+  hold(): () => void {
+    let release = () => {}
+    this.gate = new Promise<void>((resolve) => (release = resolve))
+    return release
+  }
 
   constructor(
     readonly owner: string,
@@ -39,7 +47,10 @@ export class FakeGitHub {
   }
 
   async install(page: Page) {
-    await page.route('https://api.github.com/**', (route) => this.handle(route))
+    await page.route('https://api.github.com/**', async (route) => {
+      await this.gate
+      return this.handle(route)
+    })
   }
 
   private handle(route: Route) {

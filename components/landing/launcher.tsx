@@ -7,6 +7,7 @@ import { Database, FolderOpen, FolderPlus, Github, Loader2, Trash2 } from 'lucid
 import { Button } from '@/components/ui/button'
 import { ModeToggle } from '@/components/mode-toggle'
 import { ConnectDialog } from '@/components/connect-dialog'
+import { LoadingState } from '@/components/loading-state'
 import { useVault } from '@/lib/vault-context'
 import { listVaults, removeVault } from '@/lib/storage'
 import type { PersistedVaultState } from '@/lib/types'
@@ -63,12 +64,9 @@ export function Launcher() {
   if (status.state === 'checking' || status.state === 'connecting' || status.state === 'ready') {
     return (
       <Shell showThemeToggle={false}>
-        <div className="flex flex-col items-center gap-4 text-center">
-          <Loader2 className="text-primary size-6 animate-spin" />
-          <p className="text-muted-foreground text-sm">
-            {status.state === 'checking' ? 'Checking for vault...' : 'Opening vault...'}
-          </p>
-        </div>
+        <LoadingState
+          title={status.state === 'checking' ? 'Checking for vault' : 'Opening your vault'}
+        />
       </Shell>
     )
   }
