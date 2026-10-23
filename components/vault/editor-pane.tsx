@@ -1,6 +1,7 @@
 ﻿'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { LoadingState } from '@/components/loading-state'
 import {
   Check,
   CircleAlert,
@@ -303,9 +304,7 @@ export function EditorPane({
 
   if (!loaded) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loadingâ€¦</p>
-      </div>
+      <LoadingState className="h-full" title="Loading note" />
     )
   }
 

@@ -10,6 +10,7 @@ import { AssistantSidebarLoader } from '@/components/assistant/assistant-sidebar
 import { SettingsDialog, type SettingsSection } from '@/components/settings-dialog'
 import { useVault } from '@/lib/vault-context'
 import { Button } from '@/components/ui/button'
+import { LoadingState } from '@/components/loading-state'
 import { ConnectDialog } from '@/components/connect-dialog'
 import { GitHubAuthExpiredError, listFilesRecursive } from '@/lib/storage'
 import { getActiveVaultId } from '@/lib/storage/idb'
@@ -55,6 +56,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [reconnectOpen, setReconnectOpen] = useState(false)
   const [virtualFolders, setVirtualFolders] = useState<Set<string>>(new Set())
   const [seeding, setSeeding] = useState(false)
+  const [entriesLoaded, setEntriesLoaded] = useState(false)
   const [syncNonce, setSyncNonce] = useState(0)
   const [activeVaultId, setActiveVaultIdState] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -195,6 +197,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load concepts')
       setAuthExpired(e instanceof GitHubAuthExpiredError)
+    } finally {
+      setEntriesLoaded(true)
     }
   }, [provider, syncUrl])
 
@@ -476,20 +480,31 @@ export function VaultShell({ initialPath }: VaultShellProps) {
 
   if (status.state !== 'ready' || !provider) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading your vault...</p>
-      </div>
+      <LoadingState
+        className="h-screen"
+        title="Opening your vault"
+        detail="Fetching your notes from GitHub or your folder."
+      />
     )
   }
 
   if (seeding) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-3">
-        <div className="border-muted-foreground/30 border-t-foreground size-6 animate-spin rounded-full border-2" />
-        <p className="text-muted-foreground text-sm">
-          Setting up your vault: writing the welcome concept and OKF index...
-        </p>
-      </div>
+      <LoadingState
+        className="h-screen"
+        title="Setting up your vault"
+        detail="Writing the welcome concept and OKF index."
+      />
+    )
+  }
+
+  if (!entriesLoaded) {
+    return (
+      <LoadingState
+        className="h-screen"
+        title="Loading your notes"
+        detail="Reading the repository. Large vaults can take a moment."
+      />
     )
   }
 
