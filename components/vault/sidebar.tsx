@@ -35,6 +35,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { SignedInAvatar } from '@/components/account/user-avatar'
+import { isClerkConfigured } from '@/lib/accounts'
 import { ModeToggle } from '@/components/mode-toggle'
 import { ConnectAiDialog } from './connect-ai-dialog'
 import { TemplateMarketplaceButton } from './template-marketplace-button'
@@ -624,7 +626,11 @@ export function AppSidebar({
               aria-label="Account"
               title="Account"
             >
-              <UserRound className="size-4" />
+              {isClerkConfigured() ? (
+                <SignedInAvatar className="size-6" fallback={<UserRound className="size-4" />} />
+              ) : (
+                <UserRound className="size-4" />
+              )}
             </button>
             <button
               type="button"
