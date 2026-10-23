@@ -6,6 +6,7 @@ import { useUser } from '@clerk/nextjs'
 import { CircleUserRound, UserRoundPlus } from 'lucide-react'
 import { isDesktopApp } from '@/lib/desktop'
 import { cn } from '@/lib/utils'
+import { SignedInAvatar } from './user-avatar'
 
 export function AccountLink({ className }: { className?: string }) {
   const [isDesktop, setIsDesktop] = useState(false)
@@ -61,7 +62,7 @@ function ConfiguredAccountLink({
   return (
     <AccountButton
       className={className}
-      icon={isSignedIn ? <CircleUserRound className="size-4" /> : <UserRoundPlus className="size-4" />}
+      icon={isSignedIn ? <SignedInAvatar /> : <UserRoundPlus className="size-4" />}
       label={isSignedIn ? 'My account' : 'Sign in'}
     />
   )
