@@ -146,7 +146,7 @@ export function DashboardView({
   const empty = spec.rows.length === 0 && (!hasBlock || spec.issues.length <= 1)
 
   return (
-    <div data-testid="dashboard-view" className="@container/dashboard h-full overflow-y-auto">
+    <div data-testid="dashboard-view" className="@container/dashboard h-full overflow-x-hidden overflow-y-auto">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6">
         <ViewHeader
           title={title}
@@ -244,7 +244,7 @@ function DashboardRowView({
 }) {
   const results = useRowResults(row, data)
   return (
-    <div className={cn('grid gap-4', GRID[row.columns] ?? GRID[1])}>
+    <div className={cn('grid gap-4 [&>*]:min-w-0', GRID[row.columns] ?? GRID[1])}>
       {results.map((result, index) => (
         <DashboardItemView key={row.itemIndexes[index]} result={result} onEditCell={onEditCell} />
       ))}
@@ -449,7 +449,7 @@ function EditableRow({
   const next = rows[rowPosition + 1]
 
   return (
-    <div className={cn('grid gap-x-4 gap-y-6 pt-3', GRID[row.columns] ?? GRID[1])}>
+    <div className={cn('grid gap-x-4 gap-y-6 pt-3 [&>*]:min-w-0', GRID[row.columns] ?? GRID[1])}>
       {results.map((result, position) => {
         const at = { row: row.index, item: row.itemIndexes[position] }
         const isDragging = dragging?.row === at.row && dragging.item === at.item
