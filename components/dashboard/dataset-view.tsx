@@ -1,11 +1,14 @@
 'use client'
 
 import { useMemo, type ReactNode } from 'react'
+import { Dumbbell } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { DataTable } from './dashboard-items'
 import { ViewHeader } from './view-header'
 import { parseDataset } from '@/lib/dataset'
 import { prettyLabel } from '@/lib/dashboard/evaluate'
 import type { ValueFormat } from '@/lib/dashboard/spec'
+import { isWorkoutDataset } from '@/lib/workout'
 
 const FORMATS: Record<string, ValueFormat> = {
   currency: 'currency',
@@ -21,12 +24,14 @@ export function DatasetView({
   title,
   description,
   viewToggle,
+  onStartWorkout,
 }: {
   path: string
   raw: string
   title: string
   description?: string
   viewToggle?: ReactNode
+  onStartWorkout?: () => void
 }) {
   const dataset = useMemo(() => parseDataset(path, raw), [path, raw])
   const columns = dataset.schema.columns.map((column) => ({
@@ -42,7 +47,17 @@ export function DatasetView({
         <ViewHeader
           title={title}
           description={description}
-          actions={viewToggle}
+          actions={
+            <>
+              {onStartWorkout && isWorkoutDataset(dataset) && (
+                <Button type="button" size="sm" className="h-8" onClick={onStartWorkout}>
+                  <Dumbbell className="size-4" />
+                  Start workout
+                </Button>
+              )}
+              {viewToggle}
+            </>
+          }
           meta={
             <p className="text-muted-foreground text-xs">
               {dataset.rows.length} row{dataset.rows.length === 1 ? '' : 's'}

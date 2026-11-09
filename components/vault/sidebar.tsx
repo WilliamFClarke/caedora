@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ChevronsUpDown,
   Database,
+  Dumbbell,
   FileText,
   LayoutDashboard,
   Sheet,
@@ -134,6 +135,8 @@ interface AppSidebarProps {
   onSync?: () => Promise<void>
   conceptCatalog: Record<string, OkfConceptSummary>
   onOpenSearch: () => void
+  /** Shown when the vault has a training log to write sets to. */
+  onStartWorkout?: () => void
 }
 
 interface TreeNodeT {
@@ -257,6 +260,7 @@ export function AppSidebar({
   onSync,
   conceptCatalog,
   onOpenSearch,
+  onStartWorkout,
 }: AppSidebarProps) {
   const router = useRouter()
   const { connectToVault, disconnect } = useVault()
@@ -416,6 +420,19 @@ export function AppSidebar({
             onImportFailed={onTemplateImportFailed}
             onImportSettled={onTemplateImportSettled}
           />
+          {onStartWorkout && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-8"
+              title="Start workout"
+              aria-label="Start workout"
+              onClick={onStartWorkout}
+            >
+              <Dumbbell className="size-4" />
+            </Button>
+          )}
           <Button
             type="button"
             size="icon"

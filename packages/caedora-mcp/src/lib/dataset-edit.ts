@@ -240,6 +240,39 @@ export function upsertDatasetRows(
 }
 
 /**
+ * Adds one row to the end of the table. Unlike upsertDatasetRows this needs no
+ * key, so it suits logs where rows are only ever added, such as one row per set.
+ */
+export function appendDatasetRow(path: string, raw: string, input: DatasetInput): string {
+  return appendRow(parseDataset(path, raw), raw, input)
+}
+
+/**
+ * Sets cells of the row at `index`, counted from 0 in the order parseDataset
+ * reads them. For tables without a key, where the caller has found the row
+ * some other way.
+ */
+export function updateDatasetRowAt(path: string, raw: string, index: number, fields: DatasetInput): string {
+  const dataset = parseDataset(path, raw)
+  if (!dataset.rows[index]) throw new DatasetEditError(`That row is no longer in ${dataset.title}.`)
+  const layout = layoutTable(raw, dataset)
+  for (const [name, value] of Object.entries(fields)) {
+    const column = requireColumn(dataset, name)
+    writeCell(layout, layout.dataLines[index], columnIndex(layout, column), formatCell(value, column))
+  }
+  return joinLayout(layout)
+}
+
+/** Removes the row at `index`, leaving every other line of the file as it was. */
+export function deleteDatasetRowAt(path: string, raw: string, index: number): string {
+  const dataset = parseDataset(path, raw)
+  if (!dataset.rows[index]) throw new DatasetEditError(`That row is no longer in ${dataset.title}.`)
+  const layout = layoutTable(raw, dataset)
+  layout.lines.splice(layout.dataLines[index], 1)
+  return joinLayout(layout)
+}
+
+/**
  * Writes `generated: { by, at }` into the frontmatter, keeping the style the
  * file already uses and leaving every other line alone.
  */
