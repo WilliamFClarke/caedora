@@ -11,95 +11,112 @@ function vault() {
   })
 }
 
-const dialog = (page: Page) => page.getByRole('dialog')
+const tracker = (page: Page) => page.getByTestId('workout-tracker')
 const exercise = (page: Page, name: string) =>
-  dialog(page).getByRole('listitem').filter({ has: page.getByRole('heading', { name, exact: true }) })
+  tracker(page).getByRole('listitem').filter({ has: page.getByRole('heading', { name, exact: true }) })
+const squashed = (github: FakeGitHub) => github.read(LOG).replace(/ +/g, ' ')
+// Only the training log matters here; the open welcome note may autosave on its own.
+const logCommits = (github: FakeGitHub) => github.commits.filter((commit) => commit.path === LOG)
 
 async function startUpperA(page: Page) {
   await page.getByRole('button', { name: 'Start workout' }).first().click()
-  await dialog(page).getByLabel('Date').fill('2026-11-10')
-  await dialog(page).getByRole('button', { name: 'Start Upper A' }).click()
-  await expect(dialog(page).getByRole('heading', { name: 'Upper A' })).toBeVisible()
+  await tracker(page).getByLabel('Date').fill('2026-11-10')
+  await tracker(page).getByRole('button', { name: 'Start Upper A' }).click()
+  await expect(tracker(page).getByRole('heading', { name: 'Upper A' })).toBeVisible()
 }
 
-test('picks a programme day and logs sets straight to the training log', async ({ page }) => {
+async function logSet(page: Page, name: string, values: { kg?: string; reps: string; rir?: string }, set: number) {
+  const card = exercise(page, name)
+  if (values.kg !== undefined) await card.getByLabel(`${name} kg`).fill(values.kg)
+  await card.getByLabel(`${name} reps`, { exact: true }).fill(values.reps)
+  if (values.rir !== undefined) await card.getByLabel(`${name} reps in reserve`).fill(values.rir)
+  await card.getByRole('button', { name: `Log set ${set} of ${name}` }).click()
+}
+
+test('logs sets on the device, starts the rest timer and saves the workout after a check', async ({ page }) => {
   const github = vault()
   await openGitHubVault(page, github, 'welcome.md')
   await startUpperA(page)
 
   const press = exercise(page, 'Incline dumbbell press')
   await expect(press).toContainText('Find a load for 6 to 10 reps')
-  await expect(press).toContainText('30 kg × 10, 9')
-
+  await expect(press).toContainText('Rest 3:00')
   // The load carries over from last time, so only the reps need typing.
   await expect(press.getByLabel('Incline dumbbell press kg')).toHaveValue('30')
-  await press.getByLabel('Incline dumbbell press kg').fill('32.5')
-  await press.getByLabel('Incline dumbbell press reps', { exact: true }).fill('9')
-  await press.getByLabel('Incline dumbbell press reps in reserve').fill('2')
-  await press.getByRole('button', { name: 'Log set 1 of Incline dumbbell press' }).click()
 
-  await expect(press.getByRole('list', { name: 'Incline dumbbell press sets' })).toContainText('32.5 kg × 9 @ 2 RIR')
-  await expect(press.getByRole('button', { name: 'Log set 2 of Incline dumbbell press' })).toBeVisible()
-  await expect.poll(() => github.read(LOG).replace(/ +/g, ' ')).toContain(
-    '| 2026-11-10 | Incline dumbbell press | 1 | 32.5 | 9 | 2 | | upper-a | chest | 44.4 |'
-  )
-  expect(github.commits.at(-1)?.message).toBe('Log Incline dumbbell press set 1: 32.5 kg × 9 @ 2 RIR')
+  await logSet(page, 'Incline dumbbell press', { kg: '32.5', reps: '9', rir: '2' }, 1)
+  await expect(press.getByRole('button', { name: 'Edit set 1 of Incline dumbbell press: 32.5 kg × 9 @ 2 RIR' })).toBeVisible()
+  const timer = tracker(page).getByRole('region', { name: 'Rest timer' })
+  await expect(timer).toContainText('Rest after Incline dumbbell press')
+  await expect(timer.getByRole('timer')).toHaveText(/^(3:00|2:5\d)$/)
+  await timer.getByRole('button', { name: 'Skip' }).click()
+  await expect(timer).toBeHidden()
 
-  await press.getByLabel('Incline dumbbell press reps', { exact: true }).fill('8')
-  await press.getByRole('button', { name: 'Log set 2 of Incline dumbbell press' }).click()
-  await expect(press.getByRole('list', { name: 'Incline dumbbell press sets' }).getByRole('listitem')).toHaveCount(2)
+  // Nothing reaches the vault until the workout is finished and checked.
+  expect(logCommits(github)).toHaveLength(0)
 
-  await dialog(page).getByRole('button', { name: 'Finish workout' }).click()
-  await expect(dialog(page)).toContainText('2 sets across 1 exercise saved to your training log.')
+  await logSet(page, 'Incline dumbbell press', { reps: '8' }, 2)
+  await logSet(page, 'Chest supported row', { kg: '40', reps: '10' }, 1)
+
+  await tracker(page).getByRole('button', { name: 'Finish workout' }).click()
+  await expect(tracker(page).getByRole('heading', { name: 'Check your workout' })).toBeVisible()
+  const rows = tracker(page).getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Chest supported row', exact: true }) })
+  await expect(rows).toContainText('1 of 3 sets')
+
+  // A slip can be fixed on the review screen before saving.
+  await rows.getByRole('button', { name: /Edit set 1 of Chest supported row/ }).click()
+  await rows.getByLabel('Set 1 reps', { exact: true }).fill('11')
+  await rows.getByRole('button', { name: 'Save set 1 of Chest supported row' }).click()
+  await expect(rows).toContainText('40 kg × 11')
+
+  await tracker(page).getByRole('button', { name: 'Save 3 sets to Training log' }).click()
+  await expect(tracker(page).getByRole('heading', { name: 'Upper A saved' })).toBeVisible()
+  expect(logCommits(github).map((commit) => commit.message)).toEqual(['Log Upper A on 2026-11-10: 3 sets'])
+  expect(squashed(github)).toContain('| 2026-11-10 | Incline dumbbell press | 1 | 32.5 | 9 | 2 | | upper-a | chest | 44.4 |')
+  expect(squashed(github)).toContain('| 2026-11-10 | Incline dumbbell press | 2 | 32.5 | 8 | 2 |')
+  expect(squashed(github)).toContain('| 2026-11-10 | Chest supported row | 1 | 40 | 11 |')
 })
 
-test('edits and deletes a logged set', async ({ page }) => {
+test('a workout in progress survives a reload', async ({ page }) => {
   const github = vault()
   await openGitHubVault(page, github, 'welcome.md')
   await startUpperA(page)
+  await logSet(page, 'Incline dumbbell press', { kg: '30', reps: '10' }, 1)
+  await expect(exercise(page, 'Incline dumbbell press').getByRole('button', { name: /Edit set 1 of Incline dumbbell press/ })).toBeVisible()
 
-  const row = exercise(page, 'Chest supported row')
-  await row.getByLabel('Chest supported row kg').fill('40')
-  await row.getByLabel('Chest supported row reps', { exact: true }).fill('10')
-  await row.getByRole('button', { name: 'Log set 1 of Chest supported row' }).click()
-  const sets = row.getByRole('list', { name: 'Chest supported row sets' })
-  await expect(sets).toContainText('40 kg × 10')
+  await page.reload()
+  await page.getByRole('button', { name: 'Start workout' }).first().click()
+  await expect(tracker(page).getByRole('heading', { name: 'Upper A' })).toBeVisible()
+  const press = exercise(page, 'Incline dumbbell press')
+  await expect(press.getByRole('button', { name: /Edit set 1 of Incline dumbbell press: 30 kg × 10/ })).toBeVisible()
 
-  await row.getByRole('button', { name: 'Edit set 1 of Chest supported row' }).click()
-  await row.getByLabel('Set 1 reps', { exact: true }).fill('11')
-  await row.getByRole('button', { name: 'Save' }).click()
-  await expect(sets).toContainText('40 kg × 11')
-  await expect.poll(() => github.read(LOG).replace(/ +/g, ' ')).toContain('| Chest supported row | 1 | 40 | 11 |')
-
-  await row.getByRole('button', { name: 'Delete set 1 of Chest supported row' }).click()
-  await expect(sets).toHaveCount(0)
-  await expect.poll(() => github.read(LOG)).not.toContain('Chest supported row | 1')
+  // A set can be removed before it is ever saved.
+  await press.getByRole('button', { name: /Edit set 1 of Incline dumbbell press/ }).click()
+  await press.getByRole('button', { name: 'Delete set 1 of Incline dumbbell press' }).click()
+  await expect(press.getByRole('button', { name: 'Log set 1 of Incline dumbbell press' })).toBeVisible()
+  expect(logCommits(github)).toHaveLength(0)
 })
 
-test('starts an empty workout and adds an exercise from a button', async ({ page }) => {
+test('with no signal the workout waits on the device and saves when the connection is back', async ({ page, context }) => {
   const github = vault()
   await openGitHubVault(page, github, LOG)
   await expect(page.getByTestId('dataset-view')).toBeVisible({ timeout: 15_000 })
 
   await page.getByTestId('dataset-view').getByRole('button', { name: 'Start workout' }).click()
-  await dialog(page).getByLabel('Date').fill('2026-11-10')
-  await dialog(page).getByRole('button', { name: 'Start empty workout' }).click()
-  await dialog(page).getByLabel('Exercise to add').fill('romanian deadlift')
-  await dialog(page).getByRole('button', { name: 'Add', exact: true }).click()
+  await tracker(page).getByLabel('Date').fill('2026-11-10')
+  await tracker(page).getByRole('button', { name: 'Start empty workout' }).click()
+  await tracker(page).getByLabel('Exercise to add').fill('romanian deadlift')
+  await tracker(page).getByRole('button', { name: 'Add', exact: true }).click()
 
-  const rdl = exercise(page, 'Romanian deadlift')
-  await rdl.getByLabel('Romanian deadlift kg').fill('80')
-  await rdl.getByLabel('Romanian deadlift reps', { exact: true }).fill('8')
-  await rdl.getByRole('button', { name: 'Log set 1 of Romanian deadlift' }).click()
-  await expect(rdl.getByRole('list', { name: 'Romanian deadlift sets' })).toContainText('80 kg × 8')
-  await expect.poll(() => github.read(LOG).replace(/ +/g, ' ')).toContain(
-    '| 2026-11-10 | Romanian deadlift | 1 | 80 | 8 | | | other |'
-  )
+  await context.setOffline(true)
+  await expect(tracker(page)).toContainText('Offline, saved on this device')
+  await logSet(page, 'Romanian deadlift', { kg: '80', reps: '8' }, 1)
+  await tracker(page).getByRole('button', { name: 'Finish workout' }).click()
+  await expect(tracker(page).getByRole('status')).toContainText('No connection')
+  await expect(tracker(page).getByRole('button', { name: 'Waiting for connection' })).toBeDisabled()
 
-  // Closing and reopening offers to carry on with the same day.
-  await page.keyboard.press('Escape')
-  await page.getByTestId('dataset-view').getByRole('button', { name: 'Start workout' }).click()
-  await dialog(page).getByLabel('Date').fill('2026-11-10')
-  await dialog(page).getByRole('button', { name: /Continue this session/ }).click()
-  await expect(exercise(page, 'Romanian deadlift').getByRole('button', { name: 'Log set 2 of Romanian deadlift' })).toBeVisible()
+  await context.setOffline(false)
+  await tracker(page).getByRole('button', { name: 'Save 1 set to Training log' }).click()
+  await expect(tracker(page).getByRole('heading', { name: 'Workout saved' })).toBeVisible()
+  expect(squashed(github)).toContain('| 2026-11-10 | Romanian deadlift | 1 | 80 | 8 | | | other |')
 })

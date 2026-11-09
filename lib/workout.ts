@@ -5,12 +5,7 @@ import {
   type DatasetRow,
   type DatasetValue,
 } from '@/lib/dataset'
-import {
-  appendDatasetRow,
-  deleteDatasetRowAt,
-  updateDatasetRowAt,
-  type DatasetInput,
-} from '@/lib/dataset-edit'
+import { appendDatasetRow, type DatasetInput } from '@/lib/dataset-edit'
 
 /**
  * Workout tracking on top of ordinary Datasets. Nothing here is stored outside
@@ -37,6 +32,8 @@ export interface PlannedExercise {
   reps?: string
   rir?: string
   rest?: string
+  /** Rest after each working set, in seconds, for the rest timer. */
+  restSeconds?: number
   muscle?: string
   target?: string
   cue?: string
@@ -192,6 +189,8 @@ export function workoutTemplates(sources: WorkoutSources): WorkoutTemplate[] {
       const planned: PlannedExercise = { name }
       const sets = number(row.sets) ?? number(next?.sets)
       if (sets !== undefined) planned.sets = sets
+      const restSeconds = number(row.rest_s) ?? parseRestSeconds(text(row.rest))
+      if (restSeconds !== undefined) planned.restSeconds = restSeconds
       const fields: Array<[keyof PlannedExercise, string | undefined]> = [
         ['reps', text(row.reps)],
         ['rir', text(row.rir)],
@@ -206,6 +205,37 @@ export function workoutTemplates(sources: WorkoutSources): WorkoutTemplate[] {
     })
     return { day, label: dayLabel(day), exercises }
   })
+}
+
+/** Rest used when the plan gives none, such as for an exercise added on the day. */
+export const DEFAULT_REST_SECONDS = 90
+
+/**
+ * Reads a rest time written for people: "90 s", "3 min", "1:30", "2 to 3 min"
+ * or "2-3 min" (the upper end, since longer rest suits hypertrophy work).
+ */
+export function parseRestSeconds(value: string | undefined): number | undefined {
+  if (!value) return undefined
+  const textValue = value.trim().toLowerCase()
+  const clock = textValue.match(/^(\d+):(\d{1,2})$/)
+  if (clock) return Number(clock[1]) * 60 + Number(clock[2])
+  const numbers = [...textValue.matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0]))
+  if (numbers.length === 0) return undefined
+  const amount = Math.max(...numbers)
+  const minutes = /min|\d\s*m\b/.test(textValue)
+  const seconds = Math.round(minutes ? amount * 60 : amount)
+  return seconds > 0 ? seconds : undefined
+}
+
+/** The rest timer length for an exercise. */
+export function restSecondsFor(exercise: Pick<PlannedExercise, 'restSeconds' | 'rest'>): number {
+  return exercise.restSeconds ?? parseRestSeconds(exercise.rest) ?? DEFAULT_REST_SECONDS
+}
+
+/** "2:05", or "0:09" in the last ten seconds. */
+export function formatCountdown(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.ceil(totalSeconds))
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
 /** Every set in the log, with the row index needed to edit or remove it. */
@@ -333,55 +363,110 @@ export function setRow(log: Dataset, input: SetInput): DatasetInput {
   return row
 }
 
-/** Appends one set to the training log and returns the new file with a commit message. */
-export function logSet(path: string, raw: string, input: SetInput): { content: string; message: string } {
-  const log = parseDataset(path, raw)
-  const content = appendDatasetRow(path, raw, setRow(log, input))
-  return { content, message: `Log ${input.exercise.trim()} set ${input.set}: ${describeSet(input)}` }
+/** A set kept on the device until the workout is finished and checked. */
+export interface DraftSet {
+  id: string
+  exercise: string
+  set: number
+  kg: number | null
+  reps: number | null
+  rir: number | null
+  muscle: string | null
+  /** When it was logged, as a timestamp. */
+  loggedAt: number
 }
 
-/** Finds a logged set again in a freshly read log, by date, exercise and set number. */
-export function findSet(log: Dataset, target: Pick<LoggedSet, 'date' | 'exercise' | 'set'>): LoggedSet | undefined {
-  const matches = setsFor(log, target.date, target.exercise).filter((item) => item.set === target.set)
-  return matches[matches.length - 1]
+/** A workout in progress, autosaved on the device so it survives losing signal or a reload. */
+export interface WorkoutDraft {
+  date: string
+  /** The programme day, or null for an empty workout. */
+  day: string | null
+  label: string
+  exercises: PlannedExercise[]
+  sets: DraftSet[]
+  startedAt: number
 }
 
-/** Changes the load, reps and reps in reserve of a logged set. */
-export function editSet(
-  path: string,
-  raw: string,
-  target: Pick<LoggedSet, 'date' | 'exercise' | 'set'>,
-  values: Pick<SetInput, 'kg' | 'reps' | 'rir'>
-): { content: string; message: string } {
+/** The sets of one exercise in a draft, in set order. */
+export function draftSetsFor(draft: WorkoutDraft, exercise: string): DraftSet[] {
+  return draft.sets.filter((item) => sameName(item.exercise, exercise)).sort((a, b) => a.set - b.set)
+}
+
+/** The set number the next set of an exercise gets, after any already in the log that day. */
+export function nextSetNumber(log: Dataset, draft: WorkoutDraft, exercise: string): number {
+  const saved = setsFor(log, draft.date, exercise).map((item) => item.set)
+  const pending = draftSetsFor(draft, exercise).map((item) => item.set)
+  return Math.max(0, ...saved, ...pending) + 1
+}
+
+/** Removes a set from a draft and closes the gap in that exercise's set numbers. */
+export function removeDraftSet(draft: WorkoutDraft, id: string): WorkoutDraft {
+  const removed = draft.sets.find((item) => item.id === id)
+  if (!removed) return draft
+  const sets = draft.sets
+    .filter((item) => item.id !== id)
+    .map((item) =>
+      sameName(item.exercise, removed.exercise) && item.set > removed.set ? { ...item, set: item.set - 1 } : item
+    )
+  return { ...draft, sets }
+}
+
+export interface ExerciseReview {
+  exercise: string
+  sets: DraftSet[]
+  notes: string[]
+}
+
+/**
+ * What to check before a workout goes into the vault: sets short of the plan,
+ * planned exercises not done, and loads well above anything logged before,
+ * which are usually typing slips such as 325 for 32.5.
+ */
+export function reviewDraft(draft: WorkoutDraft, log: Dataset): ExerciseReview[] {
+  const names: string[] = []
+  for (const item of draft.exercises) names.push(item.name)
+  for (const item of draft.sets) if (!names.some((name) => sameName(name, item.exercise))) names.push(item.exercise)
+  return names.map((name) => {
+    const sets = draftSetsFor(draft, name)
+    const plan = draft.exercises.find((item) => sameName(item.name, name))
+    const saved = setsFor(log, draft.date, name).length
+    const notes: string[] = []
+    const done = sets.length + saved
+    if (plan?.sets && done === 0) notes.push('Not done')
+    else if (plan?.sets && done < plan.sets) notes.push(`${done} of ${plan.sets} sets`)
+    const heaviest = loggedSets(log)
+      .filter((item) => sameName(item.exercise, name) && item.kg !== null && item.date < draft.date)
+      .reduce((max, item) => Math.max(max, item.kg ?? 0), 0)
+    for (const item of sets) {
+      if (heaviest > 0 && item.kg !== null && item.kg > heaviest * 1.5) {
+        notes.push(`Set ${item.set} at ${item.kg} kg is well above your best of ${heaviest} kg`)
+      }
+      if (item.reps !== null && item.reps > 50) notes.push(`Set ${item.set} has ${item.reps} reps`)
+    }
+    return { exercise: name, sets, notes }
+  })
+}
+
+/**
+ * Adds every set of a finished workout to the training log as one change.
+ * Set numbers carry on after any sets already saved for that day, so a
+ * workout finished in two parts never repeats a set number.
+ */
+export function commitDraft(path: string, raw: string, draft: WorkoutDraft): { content: string; message: string } {
+  let content = raw
   const log = parseDataset(path, raw)
-  const found = findSet(log, target)
-  if (!found) throw new Error(`Set ${target.set} of ${target.exercise} is no longer in the log.`)
-  const fields: DatasetInput = { reps: values.reps }
-  const load = firstColumn(log, LOAD_COLUMNS)
-  if (load) fields[load.name] = values.kg
-  const rir = firstColumn(log, RIR_COLUMNS)
-  if (rir) fields[rir.name] = values.rir
-  const e1rm = firstColumn(log, E1RM_COLUMNS)
-  if (e1rm) fields[e1rm.name] = estimateOneRepMax(values.kg, values.reps, values.rir)
-  return {
-    content: updateDatasetRowAt(path, raw, found.index, fields),
-    message: `Update ${target.exercise} set ${target.set}: ${describeSet(values)}`,
+  const order = reviewDraft(draft, log).map((item) => item.exercise)
+  let count = 0
+  for (const exercise of order) {
+    const offset = Math.max(0, ...setsFor(log, draft.date, exercise).map((item) => item.set))
+    draftSetsFor(draft, exercise).forEach((item, index) => {
+      const set = offset > 0 ? offset + index + 1 : item.set
+      const current = parseDataset(path, content)
+      content = appendDatasetRow(path, content, setRow(current, { ...item, date: draft.date, set, day: draft.day }))
+      count++
+    })
   }
-}
-
-/** Removes a logged set from the training log. */
-export function deleteSet(
-  path: string,
-  raw: string,
-  target: Pick<LoggedSet, 'date' | 'exercise' | 'set'>
-): { content: string; message: string } {
-  const log = parseDataset(path, raw)
-  const found = findSet(log, target)
-  if (!found) throw new Error(`Set ${target.set} of ${target.exercise} is no longer in the log.`)
-  return {
-    content: deleteDatasetRowAt(path, raw, found.index),
-    message: `Remove ${target.exercise} set ${target.set} on ${target.date}`,
-  }
+  return { content, message: `Log ${draft.label} on ${draft.date}: ${count} set${count === 1 ? '' : 's'}` }
 }
 
 /** Today's date in the browser's time zone, as the log writes it. */

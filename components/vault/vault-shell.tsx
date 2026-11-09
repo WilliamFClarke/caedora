@@ -624,6 +624,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         open={workoutOpen}
         onOpenChange={setWorkoutOpen}
         provider={provider}
+        vaultKey={activeVaultId ?? provider.type}
         datasetPaths={datasetPaths}
         onLogChanged={() => void onSync()}
       />

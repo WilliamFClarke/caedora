@@ -2,19 +2,25 @@ import { expect, test } from '@playwright/test'
 import { parseDataset } from '@/lib/dataset'
 import { appendDatasetRow, deleteDatasetRowAt, updateDatasetRowAt } from '@/lib/dataset-edit'
 import {
+  commitDraft,
   dayLabel,
-  deleteSet,
   describeSession,
-  editSet,
   estimateOneRepMax,
   exercisesOn,
   findWorkoutSources,
   knownExercises,
+  formatCountdown,
   lastSessionFor,
-  logSet,
+  nextSetNumber,
   parseEntry,
+  parseRestSeconds,
+  removeDraftSet,
+  restSecondsFor,
+  reviewDraft,
   setsFor,
   workoutTemplates,
+  type DraftSet,
+  type WorkoutDraft,
 } from '@/lib/workout'
 import { NEXT_SESSION, PROGRAMME, TRAINING_LOG, TRAINING_LOG_WITH_HISTORY } from '../fixtures/workout'
 
@@ -63,47 +69,78 @@ test('day labels read naturally', () => {
   expect(dayLabel('arms-delts')).toBe('Arms delts')
 })
 
-test('logging a set appends one row with day, muscle and estimated 1RM filled in', () => {
-  const { content, message } = logSet(LOG, TRAINING_LOG, {
-    date: '2026-11-10',
-    exercise: 'Incline dumbbell press',
-    set: 1,
-    kg: 32.5,
-    reps: 9,
-    rir: 2,
-    day: 'upper-a',
-    muscle: 'chest',
-  })
+function draftSet(exercise: string, set: number, kg: number | null, reps: number, rir: number | null = null): DraftSet {
+  return { id: `${exercise}-${set}`, exercise, set, kg, reps, rir, muscle: exercise === 'Incline dumbbell press' ? 'chest' : null, loggedAt: 0 }
+}
+
+function upperA(sets: DraftSet[]): WorkoutDraft {
+  const template = workoutTemplates(sources())[0]
+  return { date: '2026-11-10', day: template.day, label: template.label, exercises: template.exercises, sets, startedAt: 0 }
+}
+
+test('finishing a workout adds every set to the log in one change, with day, muscle and estimated 1RM', () => {
+  const draft = upperA([draftSet('Incline dumbbell press', 1, 32.5, 9, 2), draftSet('Incline dumbbell press', 2, 32.5, 8, 1)])
+  const { content, message } = commitDraft(LOG, TRAINING_LOG, draft)
   expect(content.startsWith(TRAINING_LOG.trimEnd())).toBe(true)
   expect(squash(content)).toContain('| 2026-11-10 | Incline dumbbell press | 1 | 32.5 | 9 | 2 | | upper-a | chest | 44.4 |')
-  expect(message).toBe('Log Incline dumbbell press set 1: 32.5 kg × 9 @ 2 RIR')
-  const sets = setsFor(parseDataset(LOG, content), '2026-11-10', 'incline dumbbell press')
-  expect(sets.map((item) => [item.set, item.kg, item.reps, item.rir])).toEqual([[1, 32.5, 9, 2]])
+  expect(squash(content)).toContain('| 2026-11-10 | Incline dumbbell press | 2 | 32.5 | 8 | 1 | | upper-a | chest | 42.3 |')
+  expect(message).toBe('Log Upper A on 2026-11-10: 2 sets')
 })
 
 test('a set from an empty workout is marked as other and keeps an unknown muscle out', () => {
-  const { content } = logSet(LOG, TRAINING_LOG, {
+  const draft: WorkoutDraft = {
     date: '2026-11-10',
-    exercise: 'Farmer carry',
-    set: 1,
-    kg: 40,
-    reps: 1,
-    rir: null,
-    muscle: 'grip',
-  })
-  expect(squash(content)).toContain('| 2026-11-10 | Farmer carry | 1 | 40 | 1 | | | other | | 41.3 |')
+    day: null,
+    label: 'Workout',
+    exercises: [{ name: 'Farmer carry' }],
+    sets: [{ ...draftSet('Farmer carry', 1, 40, 1), muscle: 'grip' }],
+    startedAt: 0,
+  }
+  expect(squash(commitDraft(LOG, TRAINING_LOG, draft).content)).toContain('| 2026-11-10 | Farmer carry | 1 | 40 | 1 | | | other | | 41.3 |')
 })
 
-test('a logged set can be edited and removed by date, exercise and set number', () => {
-  let raw = TRAINING_LOG_WITH_HISTORY
-  raw = editSet(LOG, raw, { date: '2026-11-03', exercise: 'Incline dumbbell press', set: 2 }, { kg: 30, reps: 8, rir: 1 }).content
-  expect(squash(raw)).toContain('| 2026-11-03 | Incline dumbbell press | 2 | 30 | 8 | 1 | | upper-a | chest | 39 |')
-  raw = deleteSet(LOG, raw, { date: '2026-11-03', exercise: 'Incline dumbbell press', set: 1 }).content
-  const left = setsFor(parseDataset(LOG, raw), '2026-11-03', 'Incline dumbbell press')
-  expect(left.map((item) => item.set)).toEqual([2])
-  expect(() => deleteSet(LOG, raw, { date: '2026-11-03', exercise: 'Incline dumbbell press', set: 1 })).toThrow(
-    /no longer in the log/
-  )
+test('set numbers carry on after sets already saved that day', () => {
+  const first = commitDraft(LOG, TRAINING_LOG, upperA([draftSet('Incline dumbbell press', 1, 30, 10)])).content
+  const log = parseDataset(LOG, first)
+  const second = upperA([])
+  expect(nextSetNumber(log, second, 'Incline dumbbell press')).toBe(2)
+  // A draft started before the first save still numbers from 1, so commit shifts it.
+  const content = commitDraft(LOG, first, upperA([draftSet('Incline dumbbell press', 1, 30, 9)])).content
+  expect(setsFor(parseDataset(LOG, content), '2026-11-10', 'Incline dumbbell press').map((item) => item.set)).toEqual([1, 2])
+})
+
+test('removing a set closes the gap in set numbers', () => {
+  const draft = upperA([
+    draftSet('Incline dumbbell press', 1, 30, 10),
+    draftSet('Incline dumbbell press', 2, 30, 9),
+    draftSet('Incline dumbbell press', 3, 30, 8),
+  ])
+  const next = removeDraftSet(draft, 'Incline dumbbell press-2')
+  expect(next.sets.map((item) => [item.set, item.reps])).toEqual([
+    [1, 10],
+    [2, 8],
+  ])
+})
+
+test('the review flags short exercises, skipped ones and likely typing slips', () => {
+  const log = parseDataset(LOG, TRAINING_LOG_WITH_HISTORY)
+  const review = reviewDraft(upperA([draftSet('Incline dumbbell press', 1, 325, 9)]), log)
+  const press = review.find((item) => item.exercise === 'Incline dumbbell press')
+  expect(press?.notes).toEqual(['1 of 3 sets', 'Set 1 at 325 kg is well above your best of 30 kg'])
+  expect(review.find((item) => item.exercise === 'Chest supported row')?.notes).toEqual(['Not done'])
+})
+
+test('rest times are read from the plan, with a default for anything unplanned', () => {
+  expect(parseRestSeconds('90 s')).toBe(90)
+  expect(parseRestSeconds('3 min')).toBe(180)
+  expect(parseRestSeconds('2:30')).toBe(150)
+  expect(parseRestSeconds('2 to 3 min')).toBe(180)
+  expect(parseRestSeconds('2m')).toBe(120)
+  expect(parseRestSeconds('')).toBeUndefined()
+  expect(workoutTemplates(sources())[0].exercises[0].restSeconds).toBe(180)
+  expect(restSecondsFor({})).toBe(90)
+  expect(formatCountdown(125)).toBe('2:05')
+  expect(formatCountdown(-3)).toBe('0:00')
 })
 
 test('last time shows the most recent earlier session', () => {
