@@ -74,6 +74,8 @@ interface EditorPaneProps {
   conceptCatalog: Record<string, OkfConceptSummary>
   linkGraphOpen?: boolean
   onToggleLinkGraph?: () => void
+  /** Opens the workout tracker, offered on training log and programme Datasets. */
+  onStartWorkout?: () => void
 }
 
 function countWords(markdown: string): number {
@@ -113,6 +115,7 @@ export function EditorPane({
   conceptCatalog,
   linkGraphOpen = false,
   onToggleLinkGraph,
+  onStartWorkout,
 }: EditorPaneProps) {
   const [loaded, setLoaded] = useState<{
     path: string
@@ -375,6 +378,7 @@ export function EditorPane({
             title={metadata.title || fallbackTitle}
             description={metadata.description}
             viewToggle={viewToggle}
+            onStartWorkout={onStartWorkout}
           />
         ) : (
         <Editor

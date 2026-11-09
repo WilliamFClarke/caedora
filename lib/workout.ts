@@ -1,0 +1,399 @@
+import {
+  parseDataset,
+  type Dataset,
+  type DatasetColumn,
+  type DatasetRow,
+  type DatasetValue,
+} from '@/lib/dataset'
+import {
+  appendDatasetRow,
+  deleteDatasetRowAt,
+  updateDatasetRowAt,
+  type DatasetInput,
+} from '@/lib/dataset-edit'
+
+/**
+ * Workout tracking on top of ordinary Datasets. Nothing here is stored outside
+ * the vault: a training log Dataset (one row per set) is the record, and an
+ * optional programme Dataset and "next session" sheet supply the planned
+ * workouts and today's targets. Columns are matched by name, so any vault
+ * whose tables use names such as date, exercise, set, kg, reps and rir works.
+ */
+
+const LOAD_COLUMNS = ['kg', 'load', 'load_kg', 'weight', 'weight_kg']
+const RIR_COLUMNS = ['rir', 'reps_in_reserve']
+const SET_COLUMNS = ['set', 'set_number']
+const E1RM_COLUMNS = ['e1rm_kg', 'e1rm']
+
+export interface WorkoutSources {
+  log: Dataset
+  programme?: Dataset
+  nextSession?: Dataset
+}
+
+export interface PlannedExercise {
+  name: string
+  sets?: number
+  reps?: string
+  rir?: string
+  rest?: string
+  muscle?: string
+  target?: string
+  cue?: string
+  note?: string
+}
+
+export interface WorkoutTemplate {
+  /** The programme's day value, e.g. upper-a. */
+  day: string
+  label: string
+  exercises: PlannedExercise[]
+}
+
+export interface LoggedSet {
+  /** Row index in the training log, as parseDataset reads it. */
+  index: number
+  date: string
+  exercise: string
+  set: number
+  kg: number | null
+  reps: number | null
+  rir: number | null
+  note: string | null
+}
+
+export interface SetInput {
+  date: string
+  exercise: string
+  set: number
+  kg: number | null
+  reps: number | null
+  rir: number | null
+  note?: string | null
+  /** The programme day the set belongs to, when the workout came from one. */
+  day?: string | null
+  muscle?: string | null
+}
+
+function columnNames(dataset: Dataset): Set<string> {
+  return new Set(dataset.schema.columns.map((column) => column.name))
+}
+
+function firstColumn(dataset: Dataset, candidates: string[]): DatasetColumn | undefined {
+  for (const name of candidates) {
+    const column = dataset.schema.columns.find((item) => item.name === name)
+    if (column) return column
+  }
+  return undefined
+}
+
+/** A training log has a row per set: at least date, exercise and reps. */
+export function isTrainingLog(dataset: Dataset): boolean {
+  const names = columnNames(dataset)
+  return names.has('date') && names.has('exercise') && names.has('reps')
+}
+
+/** A "next session" sheet plans each day's exercises with a target. */
+export function isNextSessionSheet(dataset: Dataset): boolean {
+  const names = columnNames(dataset)
+  return names.has('day') && names.has('exercise') && names.has('target') && !names.has('date')
+}
+
+/** A programme lists each day's exercises, without dates. */
+export function isProgramme(dataset: Dataset): boolean {
+  const names = columnNames(dataset)
+  return names.has('day') && names.has('exercise') && !names.has('date') && !names.has('target')
+}
+
+/** True for any Dataset the workout tracker reads. */
+export function isWorkoutDataset(dataset: Dataset): boolean {
+  return isTrainingLog(dataset) || isProgramme(dataset) || isNextSessionSheet(dataset)
+}
+
+function folderOf(path: string): string {
+  return path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
+}
+
+/** Prefers the candidate in the same folder as the log, then the first by path. */
+function closest(candidates: Dataset[], logPath: string): Dataset | undefined {
+  const folder = folderOf(logPath)
+  return candidates.find((item) => folderOf(item.path) === folder) ?? candidates[0]
+}
+
+/**
+ * Picks the training log, programme and next session sheet from a vault's
+ * Datasets. Returns null when there is no training log to write sets to.
+ */
+export function findWorkoutSources(datasets: Dataset[]): WorkoutSources | null {
+  const sorted = [...datasets].sort((a, b) => a.path.localeCompare(b.path))
+  const logs = sorted.filter(isTrainingLog)
+  if (logs.length === 0) return null
+  // A file named like a training log wins over another table that happens to have reps.
+  const log = logs.find((item) => /training|workout|lift|gym/i.test(item.path)) ?? logs[0]
+  const programme = closest(sorted.filter(isProgramme), log.path)
+  const nextSession = closest(sorted.filter(isNextSessionSheet), log.path)
+  return {
+    log,
+    ...(programme ? { programme } : {}),
+    ...(nextSession ? { nextSession } : {}),
+  }
+}
+
+/** "upper-a" → "Upper A", "arms-delts" → "Arms delts". */
+export function dayLabel(day: string): string {
+  const words = day.split(/[-_\s]+/).filter(Boolean)
+  return words
+    .map((word, index) =>
+      word.length === 1 ? word.toUpperCase() : index === 0 ? word[0].toUpperCase() + word.slice(1) : word
+    )
+    .join(' ')
+}
+
+function text(value: DatasetValue | undefined): string | undefined {
+  if (value === null || value === undefined) return undefined
+  const result = String(value).trim()
+  return result || undefined
+}
+
+function number(value: DatasetValue | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function sameName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase()
+}
+
+function byOrder(rows: DatasetRow[]): DatasetRow[] {
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => (number(a.row.order) ?? a.index) - (number(b.row.order) ?? b.index) || a.index - b.index)
+    .map(({ row }) => row)
+}
+
+/**
+ * The workouts someone can start, one per programme day in the order the
+ * programme lists them, with today's targets from the next session sheet.
+ */
+export function workoutTemplates(sources: WorkoutSources): WorkoutTemplate[] {
+  const plan = sources.programme ?? sources.nextSession
+  if (!plan) return []
+  const days: string[] = []
+  for (const row of plan.rows) {
+    const day = text(row.day)
+    if (day && !days.includes(day)) days.push(day)
+  }
+  return days.map((day) => {
+    const rows = byOrder(plan.rows.filter((row) => text(row.day) === day))
+    const sheet = sources.nextSession?.rows.filter((row) => text(row.day) === day) ?? []
+    const exercises = rows.flatMap((row): PlannedExercise[] => {
+      const name = text(row.exercise)
+      if (!name) return []
+      const next = sheet.find((item) => text(item.exercise) && sameName(String(item.exercise), name))
+      const planned: PlannedExercise = { name }
+      const sets = number(row.sets) ?? number(next?.sets)
+      if (sets !== undefined) planned.sets = sets
+      const fields: Array<[keyof PlannedExercise, string | undefined]> = [
+        ['reps', text(row.reps)],
+        ['rir', text(row.rir)],
+        ['rest', text(row.rest)],
+        ['muscle', text(row.muscle)],
+        ['target', text(next?.target ?? row.target)],
+        ['cue', text(next?.cue ?? row.cue)],
+        ['note', sources.programme ? text(row.note) : undefined],
+      ]
+      for (const [key, value] of fields) if (value) (planned as unknown as Record<string, string>)[key] = value
+      return [planned]
+    })
+    return { day, label: dayLabel(day), exercises }
+  })
+}
+
+/** Every set in the log, with the row index needed to edit or remove it. */
+export function loggedSets(log: Dataset): LoggedSet[] {
+  const load = firstColumn(log, LOAD_COLUMNS)
+  const rir = firstColumn(log, RIR_COLUMNS)
+  const set = firstColumn(log, SET_COLUMNS)
+  const counts = new Map<string, number>()
+  return log.rows.flatMap((row, index): LoggedSet[] => {
+    const date = text(row.date)
+    const exercise = text(row.exercise)
+    if (!date || !exercise) return []
+    const id = `${date}\n${exercise.toLowerCase()}`
+    const position = (counts.get(id) ?? 0) + 1
+    counts.set(id, position)
+    return [
+      {
+        index,
+        date,
+        exercise,
+        set: (set && number(row[set.name])) ?? position,
+        kg: (load && number(row[load.name])) ?? null,
+        reps: number(row.reps) ?? null,
+        rir: (rir && number(row[rir.name])) ?? null,
+        note: text(row.note) ?? null,
+      },
+    ]
+  })
+}
+
+/** The sets logged for one exercise on one date, in set order. */
+export function setsFor(log: Dataset, date: string, exercise: string): LoggedSet[] {
+  return loggedSets(log)
+    .filter((item) => item.date === date && sameName(item.exercise, exercise))
+    .sort((a, b) => a.set - b.set || a.index - b.index)
+}
+
+/** The most recent earlier session of an exercise, for "last time". */
+export function lastSessionFor(log: Dataset, exercise: string, before: string): LoggedSet[] {
+  const earlier = loggedSets(log).filter((item) => item.date < before && sameName(item.exercise, exercise))
+  if (earlier.length === 0) return []
+  const date = earlier.reduce((latest, item) => (item.date > latest ? item.date : latest), earlier[0].date)
+  return earlier.filter((item) => item.date === date).sort((a, b) => a.set - b.set || a.index - b.index)
+}
+
+/** The exercises logged on a date, in the order they were first logged. */
+export function exercisesOn(log: Dataset, date: string): string[] {
+  const names: string[] = []
+  for (const item of loggedSets(log)) {
+    if (item.date === date && !names.some((name) => sameName(name, item.exercise))) names.push(item.exercise)
+  }
+  return names
+}
+
+/** The programme day recorded against a date's sets, when the log has a day column. */
+export function dayOn(log: Dataset, date: string): string | undefined {
+  const row = log.rows.find((item) => text(item.date) === date && text(item.day) && text(item.day) !== 'other')
+  return text(row?.day)
+}
+
+/** Every exercise name the programme, sheet and log know, for picking one to add. */
+export function knownExercises(sources: WorkoutSources): string[] {
+  const names: string[] = []
+  const add = (value: DatasetValue | undefined) => {
+    const name = text(value)
+    if (name && !names.some((item) => sameName(item, name))) names.push(name)
+  }
+  for (const dataset of [sources.programme, sources.nextSession, sources.log]) {
+    for (const row of dataset?.rows ?? []) add(row.exercise)
+  }
+  return names.sort((a, b) => a.localeCompare(b))
+}
+
+/** Epley estimate of a one rep max, counting reps in reserve as reps. */
+export function estimateOneRepMax(kg: number | null, reps: number | null, rir: number | null): number | null {
+  if (kg === null || reps === null || kg <= 0 || reps <= 0) return null
+  return Math.round(kg * (1 + (reps + (rir ?? 0)) / 30) * 10) / 10
+}
+
+/** "32.5 kg × 9 @ 2", or "BW × 12" for a bodyweight set. */
+export function describeSet(set: Pick<LoggedSet, 'kg' | 'reps' | 'rir'>): string {
+  const load = set.kg === null ? '' : set.kg === 0 ? 'BW' : `${set.kg} kg`
+  const reps = set.reps === null ? '' : `${set.reps}`
+  const main = load && reps ? `${load} × ${reps}` : load || (reps ? `${reps} reps` : 'No reps')
+  return set.rir === null ? main : `${main} @ ${set.rir} RIR`
+}
+
+/** "32.5 kg × 9, 8, 7" when the load held, otherwise each set in full. */
+export function describeSession(sets: LoggedSet[]): string {
+  if (sets.length === 0) return ''
+  const loads = new Set(sets.map((item) => item.kg))
+  if (loads.size === 1 && sets.every((item) => item.reps !== null)) {
+    const kg = sets[0].kg
+    const load = kg === null ? '' : kg === 0 ? 'BW × ' : `${kg} kg × `
+    return `${load}${sets.map((item) => item.reps).join(', ')}`
+  }
+  return sets.map((item) => describeSet({ ...item, rir: null })).join(', ')
+}
+
+function allows(column: DatasetColumn | undefined, value: string): boolean {
+  if (!column) return false
+  if (column.type !== 'enum' || !column.values?.length) return true
+  return column.values.includes(value)
+}
+
+/** The row a set is written as, using only the columns the log has. */
+export function setRow(log: Dataset, input: SetInput): DatasetInput {
+  const names = columnNames(log)
+  const row: DatasetInput = { date: input.date, exercise: input.exercise.trim(), reps: input.reps }
+  const set = firstColumn(log, SET_COLUMNS)
+  if (set) row[set.name] = input.set
+  const load = firstColumn(log, LOAD_COLUMNS)
+  if (load) row[load.name] = input.kg
+  const rir = firstColumn(log, RIR_COLUMNS)
+  if (rir) row[rir.name] = input.rir
+  if (names.has('note') && input.note?.trim()) row.note = input.note.trim()
+  const day = log.schema.columns.find((column) => column.name === 'day')
+  const dayValue = input.day ?? (day?.type === 'enum' ? 'other' : null)
+  if (dayValue && allows(day, dayValue)) row.day = dayValue
+  const muscle = log.schema.columns.find((column) => column.name === 'muscle')
+  if (input.muscle && allows(muscle, input.muscle)) row.muscle = input.muscle
+  const e1rm = firstColumn(log, E1RM_COLUMNS)
+  const estimate = estimateOneRepMax(input.kg, input.reps, input.rir)
+  if (e1rm && estimate !== null) row[e1rm.name] = estimate
+  return row
+}
+
+/** Appends one set to the training log and returns the new file with a commit message. */
+export function logSet(path: string, raw: string, input: SetInput): { content: string; message: string } {
+  const log = parseDataset(path, raw)
+  const content = appendDatasetRow(path, raw, setRow(log, input))
+  return { content, message: `Log ${input.exercise.trim()} set ${input.set}: ${describeSet(input)}` }
+}
+
+/** Finds a logged set again in a freshly read log, by date, exercise and set number. */
+export function findSet(log: Dataset, target: Pick<LoggedSet, 'date' | 'exercise' | 'set'>): LoggedSet | undefined {
+  const matches = setsFor(log, target.date, target.exercise).filter((item) => item.set === target.set)
+  return matches[matches.length - 1]
+}
+
+/** Changes the load, reps and reps in reserve of a logged set. */
+export function editSet(
+  path: string,
+  raw: string,
+  target: Pick<LoggedSet, 'date' | 'exercise' | 'set'>,
+  values: Pick<SetInput, 'kg' | 'reps' | 'rir'>
+): { content: string; message: string } {
+  const log = parseDataset(path, raw)
+  const found = findSet(log, target)
+  if (!found) throw new Error(`Set ${target.set} of ${target.exercise} is no longer in the log.`)
+  const fields: DatasetInput = { reps: values.reps }
+  const load = firstColumn(log, LOAD_COLUMNS)
+  if (load) fields[load.name] = values.kg
+  const rir = firstColumn(log, RIR_COLUMNS)
+  if (rir) fields[rir.name] = values.rir
+  const e1rm = firstColumn(log, E1RM_COLUMNS)
+  if (e1rm) fields[e1rm.name] = estimateOneRepMax(values.kg, values.reps, values.rir)
+  return {
+    content: updateDatasetRowAt(path, raw, found.index, fields),
+    message: `Update ${target.exercise} set ${target.set}: ${describeSet(values)}`,
+  }
+}
+
+/** Removes a logged set from the training log. */
+export function deleteSet(
+  path: string,
+  raw: string,
+  target: Pick<LoggedSet, 'date' | 'exercise' | 'set'>
+): { content: string; message: string } {
+  const log = parseDataset(path, raw)
+  const found = findSet(log, target)
+  if (!found) throw new Error(`Set ${target.set} of ${target.exercise} is no longer in the log.`)
+  return {
+    content: deleteDatasetRowAt(path, raw, found.index),
+    message: `Remove ${target.exercise} set ${target.set} on ${target.date}`,
+  }
+}
+
+/** Today's date in the browser's time zone, as the log writes it. */
+export function localDate(now = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+/** Parses a number typed at the gym, accepting a comma as the decimal mark. */
+export function parseEntry(value: string): number | null {
+  const cleaned = value.trim().replace(',', '.')
+  if (!cleaned) return null
+  const parsed = Number(cleaned)
+  return Number.isFinite(parsed) ? parsed : null
+}

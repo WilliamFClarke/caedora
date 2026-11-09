@@ -6,6 +6,7 @@ import { AppSidebar } from './sidebar'
 import { EditorPane } from './editor-pane'
 import { SearchDialog, useSearchShortcut } from './search-dialog'
 import { LinkGraphPanel } from './link-graph-panel'
+import { WorkoutTracker } from '@/components/workout/workout-tracker'
 import { AssistantSidebarLoader } from '@/components/assistant/assistant-sidebar-loader'
 import { SettingsDialog, type SettingsSection } from '@/components/settings-dialog'
 import { useVault } from '@/lib/vault-context'
@@ -62,6 +63,8 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [linkGraphOpen, setLinkGraphOpen] = useState(false)
+  const [workoutOpen, setWorkoutOpen] = useState(false)
+  const openWorkout = useCallback(() => setWorkoutOpen(true), [])
   const [searchDialogOpen, setSearchDialogOpen] = useState(false)
   const openSearchDialog = useCallback(() => setSearchDialogOpen(true), [])
   useSearchShortcut(openSearchDialog)
@@ -469,6 +472,25 @@ export function VaultShell({ initialPath }: VaultShellProps) {
     [provider, virtualFolders, selected, syncUrl, removePinned, removeFolderAppearance, removeHiddenFolder]
   )
 
+  const datasetPaths = useMemo(
+    () =>
+      Object.values(conceptCatalog)
+        .filter((concept) => concept.type.trim().toLowerCase() === 'dataset')
+        .map((concept) => concept.path)
+        .sort(),
+    [conceptCatalog]
+  )
+  // A cheap guess from the search text; the tracker checks the real columns when it opens.
+  const hasTrainingLog = useMemo(
+    () =>
+      Object.values(conceptCatalog).some((concept) => {
+        if (concept.type.trim().toLowerCase() !== 'dataset') return false
+        const text = concept.body.toLowerCase()
+        return text.includes('exercise') && text.includes('reps') && text.includes('date')
+      }),
+    [conceptCatalog]
+  )
+
   const onSync = useCallback(async () => {
     // Flush any unsaved editor content first (important in manual-sync mode).
     if (editorSaveRef.current) await editorSaveRef.current()
@@ -534,6 +556,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         onSync={onSync}
         conceptCatalog={conceptCatalog}
         onOpenSearch={openSearchDialog}
+        onStartWorkout={hasTrainingLog ? openWorkout : undefined}
       />
       <SidebarInset className="min-w-0">
         <div className="caedora-vault-workspace relative flex h-full min-w-0 flex-1 overflow-hidden bg-card">
@@ -565,6 +588,7 @@ export function VaultShell({ initialPath }: VaultShellProps) {
                 conceptCatalog={conceptCatalog}
                 linkGraphOpen={linkGraphOpen}
                 onToggleLinkGraph={() => setLinkGraphOpen((open) => !open)}
+                onStartWorkout={openWorkout}
               />
             )}
           </div>
@@ -595,6 +619,13 @@ export function VaultShell({ initialPath }: VaultShellProps) {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         initialSection={settingsSection}
+      />
+      <WorkoutTracker
+        open={workoutOpen}
+        onOpenChange={setWorkoutOpen}
+        provider={provider}
+        datasetPaths={datasetPaths}
+        onLogChanged={() => void onSync()}
       />
       <SearchDialog
         open={searchDialogOpen}
