@@ -25,6 +25,7 @@ import TaskItem from "@tiptap/extension-task-item";
 import { EditorContent, type Extension, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { TipTapFloatingMenu } from "@/components/tiptap/extensions/floating-menu";
+import { TableMenu } from "@/components/tiptap/extensions/table-menu";
 import { FloatingToolbar } from "@/components/tiptap/extensions/floating-toolbar";
 import { EditorToolbar } from "./toolbars/editor-toolbar";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -238,6 +239,7 @@ export function RichTextEditorDemo({
       <EditorToolbar editor={editor} actions={toolbarActions} />
       <FloatingToolbar editor={editor} />
       <TipTapFloatingMenu editor={editor} />
+      <TableMenu editor={editor} />
       {/* Clicks in the empty space below the document content land on this
           wrapper, not on the ProseMirror element. Detect that and move the
           cursor to the end so the user can start typing immediately. */}
