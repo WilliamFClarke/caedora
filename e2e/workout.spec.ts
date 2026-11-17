@@ -120,3 +120,126 @@ test('with no signal the workout waits on the device and saves when the connecti
   await expect(tracker(page).getByRole('heading', { name: 'Workout saved' })).toBeVisible()
   expect(squashed(github)).toContain('| 2026-11-10 | Romanian deadlift | 1 | 80 | 8 | | | other |')
 })
+
+test('shows how long the workout has been going', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-11-10T18:00:00') })
+  const github = vault()
+  await openGitHubVault(page, github, 'welcome.md')
+  await startUpperA(page)
+
+  const elapsed = tracker(page).getByRole('timer', { name: 'Workout time' })
+  await expect(elapsed).toHaveText(/^0:0\d$/)
+  await page.clock.fastForward('12:00')
+  await expect(elapsed).toHaveText(/^12:0\d$/)
+  await page.clock.fastForward('01:00:00')
+  await expect(elapsed).toHaveText(/^1:12:0\d$/)
+
+  // The clock keeps counting from the start of the workout after a reload.
+  await page.reload()
+  await page.getByRole('button', { name: 'Start workout' }).first().click()
+  await expect(tracker(page).getByRole('timer', { name: 'Workout time' })).toHaveText(/^1:12:\d\d$/)
+})
+
+test('rest alerts can be turned on and stay on', async ({ page, context }) => {
+  await context.grantPermissions(['notifications'])
+  const github = vault()
+  await openGitHubVault(page, github, 'welcome.md')
+  await startUpperA(page)
+
+  await tracker(page).getByRole('button', { name: 'Turn on rest alerts' }).click()
+  await expect(tracker(page).getByRole('status')).toContainText('Rest alerts are on')
+  await expect(tracker(page).getByRole('button', { name: 'Turn off rest alerts' })).toHaveAttribute('aria-pressed', 'true')
+  const worker = await page.evaluate(async () => (await navigator.serviceWorker.ready).active?.scriptURL)
+  expect(worker).toMatch(/\/rest-alerts-sw\.js$/)
+
+  // Logging a set still starts the on screen timer as before.
+  await logSet(page, 'Incline dumbbell press', { kg: '30', reps: '10' }, 1)
+  await expect(tracker(page).getByRole('region', { name: 'Rest timer' })).toBeVisible()
+
+  await page.reload()
+  await page.getByRole('button', { name: 'Start workout' }).first().click()
+  const off = tracker(page).getByRole('button', { name: 'Turn off rest alerts' })
+  await expect(off).toBeVisible()
+  await off.click()
+  await expect(tracker(page).getByRole('button', { name: 'Turn on rest alerts' })).toHaveAttribute('aria-pressed', 'false')
+})
+
+test.describe('on an iPhone in Safari', () => {
+  test.use({
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+  })
+
+  test('rest alerts explain how to add Caedora to the Home Screen', async ({ page }) => {
+    // Safari only offers notifications to web apps opened from the Home Screen.
+    await page.addInitScript(() => {
+      delete (window as { Notification?: unknown }).Notification
+    })
+    const github = vault()
+    await openGitHubVault(page, github, 'welcome.md')
+    await startUpperA(page)
+
+    await tracker(page).getByRole('button', { name: 'Turn on rest alerts' }).click()
+    await expect(tracker(page).getByRole('status')).toContainText('Add to Home Screen')
+    await tracker(page).getByRole('button', { name: 'OK' }).click()
+    await expect(tracker(page).getByRole('status')).toBeHidden()
+  })
+})
+
+const CONDITIONING = 'health/conditioning-log.md'
+
+test('logs a treadmill run on its own and adds it to the top of the conditioning log', async ({ page }) => {
+  const github = vault()
+  await openGitHubVault(page, github, 'welcome.md')
+  await page.getByRole('button', { name: 'Start workout' }).first().click()
+  await tracker(page).getByLabel('Date').fill('2026-11-17')
+  await tracker(page).getByRole('button', { name: 'Log a run' }).click()
+
+  const form = tracker(page).getByRole('form', { name: 'Log a run' })
+  await form.getByRole('button', { name: 'Treadmill' }).click()
+  await expect(form.getByRole('button', { name: 'Treadmill' })).toHaveAttribute('aria-pressed', 'true')
+  await form.getByLabel('Run minutes').fill('30')
+  await form.getByLabel('Run distance in km').fill('5')
+  await form.getByLabel('Run average heart rate').fill('152')
+  await form.getByLabel('Run notes').fill('1% incline')
+  await expect(form).toContainText('Pace 6:00 min/km')
+  await form.getByRole('button', { name: 'Log run' }).click()
+
+  const runs = tracker(page).getByRole('region', { name: 'Runs' })
+  await expect(runs).toContainText('Treadmill · 5 km in 30 min · 6:00 min/km · 152 bpm')
+  expect(github.commits.filter((commit) => commit.path === CONDITIONING)).toHaveLength(0)
+
+  await tracker(page).getByRole('button', { name: 'Finish workout' }).click()
+  await expect(tracker(page).getByRole('region', { name: 'Runs to save' })).toContainText('5 km in 30 min')
+  await tracker(page).getByRole('button', { name: 'Save 1 run to Conditioning log' }).click()
+  await expect(tracker(page).getByRole('heading', { name: 'Run saved' })).toBeVisible()
+  await expect(tracker(page)).toContainText('1 run added to Conditioning log.')
+
+  expect(github.commits.map((commit) => commit.message)).toContain('Log run on 2026-11-17: 5 km in 30 min')
+  const table = github.read(CONDITIONING).replace(/ +/g, ' ')
+  expect(table).toContain(
+    '| --- | --- | --- | --- | --- | --- |\n| 2026-11-17 | run | 30 | 152 | 5 | Treadmill. Average pace: 6:00 min/km. 1% incline |\n| 2026-11-13 | run | 12 |'
+  )
+})
+
+test('a gym workout can include a run, saved to each log', async ({ page }) => {
+  const github = vault()
+  await openGitHubVault(page, github, 'welcome.md')
+  await startUpperA(page)
+  await logSet(page, 'Incline dumbbell press', { kg: '30', reps: '10' }, 1)
+
+  await tracker(page).getByRole('button', { name: 'Add a run' }).click()
+  const form = tracker(page).getByRole('form', { name: 'Log a run' })
+  await form.getByLabel('Run minutes').fill('10')
+  await form.getByRole('button', { name: 'Log run' }).click()
+  await expect(tracker(page).getByRole('region', { name: 'Runs' })).toContainText('Outdoor · 10 min')
+  await expect(tracker(page).getByRole('heading', { name: 'Upper A' })).toBeVisible()
+
+  await tracker(page).getByRole('button', { name: 'Finish workout' }).click()
+  await tracker(page).getByRole('button', { name: 'Save 1 set and 1 run to your vault' }).click()
+  await expect(tracker(page).getByRole('heading', { name: 'Upper A saved' })).toBeVisible()
+  expect(logCommits(github).map((commit) => commit.message)).toEqual(['Log Upper A on 2026-11-10: 1 set'])
+  expect(github.commits.filter((commit) => commit.path === CONDITIONING).map((commit) => commit.message)).toEqual([
+    'Log run on 2026-11-10: 10 min',
+  ])
+})
