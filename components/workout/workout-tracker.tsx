@@ -1088,7 +1088,15 @@ function useRestAlerts(rest: RestState | null) {
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => setState(currentRestAlertState()), [])
+  useEffect(() => {
+    let cancelled = false
+    void currentRestAlertState().then((next) => {
+      if (!cancelled) setState(next)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const endsAt = rest?.endsAt ?? null
   const exercise = rest?.exercise ?? null
@@ -1102,13 +1110,13 @@ function useRestAlerts(rest: RestState | null) {
   useEffect(() => () => void cancelRestAlert(), [])
 
   const toggle = async () => {
-    if (state === 'on') {
-      setState(disableRestAlerts())
-      setNote(null)
-      return
-    }
     setBusy(true)
     try {
+      if (state === 'on') {
+        setState(await disableRestAlerts())
+        setNote(null)
+        return
+      }
       const next = await enableRestAlerts()
       setState(next)
       setNote(ALERT_NOTES[next] ?? null)

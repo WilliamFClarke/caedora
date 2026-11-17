@@ -52,12 +52,27 @@ function writeSetting(on: boolean) {
   }
 }
 
+/**
+ * The notification permission, asking the Permissions API first. Some Chromium builds, such as
+ * headless ones, report Notification.permission as denied even after permission was granted.
+ */
+async function notificationPermission(): Promise<NotificationPermission> {
+  try {
+    const status = await navigator.permissions?.query({ name: 'notifications' })
+    if (status) return status.state === 'prompt' ? 'default' : status.state
+  } catch {
+    // Older Safari has no Permissions API for notifications.
+  }
+  return Notification.permission
+}
+
 /** Whether rest alerts are on, off, blocked or not possible on this device. */
-export function currentRestAlertState(): RestAlertState {
+export async function currentRestAlertState(): Promise<RestAlertState> {
   const support = restAlertSupport()
   if (support !== 'supported') return support
-  if (Notification.permission === 'denied') return 'denied'
-  return readSetting() && Notification.permission === 'granted' ? 'on' : 'off'
+  const permission = await notificationPermission()
+  if (permission === 'denied') return 'denied'
+  return readSetting() && permission === 'granted' ? 'on' : 'off'
 }
 
 async function registration(): Promise<ServiceWorkerRegistration> {
@@ -71,7 +86,8 @@ async function registration(): Promise<ServiceWorkerRegistration> {
 export async function enableRestAlerts(): Promise<RestAlertState> {
   const support = restAlertSupport()
   if (support !== 'supported') return support
-  const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
+  const current = await notificationPermission()
+  const permission = current === 'granted' ? 'granted' : await Notification.requestPermission()
   if (permission !== 'granted') {
     writeSetting(false)
     return permission === 'denied' ? 'denied' : 'off'
@@ -81,15 +97,15 @@ export async function enableRestAlerts(): Promise<RestAlertState> {
   return 'on'
 }
 
-export function disableRestAlerts(): RestAlertState {
+export async function disableRestAlerts(): Promise<RestAlertState> {
   // Cancel while still on, so the worker hears about it.
-  void cancelRestAlert()
+  await cancelRestAlert()
   writeSetting(false)
   return currentRestAlertState()
 }
 
 async function post(message: Record<string, unknown>) {
-  if (currentRestAlertState() !== 'on') return
+  if (!readSetting() || restAlertSupport() !== 'supported') return
   try {
     const worker = (await registration()).active
     worker?.postMessage(message)
