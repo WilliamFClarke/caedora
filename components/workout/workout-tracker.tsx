@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Bell,
+  BellOff,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -34,6 +36,7 @@ import {
   exercisesOn,
   findWorkoutSources,
   formatCountdown,
+  formatElapsed,
   knownExercises,
   lastSessionFor,
   localDate,
@@ -58,6 +61,14 @@ import {
   saveCachedFiles,
   saveDraft,
 } from '@/lib/workout-store'
+import {
+  cancelRestAlert,
+  currentRestAlertState,
+  disableRestAlerts,
+  enableRestAlerts,
+  scheduleRestAlert,
+  type RestAlertState,
+} from '@/lib/rest-alerts'
 
 type Stage = 'pick' | 'session' | 'review' | 'saved'
 
@@ -589,6 +600,8 @@ function SessionView({
 }) {
   const [adding, setAdding] = useState('')
   const [rest, setRest] = useState<RestState | null>(null)
+  const now = useNow(1000)
+  const alerts = useRestAlerts(rest)
   const known = useMemo(() => knownExercises(sources), [sources])
   // Every exercise the programme plans, so one added on the day still gets its rest time and target.
   const planned = useMemo(() => {
@@ -638,6 +651,12 @@ function SessionView({
         back={{ label: 'Back to workouts', onClick: onBack }}
       >
         <div className="mt-2 flex items-center gap-3">
+          <p className="flex shrink-0 items-center gap-1 text-sm font-medium" title="Time since the workout started">
+            <Clock className="text-muted-foreground size-4" aria-hidden />
+            <span role="timer" aria-label="Workout time" aria-live="off" className="tabular-nums">
+              {formatElapsed(now - draft.startedAt)}
+            </span>
+          </p>
           {plannedSets > 0 ? (
             <div
               className="bg-muted h-1.5 flex-1 overflow-hidden rounded-full"
@@ -652,8 +671,17 @@ function SessionView({
           ) : (
             <span className="flex-1" />
           )}
+          <RestAlertButton alerts={alerts} />
           <StatusPill online={online} storeError={storeError} />
         </div>
+        {alerts.note && (
+          <p role="status" className="text-muted-foreground mt-2 flex items-start gap-2 text-xs">
+            <span className="flex-1">{alerts.note}</span>
+            <button type="button" className="hover:text-foreground shrink-0 underline" onClick={alerts.clearNote}>
+              OK
+            </button>
+          </p>
+        )}
       </Header>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6">
@@ -1026,6 +1054,90 @@ function SetInput({
       className="bg-background h-10 rounded-lg px-1 text-center text-base font-medium tabular-nums"
       autoComplete="off"
     />
+  )
+}
+
+/** The current time, updated on an interval, so on screen timers tick. */
+function useNow(interval: number): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const tick = () => setNow(Date.now())
+    tick()
+    const id = window.setInterval(tick, interval)
+    // Catch up straight away when the phone wakes, rather than on the next tick.
+    document.addEventListener('visibilitychange', tick)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', tick)
+    }
+  }, [interval])
+  return now
+}
+
+const ALERT_NOTES: Partial<Record<RestAlertState, string>> = {
+  on: 'Rest alerts are on. Your phone will notify you when a rest ends while Caedora is in the background.',
+  denied: 'Notifications are blocked for Caedora. Allow them in your browser or phone settings to get rest alerts.',
+  'install-ios':
+    'On iPhone and iPad, rest alerts need Caedora on your Home Screen. In Safari tap Share, then Add to Home Screen, and open Caedora from there.',
+  unsupported: 'This browser cannot show notifications, so the rest timer will beep and buzz only while the tracker is open.',
+}
+
+/** Rest alert setting for the session, and a notification scheduled for each rest while it is on. */
+function useRestAlerts(rest: RestState | null) {
+  const [state, setState] = useState<RestAlertState>('off')
+  const [note, setNote] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => setState(currentRestAlertState()), [])
+
+  const endsAt = rest?.endsAt ?? null
+  const exercise = rest?.exercise ?? null
+  useEffect(() => {
+    if (state !== 'on') return
+    if (endsAt !== null && exercise !== null && endsAt > Date.now()) void scheduleRestAlert(endsAt, exercise)
+    else void cancelRestAlert()
+  }, [state, endsAt, exercise])
+
+  // Leaving the workout drops the rest timer, so its alert goes too.
+  useEffect(() => () => void cancelRestAlert(), [])
+
+  const toggle = async () => {
+    if (state === 'on') {
+      setState(disableRestAlerts())
+      setNote(null)
+      return
+    }
+    setBusy(true)
+    try {
+      const next = await enableRestAlerts()
+      setState(next)
+      setNote(ALERT_NOTES[next] ?? null)
+    } catch {
+      setNote('Rest alerts could not be turned on in this browser.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return { state, note, busy, toggle, clearNote: () => setNote(null) }
+}
+
+function RestAlertButton({ alerts }: { alerts: ReturnType<typeof useRestAlerts> }) {
+  const on = alerts.state === 'on'
+  return (
+    <Button
+      type="button"
+      size="icon"
+      variant="ghost"
+      className={cn('-my-1 size-8 shrink-0', on ? 'text-primary' : 'text-muted-foreground')}
+      aria-label={on ? 'Turn off rest alerts' : 'Turn on rest alerts'}
+      aria-pressed={on}
+      title={on ? 'Rest alerts on' : 'Get a notification when a rest ends'}
+      disabled={alerts.busy}
+      onClick={() => void alerts.toggle()}
+    >
+      {on ? <Bell className="size-4" /> : <BellOff className="size-4" />}
+    </Button>
   )
 }
 

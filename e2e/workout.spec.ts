@@ -120,3 +120,68 @@ test('with no signal the workout waits on the device and saves when the connecti
   await expect(tracker(page).getByRole('heading', { name: 'Workout saved' })).toBeVisible()
   expect(squashed(github)).toContain('| 2026-11-10 | Romanian deadlift | 1 | 80 | 8 | | | other |')
 })
+
+test('shows how long the workout has been going', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-11-10T18:00:00') })
+  const github = vault()
+  await openGitHubVault(page, github, 'welcome.md')
+  await startUpperA(page)
+
+  const elapsed = tracker(page).getByRole('timer', { name: 'Workout time' })
+  await expect(elapsed).toHaveText(/^0:0\d$/)
+  await page.clock.fastForward('12:00')
+  await expect(elapsed).toHaveText(/^12:0\d$/)
+  await page.clock.fastForward('01:00:00')
+  await expect(elapsed).toHaveText(/^1:12:0\d$/)
+
+  // The clock keeps counting from the start of the workout after a reload.
+  await page.reload()
+  await page.getByRole('button', { name: 'Start workout' }).first().click()
+  await expect(tracker(page).getByRole('timer', { name: 'Workout time' })).toHaveText(/^1:12:\d\d$/)
+})
+
+test('rest alerts can be turned on and stay on', async ({ page, context }) => {
+  await context.grantPermissions(['notifications'])
+  const github = vault()
+  await openGitHubVault(page, github, 'welcome.md')
+  await startUpperA(page)
+
+  await tracker(page).getByRole('button', { name: 'Turn on rest alerts' }).click()
+  await expect(tracker(page).getByRole('status')).toContainText('Rest alerts are on')
+  await expect(tracker(page).getByRole('button', { name: 'Turn off rest alerts' })).toHaveAttribute('aria-pressed', 'true')
+  const worker = await page.evaluate(async () => (await navigator.serviceWorker.ready).active?.scriptURL)
+  expect(worker).toMatch(/\/rest-alerts-sw\.js$/)
+
+  // Logging a set still starts the on screen timer as before.
+  await logSet(page, 'Incline dumbbell press', { kg: '30', reps: '10' }, 1)
+  await expect(tracker(page).getByRole('region', { name: 'Rest timer' })).toBeVisible()
+
+  await page.reload()
+  await page.getByRole('button', { name: 'Start workout' }).first().click()
+  const off = tracker(page).getByRole('button', { name: 'Turn off rest alerts' })
+  await expect(off).toBeVisible()
+  await off.click()
+  await expect(tracker(page).getByRole('button', { name: 'Turn on rest alerts' })).toHaveAttribute('aria-pressed', 'false')
+})
+
+test.describe('on an iPhone in Safari', () => {
+  test.use({
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+  })
+
+  test('rest alerts explain how to add Caedora to the Home Screen', async ({ page }) => {
+    // Safari only offers notifications to web apps opened from the Home Screen.
+    await page.addInitScript(() => {
+      delete (window as { Notification?: unknown }).Notification
+    })
+    const github = vault()
+    await openGitHubVault(page, github, 'welcome.md')
+    await startUpperA(page)
+
+    await tracker(page).getByRole('button', { name: 'Turn on rest alerts' }).click()
+    await expect(tracker(page).getByRole('status')).toContainText('Add to Home Screen')
+    await tracker(page).getByRole('button', { name: 'OK' }).click()
+    await expect(tracker(page).getByRole('status')).toBeHidden()
+  })
+})

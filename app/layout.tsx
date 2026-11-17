@@ -27,6 +27,11 @@ export const metadata: Metadata = {
   alternates: {
     canonical: 'https://caedora.app',
   },
+  appleWebApp: {
+    capable: true,
+    title: 'Caedora',
+    statusBarStyle: 'default',
+  },
   openGraph: {
     title: 'Caedora',
     description: 'Open Knowledge Format vaults. Private by design.',

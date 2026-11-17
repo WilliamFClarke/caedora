@@ -238,6 +238,15 @@ export function formatCountdown(totalSeconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
+/** How long a workout has been going, as m:ss, or h:mm:ss after the first hour. */
+export function formatElapsed(milliseconds: number): string {
+  const total = Math.max(0, Math.floor(milliseconds / 1000))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = String(total % 60).padStart(2, '0')
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`
+}
+
 /** Every set in the log, with the row index needed to edit or remove it. */
 export function loggedSets(log: Dataset): LoggedSet[] {
   const load = firstColumn(log, LOAD_COLUMNS)

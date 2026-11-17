@@ -10,6 +10,7 @@ import {
   findWorkoutSources,
   knownExercises,
   formatCountdown,
+  formatElapsed,
   lastSessionFor,
   nextSetNumber,
   parseEntry,
@@ -141,6 +142,14 @@ test('rest times are read from the plan, with a default for anything unplanned',
   expect(restSecondsFor({})).toBe(90)
   expect(formatCountdown(125)).toBe('2:05')
   expect(formatCountdown(-3)).toBe('0:00')
+})
+
+test('formats how long a workout has been going', () => {
+  expect(formatElapsed(0)).toBe('0:00')
+  expect(formatElapsed(65_900)).toBe('1:05')
+  expect(formatElapsed(59 * 60_000 + 59_000)).toBe('59:59')
+  expect(formatElapsed(3_600_000 + 4 * 60_000 + 7_000)).toBe('1:04:07')
+  expect(formatElapsed(-5000)).toBe('0:00')
 })
 
 test('last time shows the most recent earlier session', () => {
