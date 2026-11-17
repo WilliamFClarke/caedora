@@ -174,8 +174,35 @@ Until the first session of each day is logged, "last time" is empty and the targ
 | lower-a | 6 | Hanging leg raise | 3 |  | 10 to 15 reps, 1 in reserve | Curl the pelvis up, do not swing |
 `
 
+/** Copied from the Alpha-Vault: newest row first, as the log asks. */
+export const CONDITIONING_LOG = `---
+type: Dataset
+title: Conditioning log
+description: Cardio and sport sessions, one row each with type, minutes, average heart rate and distance, used to track aerobic base alongside lifting.
+tags: [health, conditioning, cardio, log]
+dataset:
+  columns:
+    date: { type: date, required: true }
+    type: { type: enum, values: [zone2, intervals, walk, run, cycle, swim, sport, other] }
+    minutes: { type: number, required: true }
+    avg_hr: { type: number, label: Average heart rate }
+    distance_km: { type: number, label: Distance (km) }
+    notes: { type: text }
+generated: { by: claude, at: 2026-11-09T18:00:00Z }
+---
+
+# Conditioning log
+
+One row per cardio or sport session, newest first. The weekend run goes here as type run, and Claude copies its distance into the [run plan](/health/run-plan.md). Zone 2 is steady work where Will can still talk in full sentences, roughly 60 to 70% of maximum heart rate. Intervals are hard efforts with rest between. Ordinary walking only needs logging if it was a deliberate long walk; daily steps go in the [daily check in](/health/daily-log.md).
+
+| date | type | minutes | avg_hr | distance_km | notes |
+| --- | --- | --- | --- | --- | --- |
+| 2026-11-13 | run | 12 | | 2 | Average pace: 6:00 min/km. |
+`
+
 export const WORKOUT_FILES: Record<string, string> = {
   'health/training-log.md': TRAINING_LOG_WITH_HISTORY,
   'health/programme.md': PROGRAMME,
   'health/next-session.md': NEXT_SESSION,
+  'health/conditioning-log.md': CONDITIONING_LOG,
 }

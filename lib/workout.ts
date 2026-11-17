@@ -24,7 +24,15 @@ export interface WorkoutSources {
   log: Dataset
   programme?: Dataset
   nextSession?: Dataset
+  /** Where runs and other cardio go, one row per session. */
+  conditioning?: Dataset
 }
+
+const MINUTES_COLUMNS = ['minutes', 'duration_min', 'duration_minutes', 'mins']
+const DISTANCE_COLUMNS = ['distance_km', 'km', 'distance']
+const HEART_RATE_COLUMNS = ['avg_hr', 'average_hr', 'hr', 'heart_rate']
+const NOTES_COLUMNS = ['notes', 'note']
+const ACTIVITY_COLUMNS = ['type', 'activity', 'kind']
 
 export interface PlannedExercise {
   name: string
@@ -102,9 +110,15 @@ export function isProgramme(dataset: Dataset): boolean {
   return names.has('day') && names.has('exercise') && !names.has('date') && !names.has('target')
 }
 
+/** A conditioning log has a row per cardio session: a date and how many minutes, but no exercise. */
+export function isConditioningLog(dataset: Dataset): boolean {
+  const names = columnNames(dataset)
+  return names.has('date') && !names.has('exercise') && MINUTES_COLUMNS.some((name) => names.has(name))
+}
+
 /** True for any Dataset the workout tracker reads. */
 export function isWorkoutDataset(dataset: Dataset): boolean {
-  return isTrainingLog(dataset) || isProgramme(dataset) || isNextSessionSheet(dataset)
+  return isTrainingLog(dataset) || isProgramme(dataset) || isNextSessionSheet(dataset) || isConditioningLog(dataset)
 }
 
 function folderOf(path: string): string {
@@ -129,10 +143,16 @@ export function findWorkoutSources(datasets: Dataset[]): WorkoutSources | null {
   const log = logs.find((item) => /training|workout|lift|gym/i.test(item.path)) ?? logs[0]
   const programme = closest(sorted.filter(isProgramme), log.path)
   const nextSession = closest(sorted.filter(isNextSessionSheet), log.path)
+  const cardio = sorted.filter(isConditioningLog)
+  const conditioning = closest(
+    cardio.filter((item) => /condition|cardio|run/i.test(item.path)).concat(cardio),
+    log.path
+  )
   return {
     log,
     ...(programme ? { programme } : {}),
     ...(nextSession ? { nextSession } : {}),
+    ...(conditioning ? { conditioning } : {}),
   }
 }
 
@@ -393,7 +413,113 @@ export interface WorkoutDraft {
   label: string
   exercises: PlannedExercise[]
   sets: DraftSet[]
+  /** Runs logged during the workout. Missing from drafts saved before runs could be logged. */
+  runs?: DraftRun[]
   startedAt: number
+}
+
+/** A run kept on the device until the workout is finished, outdoors or on a treadmill. */
+export interface DraftRun {
+  id: string
+  treadmill: boolean
+  minutes: number
+  distanceKm: number | null
+  avgHr: number | null
+  note: string | null
+  loggedAt: number
+}
+
+/** "6:00 min/km", or null without both a time and a distance. */
+export function formatPace(minutes: number | null, distanceKm: number | null): string | null {
+  if (!minutes || !distanceKm || minutes <= 0 || distanceKm <= 0) return null
+  const seconds = Math.round((minutes * 60) / distanceKm)
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} min/km`
+}
+
+/** A short line for a run, such as "Treadmill · 5 km in 30 min · 6:00 min/km". */
+export function describeRun(run: Pick<DraftRun, 'treadmill' | 'minutes' | 'distanceKm' | 'avgHr'>): string {
+  const parts = [run.treadmill ? 'Treadmill' : 'Outdoor']
+  parts.push(run.distanceKm ? `${run.distanceKm} km in ${run.minutes} min` : `${run.minutes} min`)
+  const pace = formatPace(run.minutes, run.distanceKm)
+  if (pace) parts.push(pace)
+  if (run.avgHr) parts.push(`${run.avgHr} bpm`)
+  return parts.join(' · ')
+}
+
+/** The row a run is written as, using only the columns the conditioning log has. */
+export function runRow(conditioning: Dataset, date: string, run: DraftRun): DatasetInput {
+  const row: DatasetInput = { date }
+  const minutes = firstColumn(conditioning, MINUTES_COLUMNS)
+  if (minutes) row[minutes.name] = run.minutes
+  const activity = firstColumn(conditioning, ACTIVITY_COLUMNS)
+  if (activity) {
+    const value = ['run', 'running', 'other'].find((item) => allows(activity, item))
+    if (value) row[activity.name] = value
+  }
+  const distance = firstColumn(conditioning, DISTANCE_COLUMNS)
+  if (distance && run.distanceKm !== null) row[distance.name] = run.distanceKm
+  const heartRate = firstColumn(conditioning, HEART_RATE_COLUMNS)
+  if (heartRate && run.avgHr !== null) row[heartRate.name] = run.avgHr
+  const notes = firstColumn(conditioning, NOTES_COLUMNS)
+  if (notes) {
+    const pace = formatPace(run.minutes, run.distanceKm)
+    const text = [run.treadmill ? 'Treadmill.' : '', pace ? `Average pace: ${pace}.` : '', run.note?.trim() ?? '']
+      .filter(Boolean)
+      .join(' ')
+    if (text) row[notes.name] = text
+  }
+  return row
+}
+
+/** A markdown table's delimiter row, such as | --- | :---: |. Needs a pipe, so frontmatter fences never match. */
+const isDelimiterRow = (line: string) => line.includes('|') && line.includes('---') && /^[\s|:-]+$/.test(line)
+
+/** True when the log keeps its newest rows at the top, from its dates or from saying so. */
+function newestFirst(dataset: Dataset, raw: string): boolean {
+  const dates = dataset.rows.map((row) => text(row.date)).filter((value): value is string => !!value)
+  if (dates.length >= 2 && dates[0] !== dates[dates.length - 1]) return dates[0] > dates[dates.length - 1]
+  return /newest first|most recent first|latest first/i.test(raw)
+}
+
+/**
+ * Adds a row to a log, keeping the log's own order: at the end of a log that
+ * runs oldest first, and in date order near the top of one that runs newest first.
+ */
+function addInDateOrder(path: string, raw: string, input: DatasetInput, date: string): string {
+  const dataset = parseDataset(path, raw)
+  const appended = appendDatasetRow(path, raw, input)
+  if (dataset.rows.length === 0 || !newestFirst(dataset, raw)) return appended
+  const before = raw.split('\n')
+  const after = appended.split('\n')
+  let added = after.findIndex((line, index) => line !== before[index])
+  if (added < 0) return appended
+  // Appending can also add a final newline; the new row is the first changed line that is a table row.
+  while (added < after.length && !after[added].trim().startsWith('|')) added++
+  const [line] = after.splice(added, 1)
+  // The table's delimiter row is the nearest one above where the row was appended.
+  let delimiter = added - 1
+  while (delimiter >= 0 && !isDelimiterRow(after[delimiter])) delimiter--
+  if (delimiter < 0) return appended
+  const position = dataset.rows.findIndex((row) => (text(row.date) ?? '') <= date)
+  const target = delimiter + 1 + (position < 0 ? dataset.rows.length : position)
+  after.splice(target, 0, line)
+  return after.join('\n')
+}
+
+/** Adds the runs of a finished workout to the conditioning log as one change. */
+export function commitRuns(path: string, raw: string, draft: WorkoutDraft): { content: string; message: string } {
+  let content = raw
+  const runs = draft.runs ?? []
+  for (const run of runs) {
+    content = addInDateOrder(path, content, runRow(parseDataset(path, content), draft.date, run), draft.date)
+  }
+  const detail =
+    runs.length === 1
+      ? runs[0].distanceKm
+        ? `${runs[0].distanceKm} km in ${runs[0].minutes} min`
+        : `${runs[0].minutes} min`
+      : `${runs.length} runs`
+  return { content, message: `Log run on ${draft.date}: ${detail}` }
 }
 
 /** The sets of one exercise in a draft, in set order. */

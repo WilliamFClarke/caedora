@@ -3,6 +3,9 @@ import { parseDataset } from '@/lib/dataset'
 import { appendDatasetRow, deleteDatasetRowAt, updateDatasetRowAt } from '@/lib/dataset-edit'
 import {
   commitDraft,
+  commitRuns,
+  describeRun,
+  formatPace,
   dayLabel,
   describeSession,
   estimateOneRepMax,
@@ -20,10 +23,11 @@ import {
   reviewDraft,
   setsFor,
   workoutTemplates,
+  type DraftRun,
   type DraftSet,
   type WorkoutDraft,
 } from '@/lib/workout'
-import { NEXT_SESSION, PROGRAMME, TRAINING_LOG, TRAINING_LOG_WITH_HISTORY } from '../fixtures/workout'
+import { CONDITIONING_LOG, NEXT_SESSION, PROGRAMME, TRAINING_LOG, TRAINING_LOG_WITH_HISTORY } from '../fixtures/workout'
 
 const LOG = 'health/training-log.md'
 
@@ -180,4 +184,54 @@ test('rows can be appended, changed and removed in a table without a key', () =>
   const changed = updateDatasetRowAt(LOG, appended, 0, { reps: 9 })
   expect(squash(changed)).toContain('| 2026-11-10 | Pull up | 1 | 0 | 9 |')
   expect(deleteDatasetRowAt(LOG, changed, 0)).toBe(TRAINING_LOG)
+})
+
+const CONDITIONING = 'health/conditioning-log.md'
+
+function run(fields: Partial<DraftRun>): DraftRun {
+  return { id: 'r', treadmill: false, minutes: 30, distanceKm: 5, avgHr: null, note: null, loggedAt: 0, ...fields }
+}
+
+function runDraft(date: string, runs: DraftRun[]): WorkoutDraft {
+  return { date, day: null, label: 'Run', exercises: [], sets: [], runs, startedAt: 0 }
+}
+
+test('finds the conditioning log beside the training log', () => {
+  const found = findWorkoutSources([
+    parseDataset(LOG, TRAINING_LOG_WITH_HISTORY),
+    parseDataset(CONDITIONING, CONDITIONING_LOG),
+  ])
+  expect(found?.conditioning?.path).toBe(CONDITIONING)
+  expect(found?.log.path).toBe(LOG)
+})
+
+test('pace and run summaries read naturally', () => {
+  expect(formatPace(30, 5)).toBe('6:00 min/km')
+  expect(formatPace(27.5, 5)).toBe('5:30 min/km')
+  expect(formatPace(30, null)).toBeNull()
+  expect(describeRun(run({ treadmill: true, avgHr: 152 }))).toBe('Treadmill · 5 km in 30 min · 6:00 min/km · 152 bpm')
+  expect(describeRun(run({ distanceKm: null, minutes: 20 }))).toBe('Outdoor · 20 min')
+})
+
+test('a run goes to the top of a newest first conditioning log, in the format already there', () => {
+  const result = commitRuns(CONDITIONING, CONDITIONING_LOG, runDraft('2026-11-17', [run({ treadmill: true, note: '1% incline' })]))
+  expect(result.message).toBe('Log run on 2026-11-17: 5 km in 30 min')
+  const rows = parseDataset(CONDITIONING, result.content).rows
+  expect(rows.map((row) => row.date)).toEqual(['2026-11-17', '2026-11-13'])
+  expect(rows[0]).toMatchObject({ type: 'run', minutes: 30, distance_km: 5, notes: 'Treadmill. Average pace: 6:00 min/km. 1% incline' })
+  // Everything around the table is left alone.
+  expect(result.content.split('| 2026-11-17 |')[0]).toBe(CONDITIONING_LOG.split('| 2026-11-13 |')[0])
+})
+
+test('an older run slots in by date, and an oldest first log keeps adding at the end', () => {
+  const twoRows = commitRuns(CONDITIONING, CONDITIONING_LOG, runDraft('2026-11-17', [run({})])).content
+  const backdated = commitRuns(CONDITIONING, twoRows, runDraft('2026-11-15', [run({ minutes: 25, avgHr: 150 })]))
+  expect(parseDataset(CONDITIONING, backdated.content).rows.map((row) => row.date)).toEqual(['2026-11-17', '2026-11-15', '2026-11-13'])
+
+  const oldestFirst = CONDITIONING_LOG.replace('newest first', 'oldest first')
+  const appended = commitRuns(CONDITIONING, oldestFirst, runDraft('2026-11-17', [run({}), run({ id: 'b', minutes: 10, distanceKm: null })]))
+  expect(appended.message).toBe('Log run on 2026-11-17: 2 runs')
+  const rows = parseDataset(CONDITIONING, appended.content).rows
+  expect(rows.map((row) => row.minutes)).toEqual([12, 30, 10])
+  expect(rows[2].distance_km ?? null).toBeNull()
 })

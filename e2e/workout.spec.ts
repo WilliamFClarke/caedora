@@ -185,3 +185,61 @@ test.describe('on an iPhone in Safari', () => {
     await expect(tracker(page).getByRole('status')).toBeHidden()
   })
 })
+
+const CONDITIONING = 'health/conditioning-log.md'
+
+test('logs a treadmill run on its own and adds it to the top of the conditioning log', async ({ page }) => {
+  const github = vault()
+  await openGitHubVault(page, github, 'welcome.md')
+  await page.getByRole('button', { name: 'Start workout' }).first().click()
+  await tracker(page).getByLabel('Date').fill('2026-11-17')
+  await tracker(page).getByRole('button', { name: 'Log a run' }).click()
+
+  const form = tracker(page).getByRole('form', { name: 'Log a run' })
+  await form.getByRole('button', { name: 'Treadmill' }).click()
+  await expect(form.getByRole('button', { name: 'Treadmill' })).toHaveAttribute('aria-pressed', 'true')
+  await form.getByLabel('Run minutes').fill('30')
+  await form.getByLabel('Run distance in km').fill('5')
+  await form.getByLabel('Run average heart rate').fill('152')
+  await form.getByLabel('Run notes').fill('1% incline')
+  await expect(form).toContainText('Pace 6:00 min/km')
+  await form.getByRole('button', { name: 'Log run' }).click()
+
+  const runs = tracker(page).getByRole('region', { name: 'Runs' })
+  await expect(runs).toContainText('Treadmill · 5 km in 30 min · 6:00 min/km · 152 bpm')
+  expect(github.commits.filter((commit) => commit.path === CONDITIONING)).toHaveLength(0)
+
+  await tracker(page).getByRole('button', { name: 'Finish workout' }).click()
+  await expect(tracker(page).getByRole('region', { name: 'Runs to save' })).toContainText('5 km in 30 min')
+  await tracker(page).getByRole('button', { name: 'Save 1 run to Conditioning log' }).click()
+  await expect(tracker(page).getByRole('heading', { name: 'Run saved' })).toBeVisible()
+  await expect(tracker(page)).toContainText('1 run added to Conditioning log.')
+
+  expect(github.commits.map((commit) => commit.message)).toContain('Log run on 2026-11-17: 5 km in 30 min')
+  const table = github.read(CONDITIONING).replace(/ +/g, ' ')
+  expect(table).toContain(
+    '| --- | --- | --- | --- | --- | --- |\n| 2026-11-17 | run | 30 | 152 | 5 | Treadmill. Average pace: 6:00 min/km. 1% incline |\n| 2026-11-13 | run | 12 |'
+  )
+})
+
+test('a gym workout can include a run, saved to each log', async ({ page }) => {
+  const github = vault()
+  await openGitHubVault(page, github, 'welcome.md')
+  await startUpperA(page)
+  await logSet(page, 'Incline dumbbell press', { kg: '30', reps: '10' }, 1)
+
+  await tracker(page).getByRole('button', { name: 'Add a run' }).click()
+  const form = tracker(page).getByRole('form', { name: 'Log a run' })
+  await form.getByLabel('Run minutes').fill('10')
+  await form.getByRole('button', { name: 'Log run' }).click()
+  await expect(tracker(page).getByRole('region', { name: 'Runs' })).toContainText('Outdoor · 10 min')
+  await expect(tracker(page).getByRole('heading', { name: 'Upper A' })).toBeVisible()
+
+  await tracker(page).getByRole('button', { name: 'Finish workout' }).click()
+  await tracker(page).getByRole('button', { name: 'Save 1 set and 1 run to your vault' }).click()
+  await expect(tracker(page).getByRole('heading', { name: 'Upper A saved' })).toBeVisible()
+  expect(logCommits(github).map((commit) => commit.message)).toEqual(['Log Upper A on 2026-11-10: 1 set'])
+  expect(github.commits.filter((commit) => commit.path === CONDITIONING).map((commit) => commit.message)).toEqual([
+    'Log run on 2026-11-10: 10 min',
+  ])
+})
