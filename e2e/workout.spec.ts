@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { FakeGitHub, openGitHubVault } from './github'
-import { WORKOUT_FILES } from '../tests/fixtures/workout'
+import { NEXT_SESSION, TRAINING_LOG_WITH_HISTORY, WORKOUT_FILES } from '../tests/fixtures/workout'
 
 const LOG = 'health/training-log.md'
 
@@ -75,6 +75,38 @@ test('logs sets on the device, starts the rest timer and saves the workout after
   expect(squashed(github)).toContain('| 2026-11-10 | Incline dumbbell press | 1 | 32.5 | 9 | 2 | | upper-a | chest | 44.4 |')
   expect(squashed(github)).toContain('| 2026-11-10 | Incline dumbbell press | 2 | 32.5 | 8 | 2 |')
   expect(squashed(github)).toContain('| 2026-11-10 | Chest supported row | 1 | 40 | 11 |')
+})
+
+test('each exercise starts at the planned weight, last time or an estimate from a similar exercise', async ({ page }) => {
+  // The sheet plans 12.5 kg for the curl and names a load in the row's target; the log has a similar triceps exercise.
+  const sheet = NEXT_SESSION.replace('    target: { type: text', "    kg: { type: number, label: Today's kg }\n    target: { type: text")
+    .replace('| sets | last_time | target | cue |', '| sets | last_time | kg | target | cue |')
+    .replace('| --- | --- | --- | --- | --- | --- | --- |', '| --- | --- | --- | --- | --- | --- | --- | --- |')
+    .replace(/^(\| [a-z-]+ \| \d+ \| [^|]+ \| \d+ \| [^|]* \|)/gm, '$1 |')
+    .replace('| EZ bar curl | 3 |  | |', '| EZ bar curl | 3 |  | 12.5 |')
+    .replace('Find a load for 8 to 10 reps, 1 to 2 in reserve | Pause', 'Start at about 40 kg for 8 to 10 reps | Pause')
+  const log = `${TRAINING_LOG_WITH_HISTORY}| 2026-11-05 | Triceps extension | 1 | 27 | 13 | 0 |  | other | triceps | 38.7 |\n`
+  const github = new FakeGitHub('will', 'health-vault', {
+    ...WORKOUT_FILES,
+    'welcome.md': '---\ntype: Note\ntitle: Welcome\ndescription: Start here.\n---\n\n# Welcome\n',
+    'health/next-session.md': sheet,
+    'health/training-log.md': log,
+  })
+  await openGitHubVault(page, github, 'welcome.md')
+  await startUpperA(page)
+
+  await expect(exercise(page, 'Incline dumbbell press').getByLabel('Incline dumbbell press kg')).toHaveValue('30')
+  await expect(exercise(page, 'EZ bar curl').getByLabel('EZ bar curl kg')).toHaveValue('12.5')
+  await expect(exercise(page, 'Chest supported row').getByLabel('Chest supported row kg')).toHaveValue('40')
+  const triceps = exercise(page, 'Overhead cable triceps extension')
+  await expect(triceps.getByLabel('Overhead cable triceps extension kg')).toHaveValue('27')
+  await expect(triceps).toContainText('27 kg estimated from Triceps extension')
+  // Nothing to go on, so the box stays empty.
+  await expect(exercise(page, 'Cable lateral raise').getByLabel('Cable lateral raise kg')).toHaveValue('')
+
+  // After the first set, the next one carries on from what was just lifted.
+  await logSet(page, 'EZ bar curl', { kg: '15', reps: '10' }, 1)
+  await expect(exercise(page, 'EZ bar curl').getByLabel('EZ bar curl kg')).toHaveValue('15')
 })
 
 test('a workout in progress survives a reload', async ({ page }) => {
