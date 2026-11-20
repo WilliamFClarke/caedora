@@ -84,7 +84,8 @@ test('a workout in progress survives a reload', async ({ page }) => {
   await logSet(page, 'Incline dumbbell press', { kg: '30', reps: '10' }, 1)
   await expect(exercise(page, 'Incline dumbbell press').getByRole('button', { name: /Edit set 1 of Incline dumbbell press/ })).toBeVisible()
 
-  await page.reload()
+  // Load the note without the ?workout link, so the draft comes back from the device alone.
+  await page.goto(page.url().split('?')[0])
   await page.getByRole('button', { name: 'Start workout' }).first().click()
   await expect(tracker(page).getByRole('heading', { name: 'Upper A' })).toBeVisible()
   const press = exercise(page, 'Incline dumbbell press')
@@ -135,7 +136,8 @@ test('shows how long the workout has been going', async ({ page }) => {
   await expect(elapsed).toHaveText(/^1:12:0\d$/)
 
   // The clock keeps counting from the start of the workout after a reload.
-  await page.reload()
+  // Load the note without the ?workout link, so the draft comes back from the device alone.
+  await page.goto(page.url().split('?')[0])
   await page.getByRole('button', { name: 'Start workout' }).first().click()
   await expect(tracker(page).getByRole('timer', { name: 'Workout time' })).toHaveText(/^1:12:\d\d$/)
 })
@@ -156,7 +158,8 @@ test('rest alerts can be turned on and stay on', async ({ page, context }) => {
   await logSet(page, 'Incline dumbbell press', { kg: '30', reps: '10' }, 1)
   await expect(tracker(page).getByRole('region', { name: 'Rest timer' })).toBeVisible()
 
-  await page.reload()
+  // Load the note without the ?workout link, so the draft comes back from the device alone.
+  await page.goto(page.url().split('?')[0])
   await page.getByRole('button', { name: 'Start workout' }).first().click()
   const off = tracker(page).getByRole('button', { name: 'Turn off rest alerts' })
   await expect(off).toBeVisible()

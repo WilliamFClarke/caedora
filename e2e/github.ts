@@ -146,6 +146,17 @@ export async function openGitHubVault(
 ) {
   await github.install(page)
   await page.goto('/')
+  await saveGitHubVault(page, github, credentials)
+  await page.goto(`/vault/${path}`)
+  await expect(page.getByRole('main')).toBeVisible({ timeout: 30_000 })
+}
+
+/** Stores the fake repository as the active vault, as connecting it from the home page does. */
+export async function saveGitHubVault(
+  page: Page,
+  github: FakeGitHub,
+  credentials: Record<string, unknown> = { githubAuth: 'pat', githubPat: 'test-token' }
+) {
   await page.evaluate(
     async ({ owner, repo, credentials }) => {
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -174,8 +185,6 @@ export async function openGitHubVault(
     },
     { owner: github.owner, repo: github.repo, credentials }
   )
-  await page.goto(`/vault/${path}`)
-  await expect(page.getByRole('main')).toBeVisible({ timeout: 30_000 })
 }
 
 /** Makes the vault poll now, as it does when the tab becomes visible again. */

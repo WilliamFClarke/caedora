@@ -10,6 +10,9 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/vault',
     scope: '/',
     display: 'standalone',
+    // Where the browser hands a caedora.app link to the installed app (Chrome on
+    // Android and desktop), open it in the window that is already open.
+    launch_handler: { client_mode: ['navigate-existing', 'auto'] },
     background_color: '#ffffff',
     theme_color: '#ffffff',
     icons: [{ src: '/icon.png', sizes: '500x500', type: 'image/png', purpose: 'any' }],
