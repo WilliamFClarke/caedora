@@ -5,7 +5,10 @@ import {
   commitDraft,
   commitRuns,
   describeRun,
+  cardioActivityFor,
   formatPace,
+  formatSpeed,
+  isCardio,
   dayLabel,
   describeSession,
   estimateOneRepMax,
@@ -234,4 +237,44 @@ test('an older run slots in by date, and an oldest first log keeps adding at the
   const rows = parseDataset(CONDITIONING, appended.content).rows
   expect(rows.map((row) => row.minutes)).toEqual([12, 30, 10])
   expect(rows[2].distance_km ?? null).toBeNull()
+})
+
+test('cardio exercises in a programme are told apart from lifts', () => {
+  expect(isCardio({ name: 'Warm up', reps: '5 min' })).toBe(true)
+  expect(isCardio({ name: 'Treadmill easy run', reps: '12 to 15 min' })).toBe(true)
+  expect(isCardio({ name: 'Bike warm up' })).toBe(true)
+  expect(isCardio({ name: 'Cross trainer' })).toBe(true)
+  expect(isCardio({ name: 'Romanian deadlift', reps: '8 to 10', muscle: 'hamstrings' })).toBe(false)
+  expect(isCardio({ name: 'Seated row', reps: '10 to 12' })).toBe(false)
+  expect(isCardio({ name: 'Plank', reps: '30 s', muscle: 'abs' })).toBe(false)
+
+  expect(cardioActivityFor({ name: 'Warm up', note: 'Bike or cross trainer, then one light set' })).toEqual({ activity: 'bike', treadmill: false })
+  expect(cardioActivityFor({ name: 'Cross trainer warm up', note: 'or the bike' })).toEqual({ activity: 'cross-trainer', treadmill: false })
+  expect(cardioActivityFor({ name: 'Treadmill warm up jog' })).toEqual({ activity: 'run', treadmill: true })
+  expect(cardioActivityFor({ name: 'Warm up' })).toEqual({ activity: 'run', treadmill: false })
+})
+
+test('bike and cross trainer sessions show speed and level, and go to the log as cardio', () => {
+  expect(formatSpeed(5, 2)).toBe('24 km/h')
+  expect(describeRun(run({ activity: 'bike', minutes: 5, distanceKm: 2, level: 6 }))).toBe('Bike · 2 km in 5 min · 24 km/h · level 6')
+  expect(describeRun(run({ activity: 'cross-trainer', minutes: 5, distanceKm: null, level: null }))).toBe('Cross trainer · 5 min')
+
+  const bike = commitRuns(CONDITIONING, CONDITIONING_LOG, runDraft('2026-11-20', [run({ activity: 'bike', minutes: 5, distanceKm: 2, level: 6, exercise: 'Warm up' })]))
+  expect(bike.message).toBe('Log bike on 2026-11-20: 2 km in 5 min')
+  expect(parseDataset(CONDITIONING, bike.content).rows[0]).toMatchObject({
+    type: 'cycle',
+    minutes: 5,
+    distance_km: 2,
+    notes: 'Bike, level 6. Average speed: 24 km/h.',
+  })
+
+  // The log has no cross trainer type, so it goes in as other with the machine in the notes.
+  const both = commitRuns(
+    CONDITIONING,
+    CONDITIONING_LOG,
+    runDraft('2026-11-20', [run({ activity: 'cross-trainer', minutes: 10, distanceKm: null }), run({ id: 'b' })])
+  )
+  expect(both.message).toBe('Log cardio on 2026-11-20: 2 cardio sessions')
+  const rows = parseDataset(CONDITIONING, both.content).rows
+  expect(rows.find((row) => row.minutes === 10)).toMatchObject({ type: 'other', notes: 'Cross trainer.' })
 })

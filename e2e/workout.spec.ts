@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { FakeGitHub, openGitHubVault } from './github'
-import { WORKOUT_FILES } from '../tests/fixtures/workout'
+import { PROGRAMME, WORKOUT_FILES } from '../tests/fixtures/workout'
 
 const LOG = 'health/training-log.md'
 
@@ -242,4 +242,45 @@ test('a gym workout can include a run, saved to each log', async ({ page }) => {
   expect(github.commits.filter((commit) => commit.path === CONDITIONING).map((commit) => commit.message)).toEqual([
     'Log run on 2026-11-10: 10 min',
   ])
+})
+
+test('a bike warm up in the programme is logged as cardio, with no reps to enter', async ({ page }) => {
+  const github = new FakeGitHub('will', 'health-vault', {
+    'welcome.md': '---\ntype: Note\ntitle: Welcome\ndescription: Start here.\n---\n\n# Welcome\n',
+    ...WORKOUT_FILES,
+    'health/programme.md': PROGRAMME.replace(
+      '| upper-a | 1 |',
+      '| upper-a | 0 | Warm up |  | 1 | 5 min | easy | 60 s | Bike or cross trainer, then a light set of incline press |\n| upper-a | 1 |'
+    ),
+  })
+  await openGitHubVault(page, github, 'welcome.md')
+  await startUpperA(page)
+
+  const warmUp = exercise(page, 'Warm up')
+  await expect(warmUp).toContainText('5 min')
+  await expect(warmUp.getByLabel('Warm up reps', { exact: true })).toHaveCount(0)
+  const form = warmUp.getByRole('form', { name: 'Log a bike session' })
+  await expect(form.getByRole('button', { name: 'Bike', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await form.getByLabel('Bike minutes').fill('5')
+  await form.getByLabel('Bike distance in km').fill('2')
+  await form.getByLabel('Bike level').fill('6')
+  await expect(form).toContainText('Speed 24 km/h')
+  await form.getByRole('button', { name: 'Log bike' }).click()
+
+  await expect(warmUp).toContainText('Bike · 2 km in 5 min · 24 km/h · level 6')
+  await expect(warmUp.getByRole('form')).toHaveCount(0)
+  await expect(tracker(page).getByRole('region', { name: 'Rest timer' })).toContainText('Rest after Warm up')
+  await tracker(page).getByRole('region', { name: 'Rest timer' }).getByRole('button', { name: 'Skip' }).click()
+
+  await logSet(page, 'Incline dumbbell press', { kg: '30', reps: '10' }, 1)
+  await tracker(page).getByRole('button', { name: 'Finish workout' }).click()
+  await tracker(page).getByRole('button', { name: 'Save 1 set and 1 cardio session to your vault' }).click()
+  await expect(tracker(page).getByRole('heading', { name: 'Upper A saved' })).toBeVisible()
+  await expect(tracker(page)).toContainText('1 cardio session added to Conditioning log.')
+
+  expect(logCommits(github).map((commit) => commit.message)).toEqual(['Log Upper A on 2026-11-10: 1 set'])
+  expect(github.commits.filter((commit) => commit.path === CONDITIONING).map((commit) => commit.message)).toEqual([
+    'Log bike on 2026-11-10: 2 km in 5 min',
+  ])
+  expect(github.read(CONDITIONING).replace(/ +/g, ' ')).toContain('| 2026-11-10 | cycle | 5 | | 2 | Bike, level 6. Average speed: 24 km/h. |')
 })
