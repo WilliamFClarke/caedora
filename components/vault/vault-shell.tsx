@@ -34,6 +34,16 @@ import { useFolderAppearance } from '@/hooks/use-folder-appearance'
 import { useHiddenFolders } from '@/hooks/use-hidden-folders'
 import { isInHiddenFolder } from '@/lib/hidden-folders'
 import { useSettings } from '@/lib/settings-context'
+import {
+  isDeepLink,
+  notePathFromPathname,
+  rememberPendingLink,
+  resolveNotePath,
+  takePendingLink,
+  vaultUrl,
+  workoutFromSearch,
+  WORKOUT_PARAM,
+} from '@/lib/deep-link'
 import type { FolderAppearance } from '@/lib/folder-appearance'
 import type { FileEntry, VaultProvider } from '@/lib/types'
 import {
@@ -64,7 +74,12 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [linkGraphOpen, setLinkGraphOpen] = useState(false)
   const [workoutOpen, setWorkoutOpen] = useState(false)
-  const openWorkout = useCallback(() => setWorkoutOpen(true), [])
+  // The workout a link asked for (?workout=full-body-a), shown first in the tracker.
+  const [linkedWorkout, setLinkedWorkout] = useState<string | null>(null)
+  const openWorkout = useCallback(() => {
+    setLinkedWorkout(null)
+    setWorkoutOpen(true)
+  }, [])
   const [searchDialogOpen, setSearchDialogOpen] = useState(false)
   const openSearchDialog = useCallback(() => setSearchDialogOpen(true), [])
   useSearchShortcut(openSearchDialog)
@@ -110,17 +125,61 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   // just a bookmark for `selected`; client state drives the UI.
   const syncUrl = useCallback((path: string | null, mode: 'push' | 'replace' = 'push') => {
     if (typeof window === 'undefined') return
-    const url = path ? `/vault/${path}` : '/vault'
-    if (window.location.pathname === url) return
+    const url = vaultUrl(path)
+    if (window.location.pathname === url && !window.location.search) return
     if (mode === 'replace') window.history.replaceState(null, '', url)
     else window.history.pushState(null, '', url)
   }, [])
 
+  // Keeps the address bar's ?workout in step with the tracker, without adding history entries.
+  const syncWorkoutUrl = useCallback((workout: string | null | undefined) => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const current = params.has(WORKOUT_PARAM) ? (params.get(WORKOUT_PARAM) || null) : undefined
+    if (current === workout) return
+    const url = vaultUrl(notePathFromPathname(window.location.pathname), workout)
+    window.history.replaceState(null, '', url)
+  }, [])
+
   useEffect(() => {
     if (status.state === 'idle' || status.state === 'permission-required' || status.state === 'error') {
+      // Opening a link with no vault connected in this browser: keep the link
+      // and open it once a vault is connected from the home page.
+      const { pathname, search } = window.location
+      if (isDeepLink(pathname, search)) rememberPendingLink(`${pathname}${search}`)
       router.replace('/')
     }
   }, [status.state, router])
+
+  // Links: ?workout opens the tracker, and a link remembered while no vault
+  // was connected opens now that one is.
+  const didApplyLink = useRef(false)
+  useEffect(() => {
+    if (status.state !== 'ready' || didApplyLink.current) return
+    didApplyLink.current = true
+    let { pathname, search } = window.location
+    if (!isDeepLink(pathname, search)) {
+      const pending = takePendingLink()
+      if (pending) {
+        const url = new URL(pending, window.location.origin)
+        pathname = url.pathname
+        search = url.search
+        const path = notePathFromPathname(pathname)
+        if (path) {
+          didAutoSelect.current = true
+          setSelected(path)
+        }
+        window.history.replaceState(null, '', `${pathname}${search}`)
+      }
+    } else {
+      takePendingLink()
+    }
+    const workout = workoutFromSearch(search)
+    if (workout !== undefined) {
+      setLinkedWorkout(workout)
+      setWorkoutOpen(true)
+    }
+  }, [status.state])
 
   useEffect(() => {
     setSelected(initialPath)
@@ -208,6 +267,19 @@ export function VaultShell({ initialPath }: VaultShellProps) {
   useEffect(() => {
     void refreshEntries()
   }, [refreshEntries])
+
+  // A link may leave off .md or differ in case: open the note it means.
+  useEffect(() => {
+    if (!selected || !entriesLoaded || entries.length === 0) return
+    const files = entries.filter((e) => e.type === 'file').map((e) => e.path)
+    if (files.includes(selected)) return
+    const resolved = resolveNotePath(selected, files)
+    if (resolved && resolved !== selected) {
+      setSelected(resolved)
+      const search = window.location.search
+      window.history.replaceState(null, '', `${vaultUrl(resolved)}${search}`)
+    }
+  }, [selected, entries, entriesLoaded])
 
   useEffect(() => {
     if (!provider || entries.length === 0) {
@@ -622,7 +694,15 @@ export function VaultShell({ initialPath }: VaultShellProps) {
       />
       <WorkoutTracker
         open={workoutOpen}
-        onOpenChange={setWorkoutOpen}
+        onOpenChange={(open) => {
+          setWorkoutOpen(open)
+          if (!open) {
+            setLinkedWorkout(null)
+            syncWorkoutUrl(undefined)
+          }
+        }}
+        linkedWorkout={linkedWorkout}
+        onLinkChange={syncWorkoutUrl}
         provider={provider}
         vaultKey={activeVaultId ?? provider.type}
         datasetPaths={datasetPaths}

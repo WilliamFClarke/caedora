@@ -28,6 +28,7 @@ import { parseDataset, type Dataset } from '@/lib/dataset'
 import { isWriteConflict } from '@/lib/storage/conflict'
 import type { VaultProvider } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { matchWorkout } from '@/lib/deep-link'
 import {
   commitDraft,
   dayOn,
@@ -114,9 +115,15 @@ export function WorkoutTracker({
   vaultKey,
   datasetPaths,
   onLogChanged,
+  linkedWorkout = null,
+  onLinkChange,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** A planned workout a link asked for, by day value or label, shown first. */
+  linkedWorkout?: string | null
+  /** Called with the workout the tracker is on, so the address bar can link to it. */
+  onLinkChange?: (workout: string | null) => void
   provider: VaultProvider
   /** Identifies the vault, so each vault keeps its own workout in progress. */
   vaultKey: string
@@ -196,6 +203,13 @@ export function WorkoutTracker({
   }, [open, provider, pathsKey, vaultKey])
 
   const logPath = loaded.state === 'ready' ? loaded.sources.log.path : null
+
+  // The address bar names the workout in progress, else the one a link asked for.
+  const draftDay = draft?.day ?? null
+  useEffect(() => {
+    if (!open || loaded.state === 'loading') return
+    onLinkChange?.(draftDay ?? linkedWorkout ?? null)
+  }, [open, loaded.state, draftDay, linkedWorkout, onLinkChange])
 
   // Every change to the workout is written to the device straight away.
   const updateDraft = useCallback(
@@ -360,6 +374,7 @@ export function WorkoutTracker({
               )}
               {ready && stage !== 'saved' && (
                 <Picker
+                  linkedWorkout={linkedWorkout}
                   sources={loaded.sources}
                   log={log}
                   draft={draft}
@@ -469,6 +484,7 @@ function estimateMinutes(template: WorkoutTemplate): number {
 }
 
 function Picker({
+  linkedWorkout,
   sources,
   log,
   draft,
@@ -478,6 +494,7 @@ function Picker({
   onReview,
   onDiscard,
 }: {
+  linkedWorkout: string | null
   sources: WorkoutSources
   log: Dataset
   draft: WorkoutDraft | null
@@ -489,6 +506,10 @@ function Picker({
 }) {
   const [date, setDate] = useState(localDate)
   const templates = useMemo(() => workoutTemplates(sources), [sources])
+  const linked = useMemo(
+    () => (linkedWorkout ? matchWorkout(templates, linkedWorkout) : null),
+    [templates, linkedWorkout]
+  )
   const today = exercisesOn(log, date)
   const begin = (fields: Pick<WorkoutDraft, 'day' | 'label' | 'exercises'>) =>
     onStart({ date, ...fields, sets: [], startedAt: Date.now() })
@@ -555,6 +576,53 @@ function Picker({
             </label>
           </div>
 
+          {linkedWorkout && !linked && (
+            <p className="text-muted-foreground rounded-xl border border-dashed px-3 py-2 text-sm">
+              There is no workout called {linkedWorkout} in your programme. Pick one below.
+            </p>
+          )}
+
+          {linked && (
+            <section
+              aria-label={`Linked workout: ${linked.label}`}
+              className="border-primary/40 bg-primary/5 flex flex-col gap-3 rounded-2xl border p-4"
+            >
+              <div>
+                <h3 className="text-base font-semibold">{linked.label}</h3>
+                <p className="text-muted-foreground flex items-center gap-3 text-xs">
+                  <span className="inline-flex items-center gap-1">
+                    <Dumbbell className="size-3.5" />
+                    {linked.exercises.length} exercises
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="size-3.5" />
+                    About {estimateMinutes(linked)} min
+                  </span>
+                </p>
+              </div>
+              <ol className="flex flex-col gap-1 text-sm">
+                {linked.exercises.map((item) => (
+                  <li key={item.name} className="flex justify-between gap-3">
+                    <span>{item.name}</span>
+                    {(item.sets || item.reps) && (
+                      <span className="text-muted-foreground shrink-0 text-xs">
+                        {[item.sets ? `${item.sets} sets` : null, item.reps].filter(Boolean).join(' of ')}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+              <Button
+                type="button"
+                className="h-11"
+                onClick={() => begin({ day: linked.day, label: linked.label, exercises: linked.exercises })}
+              >
+                <Play className="size-4 fill-current" />
+                Start {linked.label}
+              </Button>
+            </section>
+          )}
+
           {today.length > 0 && (
             <button
               type="button"
@@ -569,11 +637,14 @@ function Picker({
           )}
 
           <section className="flex flex-col gap-3" aria-label="Planned workouts">
+            {linked && templates.length > 1 && (
+              <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Other workouts</h3>
+            )}
             {templates.length === 0 ? (
               <p className="text-muted-foreground text-sm">No programme found. Start an empty workout and add exercises as you go.</p>
             ) : (
               <ul className="grid gap-3 sm:grid-cols-2">
-                {templates.map((template) => (
+                {templates.filter((template) => template !== linked).map((template) => (
                   <li key={template.day}>
                     <button
                       type="button"
