@@ -818,14 +818,14 @@ function SessionView({
             onRemove={(id) => onChange({ ...draft, runs: runs.filter((item) => item.id !== id) })}
           />
         )}
+        <div className="mt-8 pb-[env(safe-area-inset-bottom)]">
+          <Button type="button" className="h-12 w-full text-base" disabled={draft.sets.length === 0 && runs.length === 0} onClick={onFinish}>
+            Finish workout
+          </Button>
+        </div>
       </div>
 
       {rest && <RestTimer rest={rest} onChange={setRest} />}
-      <footer className="border-t px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:px-6">
-        <Button type="button" className="h-12 w-full text-base" disabled={draft.sets.length === 0 && runs.length === 0} onClick={onFinish}>
-          Finish workout
-        </Button>
-      </footer>
     </>
   )
 }
