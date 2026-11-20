@@ -140,6 +140,22 @@ test('shows how long the workout has been going', async ({ page }) => {
   await expect(tracker(page).getByRole('timer', { name: 'Workout time' })).toHaveText(/^1:12:\d\d$/)
 })
 
+test('the Finish workout button sits after the last exercise and scrolls with the workout', async ({ page }) => {
+  const github = vault()
+  await openGitHubVault(page, github, 'welcome.md')
+  await startUpperA(page)
+  await page.setViewportSize({ width: 390, height: 700 })
+
+  const finish = tracker(page).getByRole('button', { name: 'Finish workout' })
+  const add = tracker(page).getByLabel('Exercise to add')
+  // It is not pinned to the screen, so it stays out of the way until the end of the list.
+  await expect(finish).not.toBeInViewport()
+  await finish.scrollIntoViewIfNeeded()
+  await expect(finish).toBeInViewport()
+  const [addBox, finishBox] = [await add.boundingBox(), await finish.boundingBox()]
+  expect(finishBox!.y).toBeGreaterThan(addBox!.y)
+})
+
 test('rest alerts can be turned on and stay on', async ({ page, context }) => {
   await context.grantPermissions(['notifications'])
   const github = vault()
