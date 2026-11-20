@@ -45,6 +45,7 @@ import {
   lastSessionFor,
   localDate,
   nextSetNumber,
+  suggestLoad,
   parseEntry,
   removeDraftSet,
   restSecondsFor,
@@ -54,6 +55,7 @@ import {
   type DraftRun,
   type DraftSet,
   type LoggedSet,
+  type LoadSuggestion,
   type PlannedExercise,
   type WorkoutDraft,
   type WorkoutSources,
@@ -759,6 +761,7 @@ function SessionView({
               saved={setsFor(log, draft.date, exercise.name)}
               pending={draftSetsFor(draft, exercise.name)}
               lastTime={lastSessionFor(log, exercise.name, draft.date)}
+              suggestion={suggestLoad(log, exercise, draft.date, nextSetNumber(log, draft, exercise.name))}
               onLog={(values) => logSet(exercise, values)}
               onEditSet={(id, values) =>
                 onChange({ ...draft, sets: draft.sets.map((item) => (item.id === id ? { ...item, ...values } : item)) })
@@ -839,6 +842,7 @@ function ExerciseCard({
   saved,
   pending,
   lastTime,
+  suggestion,
   onLog,
   onEditSet,
   onDeleteSet,
@@ -852,6 +856,8 @@ function ExerciseCard({
   /** Sets logged in this workout, kept on the device. */
   pending: DraftSet[]
   lastTime: LoggedSet[]
+  /** Where the kg box starts before any set of this exercise is logged today. */
+  suggestion: LoadSuggestion | null
   onLog: (values: Pick<DraftSet, 'kg' | 'reps' | 'rir'>) => void
   onEditSet: (id: string, values: Pick<DraftSet, 'kg' | 'reps' | 'rir'>) => void
   onDeleteSet: (id: string) => void
@@ -859,8 +865,12 @@ function ExerciseCard({
 }) {
   const nextSet = Math.max(0, ...saved.map((item) => item.set), ...pending.map((item) => item.set)) + 1
   const previousFor = (set: number) => lastTime.find((item) => item.set === set) ?? lastTime[lastTime.length - 1]
-  const latest = pending[pending.length - 1] ?? saved[saved.length - 1] ?? previousFor(nextSet)
-  const [kg, setKg] = useState(latest?.kg != null ? String(latest.kg) : '')
+  const today = pending[pending.length - 1] ?? saved[saved.length - 1]
+  const latest = today ?? previousFor(nextSet)
+  const startKg = today ? today.kg : (suggestion?.kg ?? null)
+  const [kg, setKg] = useState(startKg != null ? String(startKg) : '')
+  // Only said when the load is a guess from another exercise, as the plan and last time are shown already.
+  const estimatedFrom = !today && suggestion?.source === 'similar' && kg === String(suggestion.kg) ? suggestion : null
   const [reps, setReps] = useState('')
   const [rir, setRir] = useState(latest?.rir != null ? String(latest.rir) : '')
   const [error, setError] = useState<string | null>(null)
@@ -1030,6 +1040,11 @@ function ExerciseCard({
               <Check className="size-5" />
             </Button>
           </form>
+          {estimatedFrom && (
+            <p className="text-muted-foreground mt-1 pl-10 text-xs">
+              {estimatedFrom.kg} kg estimated from {estimatedFrom.exercise} on {formatDate(estimatedFrom.date ?? '')}
+            </p>
+          )}
           {Array.from({ length: ghosts }, (_, index) => nextSet + index + 1).map((set) => (
             <div key={`ghost-${set}`} className={cn(ROW, 'text-muted-foreground/60 mt-1 px-1 py-1.5 text-xs')} aria-hidden>
               <span className="text-center font-semibold">{set}</span>

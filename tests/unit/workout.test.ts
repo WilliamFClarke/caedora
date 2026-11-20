@@ -15,6 +15,7 @@ import {
   formatCountdown,
   formatElapsed,
   lastSessionFor,
+  loadInText,
   nextSetNumber,
   parseEntry,
   parseRestSeconds,
@@ -22,6 +23,8 @@ import {
   restSecondsFor,
   reviewDraft,
   setsFor,
+  similarExercise,
+  suggestLoad,
   workoutTemplates,
   type DraftRun,
   type DraftSet,
@@ -234,4 +237,50 @@ test('an older run slots in by date, and an oldest first log keeps adding at the
   const rows = parseDataset(CONDITIONING, appended.content).rows
   expect(rows.map((row) => row.minutes)).toEqual([12, 30, 10])
   expect(rows[2].distance_km ?? null).toBeNull()
+})
+
+test('the kg box starts at the plan, then last time, then a similar exercise, then the target', () => {
+  const sheet = NEXT_SESSION.replace('    target: { type: text', "    kg: { type: number, label: Today's kg }\n    target: { type: text")
+    .replace('| sets | last_time | target | cue |', '| sets | last_time | kg | target | cue |')
+    .replace('| --- | --- | --- | --- | --- | --- | --- |', '| --- | --- | --- | --- | --- | --- | --- | --- |')
+    .replace(/^(\| [a-z-]+ \| \d+ \| [^|]+ \| \d+ \| [^|]* \|)/gm, '$1 |')
+    .replace('| EZ bar curl | 3 |  | |', '| EZ bar curl | 3 |  | 12.5 |')
+  const found = findWorkoutSources([
+    parseDataset('health/next-session.md', sheet),
+    parseDataset(LOG, `${TRAINING_LOG_WITH_HISTORY}| 2026-11-05 | Triceps extension | 1 | 27 | 13 | 0 |  | other | triceps | |\n`),
+    parseDataset('health/programme.md', PROGRAMME),
+  ])
+  if (!found) throw new Error('No training log found')
+  const upper = workoutTemplates(found)[0].exercises
+  const named = (name: string) => upper.find((item) => item.name === name)!
+  expect(named('EZ bar curl').kg).toBe(12.5)
+  expect(named('Incline dumbbell press').kg).toBeUndefined()
+
+  const date = '2026-11-10'
+  expect(suggestLoad(found.log, named('EZ bar curl'), date, 1)).toEqual({ kg: 12.5, source: 'plan' })
+  expect(suggestLoad(found.log, named('Incline dumbbell press'), date, 2)).toEqual({ kg: 30, source: 'last-time' })
+  expect(suggestLoad(found.log, named('Overhead cable triceps extension'), date, 1)).toEqual({
+    kg: 27,
+    source: 'similar',
+    exercise: 'Triceps extension',
+    date: '2026-11-05',
+  })
+  expect(suggestLoad(found.log, { name: 'Chest supported row', target: 'Start at about 40 kg' }, date, 1)).toEqual({
+    kg: 40,
+    source: 'target',
+  })
+  expect(suggestLoad(found.log, named('Cable lateral raise'), date, 1)).toBeNull()
+  // Only earlier sessions count, so a workout on the day of the history starts empty.
+  expect(suggestLoad(found.log, named('Incline dumbbell press'), '2026-11-03', 1)).toBeNull()
+})
+
+test('similar exercises share every word of the shorter name', () => {
+  expect(similarExercise('Leg extension', 'Seated leg extension')).toBe(true)
+  expect(similarExercise('Tricep extension', 'Overhead cable triceps extension')).toBe(true)
+  expect(similarExercise('Cable lateral raise', 'Dumbbell lateral raise')).toBe(false)
+  expect(similarExercise('Leg extension', 'Leg extension')).toBe(false)
+  expect(similarExercise('Press', 'Incline dumbbell press')).toBe(false)
+  expect(loadInText('16 kg; aim for 10, 10, 10')).toBe(16)
+  expect(loadInText('Starting guess: about 2,5 kg per side')).toBe(2.5)
+  expect(loadInText('Find a load for 8 to 12 reps')).toBeUndefined()
 })

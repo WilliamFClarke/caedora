@@ -46,6 +46,8 @@ export interface PlannedExercise {
   target?: string
   cue?: string
   note?: string
+  /** The load the plan says to start at, from a kg column on the sheet or programme. */
+  kg?: number
 }
 
 export interface WorkoutTemplate {
@@ -211,6 +213,8 @@ export function workoutTemplates(sources: WorkoutSources): WorkoutTemplate[] {
       if (sets !== undefined) planned.sets = sets
       const restSeconds = number(row.rest_s) ?? parseRestSeconds(text(row.rest))
       if (restSeconds !== undefined) planned.restSeconds = restSeconds
+      const kg = (next && plannedKg(next)) ?? plannedKg(row)
+      if (kg !== undefined) planned.kg = kg
       const fields: Array<[keyof PlannedExercise, string | undefined]> = [
         ['reps', text(row.reps)],
         ['rir', text(row.rir)],
@@ -225,6 +229,17 @@ export function workoutTemplates(sources: WorkoutSources): WorkoutTemplate[] {
     })
     return { day, label: dayLabel(day), exercises }
   })
+}
+
+const PLANNED_LOAD_COLUMNS = [...LOAD_COLUMNS, 'target_kg']
+
+/** A plan row's load, from a kg column (0 for bodyweight). */
+function plannedKg(row: DatasetRow): number | undefined {
+  for (const name of PLANNED_LOAD_COLUMNS) {
+    const value = number(row[name])
+    if (value !== undefined && value >= 0) return value
+  }
+  return undefined
 }
 
 /** Rest used when the plan gives none, such as for an exercise added on the day. */
@@ -308,6 +323,77 @@ export function lastSessionFor(log: Dataset, exercise: string, before: string): 
   if (earlier.length === 0) return []
   const date = earlier.reduce((latest, item) => (item.date > latest ? item.date : latest), earlier[0].date)
   return earlier.filter((item) => item.date === date).sort((a, b) => a.set - b.set || a.index - b.index)
+}
+
+const NAME_FILLER = new Set(['a', 'an', 'and', 'of', 'on', 'or', 'the', 'to', 'with'])
+
+/** The words of an exercise name, singular, so "Triceps extension" and "Tricep extensions" match. */
+function nameWords(name: string): Set<string> {
+  return new Set(
+    name
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((word) => word && !NAME_FILLER.has(word))
+      .map((word) => (word.length > 3 && word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : word))
+  )
+}
+
+/**
+ * Two names for what is probably the same movement: every word of the shorter
+ * name, at least two of them, is in the longer one, such as "Leg extension" and
+ * "Seated leg extension", or "Tricep extension" and "Overhead cable triceps extension".
+ */
+export function similarExercise(a: string, b: string): boolean {
+  if (sameName(a, b)) return false
+  const [short, long] = [nameWords(a), nameWords(b)].sort((x, y) => x.size - y.size)
+  return short.size >= 2 && [...short].every((word) => long.has(word))
+}
+
+/** The most recent earlier session of a similar exercise, when this one has never been logged. */
+export function similarSessionFor(log: Dataset, exercise: string, before: string): LoggedSet[] {
+  const earlier = loggedSets(log).filter(
+    (item) => item.date < before && item.kg !== null && similarExercise(item.exercise, exercise)
+  )
+  if (earlier.length === 0) return []
+  const latest = earlier.reduce((best, item) => (item.date > best.date || (item.date === best.date && item.index > best.index) ? item : best))
+  return earlier
+    .filter((item) => item.date === latest.date && sameName(item.exercise, latest.exercise))
+    .sort((a, b) => a.set - b.set || a.index - b.index)
+}
+
+/** The first load written in a target, such as 16 in "16 kg; aim for 10, 10, 10". */
+export function loadInText(value: string | undefined): number | undefined {
+  const match = value?.match(/(\d+(?:[.,]\d+)?)\s*kg\b/i)
+  return match ? Number(match[1].replace(',', '.')) : undefined
+}
+
+export interface LoadSuggestion {
+  kg: number
+  /** plan: the sheet's kg; last-time: this exercise's last session; similar: a similar exercise; target: the target text. */
+  source: 'plan' | 'last-time' | 'similar' | 'target'
+  /** For a similar exercise, its name and date. */
+  exercise?: string
+  date?: string
+}
+
+/**
+ * The load a set's kg box starts at before anything is logged today: the plan's
+ * kg when the sheet gives one (it is written from the log, with progression),
+ * then the same set of the exercise's last session, then the last session of a
+ * similar exercise, then a load written in the target.
+ */
+export function suggestLoad(log: Dataset, exercise: PlannedExercise, before: string, set: number): LoadSuggestion | null {
+  if (exercise.kg !== undefined) return { kg: exercise.kg, source: 'plan' }
+  const pick = (sets: LoggedSet[]) => {
+    const withLoad = sets.filter((item) => item.kg !== null)
+    return withLoad.find((item) => item.set === set) ?? withLoad[withLoad.length - 1]
+  }
+  const last = pick(lastSessionFor(log, exercise.name, before))
+  if (last?.kg != null) return { kg: last.kg, source: 'last-time' }
+  const similar = pick(similarSessionFor(log, exercise.name, before))
+  if (similar?.kg != null) return { kg: similar.kg, source: 'similar', exercise: similar.exercise, date: similar.date }
+  const target = loadInText(exercise.target)
+  return target !== undefined ? { kg: target, source: 'target' } : null
 }
 
 /** The exercises logged on a date, in the order they were first logged. */
