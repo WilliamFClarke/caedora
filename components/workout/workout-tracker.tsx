@@ -12,6 +12,7 @@ import {
   Dumbbell,
   Loader2,
   Footprints,
+  Bike,
   Pencil,
   Play,
   Plus,
@@ -40,7 +41,14 @@ import {
   describeRun,
   formatCountdown,
   formatPace,
+  formatSpeed,
   formatElapsed,
+  allRuns,
+  cardioActivityFor,
+  cardioLabel,
+  isCardio,
+  CARDIO_ACTIVITIES,
+  type CardioActivity,
   knownExercises,
   lastSessionFor,
   localDate,
@@ -88,15 +96,18 @@ interface Saved {
   sets: number
   exercises: number
   runs: number
+  /** False once a bike or cross trainer session is among them, so the wording says cardio. */
+  onlyRuns: boolean
 }
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
-/** "3 sets", "1 run" or "3 sets and 1 run". */
-function describeCounts(sets: number, runs: number): string {
+/** "3 sets", "1 run", "3 sets and 1 run" or "3 sets and 1 cardio session". */
+function describeCounts(sets: number, runs: number, onlyRuns = true): string {
+  const cardio = plural(runs, onlyRuns ? 'run' : 'cardio session')
   if (runs === 0) return plural(sets, 'set')
-  if (sets === 0) return plural(runs, 'run')
-  return `${plural(sets, 'set')} and ${plural(runs, 'run')}`
+  if (sets === 0) return cardio
+  return `${plural(sets, 'set')} and ${cardio}`
 }
 
 const runsOf = (draft: WorkoutDraft) => draft.runs ?? []
@@ -256,7 +267,7 @@ export function WorkoutTracker({
       return
     }
     let current = draft
-    const summary = savedSoFar.current ?? { label: draft.label, sets: 0, exercises: 0, runs: 0 }
+    const summary = savedSoFar.current ?? { label: draft.label, sets: 0, exercises: 0, runs: 0, onlyRuns: true }
     try {
       if (current.sets.length > 0) {
         const content = await write(logSource.path, (raw) => commitDraft(logSource.path, raw, current))
@@ -271,6 +282,7 @@ export function WorkoutTracker({
       if (runs.length > 0 && conditioning) {
         await write(conditioning.path, (raw) => commitRuns(conditioning.path, raw, current))
         summary.runs += runs.length
+        summary.onlyRuns = summary.onlyRuns && allRuns(runs)
         current = { ...current, runs: [] }
         savedSoFar.current = summary
       }
@@ -518,7 +530,7 @@ function Picker({
             <p className="text-primary text-xs font-semibold tracking-wide uppercase">In progress</p>
             <p className="mt-0.5 text-base font-semibold">{draft.label}</p>
             <p className="text-muted-foreground text-xs">
-              {formatDate(draft.date)} · {describeCounts(draft.sets.length, runsOf(draft).length)} not yet in the vault
+              {formatDate(draft.date)} · {describeCounts(draft.sets.length, runsOf(draft).length, allRuns(runsOf(draft)))} not yet in the vault
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -678,7 +690,8 @@ function SessionView({
     return map
   }, [sources])
 
-  const countFor = (name: string) => setsFor(log, draft.date, name).length + draftSetsFor(draft, name).length
+  const cardioFor = (name: string) => runs.filter((item) => item.exercise?.toLowerCase() === name.toLowerCase())
+  const countFor = (name: string) => setsFor(log, draft.date, name).length + draftSetsFor(draft, name).length + cardioFor(name).length
   const plannedSets = draft.exercises.reduce((total, item) => total + (item.sets ?? 0), 0)
   const doneSets = draft.exercises.reduce((total, item) => total + Math.min(item.sets ?? 0, countFor(item.name)), 0)
   const current = draft.exercises.findIndex((item) => countFor(item.name) < (item.sets ?? 1))
@@ -711,7 +724,7 @@ function SessionView({
     <>
       <Header
         title={draft.label}
-        description={`${formatDate(draft.date)} · ${describeCounts(draft.sets.length, runs.length)} logged`}
+        description={`${formatDate(draft.date)} · ${describeCounts(draft.sets.length, runs.length, allRuns(runs))} logged`}
         back={{ label: 'Back to workouts', onClick: onBack }}
       >
         <div className="mt-2 flex items-center gap-3">
@@ -750,7 +763,30 @@ function SessionView({
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6">
         <ol className="flex flex-col gap-3">
-          {draft.exercises.map((exercise, index) => (
+          {draft.exercises.map((exercise, index) =>
+            sources.conditioning && isCardio(exercise) ? (
+              <CardioCard
+                key={exercise.name}
+                number={index + 1}
+                current={index === current}
+                exercise={exercise}
+                logged={cardioFor(exercise.name)}
+                title={sources.conditioning.title}
+                onAdd={(run) => {
+                  onChange({ ...draft, runs: [...runs, run] })
+                  const seconds = restSecondsFor({ ...planned.get(exercise.name.toLowerCase()), ...exercise })
+                  setRest({ exercise: exercise.name, total: seconds, endsAt: Date.now() + seconds * 1000 })
+                }}
+                onRemoveEntry={(id) => onChange({ ...draft, runs: runs.filter((item) => item.id !== id) })}
+                onRemove={() =>
+                  onChange({
+                    ...draft,
+                    exercises: draft.exercises.filter((item) => item !== exercise),
+                    runs: runs.filter((item) => item.exercise?.toLowerCase() !== exercise.name.toLowerCase()),
+                  })
+                }
+              />
+            ) : (
             <ExerciseCard
               key={exercise.name}
               number={index + 1}
@@ -772,7 +808,8 @@ function SessionView({
                 })
               }
             />
-          ))}
+            )
+          )}
         </ol>
         {draft.exercises.length === 0 && runs.length === 0 && !runFormOpen && (
           <div className="text-muted-foreground flex flex-col items-center gap-2 rounded-2xl border border-dashed px-4 py-10 text-center text-sm">
@@ -807,7 +844,7 @@ function SessionView({
         </form>
         {sources.conditioning && (
           <RunsSection
-            runs={runs}
+            runs={runs.filter((item) => !item.exercise)}
             title={sources.conditioning.title}
             formOpen={runFormOpen}
             onFormOpenChange={setRunFormOpen}
@@ -1328,7 +1365,7 @@ function RunsSection({
     <section aria-label="Runs" className="mt-6 flex flex-col gap-3">
       {runs.length > 0 && (
         <div className="bg-card rounded-2xl border p-3 shadow-xs sm:p-4">
-          <h3 className="text-[15px] font-semibold">{runs.length === 1 ? 'Run' : 'Runs'}</h3>
+          <h3 className="text-[15px] font-semibold">{cardioHeading(runs)}</h3>
           <p className="text-muted-foreground text-xs">Goes to {title} when you finish</p>
           <RunList runs={runs} onRemove={onRemove} />
         </div>
@@ -1350,7 +1387,11 @@ function RunList({ runs, onRemove }: { runs: DraftRun[]; onRemove: (id: string) 
     <ul className="mt-2 flex flex-col gap-1">
       {runs.map((run) => (
         <li key={run.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm">
-          <Footprints className="text-muted-foreground size-4 shrink-0" />
+          {run.activity === 'bike' ? (
+            <Bike className="text-muted-foreground size-4 shrink-0" />
+          ) : (
+            <Footprints className="text-muted-foreground size-4 shrink-0" />
+          )}
           <span className="min-w-0 flex-1">
             <span className="tabular-nums">{describeRun(run)}</span>
             {run.note && <span className="text-muted-foreground block truncate text-xs">{run.note}</span>}
@@ -1371,26 +1412,158 @@ function RunList({ runs, onRemove }: { runs: DraftRun[]; onRemove: (id: string) 
   )
 }
 
-/** Time, distance and heart rate for a run outdoors or on a treadmill. Pace is worked out for you. */
-function RunForm({ title, onAdd, onCancel }: { title: string; onAdd: (run: DraftRun) => void; onCancel: () => void }) {
-  const [treadmill, setTreadmill] = useState(false)
+function cardioHeading(runs: DraftRun[]): string {
+  if (!allRuns(runs)) return 'Cardio'
+  return runs.length === 1 ? 'Run' : 'Runs'
+}
+
+/**
+ * A programme exercise done as cardio, such as a bike warm up: logged with
+ * time, distance and level rather than kg and reps, and saved to the
+ * conditioning log.
+ */
+function CardioCard({
+  number,
+  current,
+  exercise,
+  logged,
+  title,
+  onAdd,
+  onRemoveEntry,
+  onRemove,
+}: {
+  number: number
+  current: boolean
+  exercise: PlannedExercise
+  /** Cardio logged for this exercise in this workout. */
+  logged: DraftRun[]
+  title: string
+  onAdd: (run: DraftRun) => void
+  onRemoveEntry: (id: string) => void
+  onRemove: () => void
+}) {
+  const done = logged.length >= (exercise.sets ?? 1)
+  const id = `exercise-${exercise.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+  const initial = useMemo(() => cardioActivityFor(exercise), [exercise])
+  const chips = [exercise.reps, `Rest ${formatCountdown(restSecondsFor(exercise))}`].filter((item): item is string => Boolean(item))
+
+  return (
+    <li
+      aria-labelledby={id}
+      className={cn(
+        'bg-card rounded-2xl border shadow-xs transition-colors',
+        current && 'border-primary/50 ring-primary/15 ring-2',
+        done && 'bg-muted/30'
+      )}
+    >
+      <div className="flex items-start gap-3 p-3 pb-2 sm:p-4 sm:pb-2">
+        <span
+          className={cn(
+            'mt-0.5 grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold',
+            done ? 'bg-primary text-primary-foreground' : current ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'
+          )}
+          aria-hidden
+        >
+          {done ? <Check className="size-4" /> : number}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 id={id} className="text-[15px] leading-snug font-semibold">
+            {exercise.name}
+          </h3>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {chips.map((chip) => (
+              <span key={chip} className="bg-muted text-muted-foreground rounded-md px-1.5 py-0.5 text-[11px] font-medium">
+                {chip}
+              </span>
+            ))}
+          </div>
+        </div>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="text-muted-foreground -mt-1 -mr-1 size-8 shrink-0"
+          aria-label={`Remove ${exercise.name} from this workout`}
+          onClick={onRemove}
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+      <div className="flex flex-col gap-2 px-3 pb-3 sm:px-4 sm:pb-4">
+        {(exercise.target || exercise.cue) && (
+          <div className="text-muted-foreground space-y-0.5 pl-10 text-xs leading-relaxed">
+            {exercise.target && <p>{exercise.target}</p>}
+            {exercise.cue && <p className="italic">{exercise.cue}</p>}
+          </div>
+        )}
+        {logged.length > 0 && <RunList runs={logged} onRemove={onRemoveEntry} />}
+        {!done && (
+          <RunForm
+            title={title}
+            exercise={exercise.name}
+            initialActivity={initial.activity}
+            initialTreadmill={initial.treadmill}
+            onAdd={onAdd}
+          />
+        )}
+      </div>
+    </li>
+  )
+}
+
+const FORM_NAMES: Record<CardioActivity, { form: string; submit: string; did: string }> = {
+  run: { form: 'Log a run', submit: 'Log run', did: 'ran' },
+  bike: { form: 'Log a bike session', submit: 'Log bike', did: 'cycled' },
+  'cross-trainer': { form: 'Log a cross trainer session', submit: 'Log cross trainer', did: 'spent on the cross trainer' },
+}
+
+/**
+ * Time, distance and heart rate for a run outdoors or on a treadmill, or a
+ * session on the bike or cross trainer with its level. Pace or speed is worked out for you.
+ */
+function RunForm({
+  title,
+  exercise,
+  initialActivity = 'run',
+  initialTreadmill = false,
+  onAdd,
+  onCancel,
+}: {
+  title: string
+  /** The programme exercise this is logged for, if any. */
+  exercise?: string
+  initialActivity?: CardioActivity
+  initialTreadmill?: boolean
+  onAdd: (run: DraftRun) => void
+  onCancel?: () => void
+}) {
+  const [activity, setActivity] = useState<CardioActivity>(initialActivity)
+  const [treadmill, setTreadmill] = useState(initialTreadmill)
   const [minutes, setMinutes] = useState('')
   const [distance, setDistance] = useState('')
   const [heartRate, setHeartRate] = useState('')
+  const [level, setLevel] = useState('')
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const isRun = activity === 'run'
+  const label = isRun ? 'Run' : cardioLabel(activity)
+  const names = FORM_NAMES[activity]
   const time = parseEntry(minutes)
   const km = parseEntry(distance)
-  const pace = formatPace(time, km)
+  const rate = isRun ? formatPace(time, km) : formatSpeed(time, km)
 
   const submit = () => {
     const hr = parseEntry(heartRate)
-    if (time === null || time <= 0) return setError('Enter how many minutes you ran.')
+    const lvl = isRun ? null : parseEntry(level)
+    if (time === null || time <= 0) return setError(`Enter how many minutes you ${names.did}.`)
     if (distance.trim() && (km === null || km <= 0)) return setError('Distance should be a number of kilometres, such as 5 or 5.2.')
     if (heartRate.trim() && (hr === null || hr < 30 || hr > 250)) return setError('Average heart rate should be in beats per minute.')
+    if (!isRun && level.trim() && (lvl === null || lvl < 0)) return setError('Level should be a number, such as 6.')
     onAdd({
       id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-      treadmill,
+      ...(isRun ? {} : { activity, level: lvl }),
+      ...(exercise ? { exercise } : {}),
+      treadmill: isRun && treadmill,
       minutes: time,
       distanceKm: km,
       avgHr: hr,
@@ -1399,60 +1572,86 @@ function RunForm({ title, onAdd, onCancel }: { title: string; onAdd: (run: Draft
     })
   }
 
+  const toggle = <T,>(options: ReadonlyArray<readonly [string, T]>, value: T, onPick: (value: T) => void, groupLabel: string) => (
+    <div className="bg-muted flex rounded-lg p-0.5" role="group" aria-label={groupLabel}>
+      {options.map(([text, option]) => (
+        <button
+          key={text}
+          type="button"
+          aria-pressed={value === option}
+          onClick={() => onPick(option)}
+          className={cn(
+            'rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+            value === option ? 'bg-background shadow-xs' : 'text-muted-foreground'
+          )}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <form
-      aria-label="Log a run"
+      aria-label={names.form}
       className="bg-card flex flex-col gap-3 rounded-2xl border p-3 shadow-xs sm:p-4"
       onSubmit={(event) => {
         event.preventDefault()
         submit()
       }}
     >
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[15px] font-semibold">Log a run</h3>
-        <div className="bg-muted flex rounded-lg p-0.5" role="group" aria-label="Where you ran">
-          {[
-            ['Outdoor', false],
-            ['Treadmill', true],
-          ].map(([label, value]) => (
-            <button
-              key={String(label)}
-              type="button"
-              aria-pressed={treadmill === value}
-              onClick={() => setTreadmill(value as boolean)}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                treadmill === value ? 'bg-background shadow-xs' : 'text-muted-foreground'
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {exercise ? <span className="sr-only">{names.form}</span> : <h3 className="text-[15px] font-semibold">{names.form}</h3>}
+        {toggle(
+          CARDIO_ACTIVITIES.map((item) => [item.label, item.value] as const),
+          activity,
+          (value) => {
+            setActivity(value)
+            setError(null)
+          },
+          'Activity'
+        )}
+        {isRun &&
+          toggle(
+            [
+              ['Outdoor', false],
+              ['Treadmill', true],
+            ] as const,
+            treadmill,
+            setTreadmill,
+            'Where you ran'
+          )}
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className={cn('grid gap-2', isRun ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4')}>
         <label className="text-muted-foreground flex flex-col gap-1 text-xs font-medium">
           Minutes
-          <Input inputMode="decimal" aria-label="Run minutes" value={minutes} onChange={(event) => setMinutes(event.target.value)} className="h-11 text-base" />
+          <Input inputMode="decimal" aria-label={`${label} minutes`} value={minutes} onChange={(event) => setMinutes(event.target.value)} className="h-11 text-base" />
         </label>
         <label className="text-muted-foreground flex flex-col gap-1 text-xs font-medium">
           Distance (km)
-          <Input inputMode="decimal" aria-label="Run distance in km" value={distance} onChange={(event) => setDistance(event.target.value)} className="h-11 text-base" />
+          <Input inputMode="decimal" aria-label={`${label} distance in km`} value={distance} onChange={(event) => setDistance(event.target.value)} className="h-11 text-base" />
         </label>
+        {!isRun && (
+          <label className="text-muted-foreground flex flex-col gap-1 text-xs font-medium">
+            Level
+            <Input inputMode="decimal" aria-label={`${label} level`} value={level} onChange={(event) => setLevel(event.target.value)} className="h-11 text-base" />
+          </label>
+        )}
         <label className="text-muted-foreground flex flex-col gap-1 text-xs font-medium">
           Avg HR
-          <Input inputMode="numeric" aria-label="Run average heart rate" value={heartRate} onChange={(event) => setHeartRate(event.target.value)} className="h-11 text-base" />
+          <Input inputMode="numeric" aria-label={`${label} average heart rate`} value={heartRate} onChange={(event) => setHeartRate(event.target.value)} className="h-11 text-base" />
         </label>
       </div>
       <Input
-        aria-label="Run notes"
-        placeholder={treadmill ? 'Notes, such as 1% incline' : 'Notes, such as the route'}
+        aria-label={`${label} notes`}
+        placeholder={isRun ? (treadmill ? 'Notes, such as 1% incline' : 'Notes, such as the route') : 'Notes, such as the programme used'}
         value={note}
         onChange={(event) => setNote(event.target.value)}
         className="h-11 text-base"
       />
       <p className="text-muted-foreground text-xs" aria-live="polite">
-        {pace ? `Pace ${pace}` : 'Add a distance to see your pace.'} Saved to {title} when you finish.
+        {rate ? `${isRun ? 'Pace' : 'Speed'} ${rate}` : `Add a distance to see your ${isRun ? 'pace' : 'speed'}.`} Saved to {title} when you
+        finish.
       </p>
       {error && (
         <p role="alert" className="text-destructive text-xs">
@@ -1461,11 +1660,13 @@ function RunForm({ title, onAdd, onCancel }: { title: string; onAdd: (run: Draft
       )}
       <div className="flex gap-2">
         <Button type="submit" className="h-11 flex-1">
-          Log run
+          {names.submit}
         </Button>
-        <Button type="button" variant="ghost" className="h-11" onClick={onCancel}>
-          Cancel
-        </Button>
+        {onCancel && (
+          <Button type="button" variant="ghost" className="h-11" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
       </div>
     </form>
   )
@@ -1511,7 +1712,7 @@ function ReviewView({
   const stats =
     draft.sets.length === 0 && runs.length > 0
       ? [
-          ['Runs', String(runs.length)],
+          [allRuns(runs) ? 'Runs' : 'Cardio', String(runs.length)],
           ['Distance', `${Math.round(distance * 100) / 100} km`],
           ['Time', `${runMinutes} min`],
         ]
@@ -1595,7 +1796,7 @@ function ReviewView({
         )}
         {runs.length > 0 && (
           <section aria-label="Runs to save" className="bg-card mt-3 rounded-2xl border p-3 shadow-xs sm:p-4">
-            <h3 className="text-[15px] font-semibold">{runs.length === 1 ? 'Run' : 'Runs'}</h3>
+            <h3 className="text-[15px] font-semibold">{cardioHeading(runs)}</h3>
             <RunList runs={runs} onRemove={(id) => onChange({ ...draft, runs: runs.filter((item) => item.id !== id) })} />
           </section>
         )}
@@ -1614,7 +1815,7 @@ function ReviewView({
         )}
         <Button type="button" className="h-12 w-full text-base" disabled={saving || waiting || draft.sets.length + runs.length === 0} onClick={onSave}>
           {saving && <Loader2 className="size-4 animate-spin" />}
-          {waiting ? 'Waiting for connection' : `Save ${describeCounts(draft.sets.length, runs.length)} to ${target}`}
+          {waiting ? 'Waiting for connection' : `Save ${describeCounts(draft.sets.length, runs.length, allRuns(runs))} to ${target}`}
         </Button>
       </footer>
     </>
@@ -1644,7 +1845,7 @@ function SavedView({
         <p className="text-muted-foreground text-sm">
           {saved.sets > 0 && `${plural(saved.sets, 'set')} across ${plural(saved.exercises, 'exercise')} added to ${title}.`}
           {saved.sets > 0 && saved.runs > 0 && ' '}
-          {saved.runs > 0 && `${plural(saved.runs, 'run')} added to ${runsTitle ?? 'your conditioning log'}.`}
+          {saved.runs > 0 && `${plural(saved.runs, saved.onlyRuns ? 'run' : 'cardio session')} added to ${runsTitle ?? 'your conditioning log'}.`}
         </p>
       </div>
       <div className="flex w-full max-w-xs flex-col gap-2">

@@ -418,15 +418,69 @@ export interface WorkoutDraft {
   startedAt: number
 }
 
-/** A run kept on the device until the workout is finished, outdoors or on a treadmill. */
+/** The kinds of cardio the tracker logs to the conditioning log. */
+export type CardioActivity = 'run' | 'bike' | 'cross-trainer'
+
+export const CARDIO_ACTIVITIES: ReadonlyArray<{ value: CardioActivity; label: string }> = [
+  { value: 'run', label: 'Run' },
+  { value: 'bike', label: 'Bike' },
+  { value: 'cross-trainer', label: 'Cross trainer' },
+]
+
+export function cardioLabel(activity: CardioActivity | undefined): string {
+  return CARDIO_ACTIVITIES.find((item) => item.value === (activity ?? 'run'))?.label ?? 'Run'
+}
+
+/**
+ * A run, bike or cross trainer session kept on the device until the workout
+ * is finished. Drafts saved before bike and cross trainer could be logged have
+ * no activity, and are runs.
+ */
 export interface DraftRun {
   id: string
+  activity?: CardioActivity
   treadmill: boolean
   minutes: number
   distanceKm: number | null
   avgHr: number | null
+  /** Resistance level on a bike or cross trainer. */
+  level?: number | null
+  /** The programme exercise this was logged for, such as a bike warm up. */
+  exercise?: string
   note: string | null
   loggedAt: number
+}
+
+const CARDIO_NAME = /\b(bike|cycle|cycling|spin|cross ?trainer|elliptical|treadmill|run|running|jog|jogging)\b/i
+/** A rep column that holds a time instead, such as "5 min" or "12 to 15 min". */
+const MINUTES_TARGET = /^\s*\d+(\.\d+)?(\s*(to|-)\s*\d+(\.\d+)?)?\s*(min|mins|minutes)\b/i
+
+/**
+ * True for a programme exercise done as cardio, such as a bike warm up or a
+ * treadmill run: its name says so, or it is planned in minutes rather than reps
+ * and works no particular muscle.
+ */
+export function isCardio(exercise: Pick<PlannedExercise, 'name' | 'reps' | 'muscle'>): boolean {
+  if (exercise.muscle) return false
+  return CARDIO_NAME.test(exercise.name) || MINUTES_TARGET.test(exercise.reps ?? '')
+}
+
+/** The kind of cardio a programme exercise most likely is, from its name first and then its notes. */
+export function cardioActivityFor(exercise: Pick<PlannedExercise, 'name' | 'target' | 'cue' | 'note'>): {
+  activity: CardioActivity
+  treadmill: boolean
+} {
+  const notes = [exercise.target, exercise.cue, exercise.note].filter(Boolean).join(' ')
+  const pick = (value: string): CardioActivity | null =>
+    /\b(bike|cycle|cycling|spin)\b/i.test(value)
+      ? 'bike'
+      : /\b(cross ?trainer|elliptical)\b/i.test(value)
+        ? 'cross-trainer'
+        : /\b(treadmill|run|running|jog|jogging)\b/i.test(value)
+          ? 'run'
+          : null
+  const activity = pick(exercise.name) ?? pick(notes) ?? 'run'
+  return { activity, treadmill: activity === 'run' && /treadmill/i.test(`${exercise.name} ${notes}`) }
 }
 
 /** "6:00 min/km", or null without both a time and a distance. */
@@ -436,14 +490,35 @@ export function formatPace(minutes: number | null, distanceKm: number | null): s
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} min/km`
 }
 
-/** A short line for a run, such as "Treadmill · 5 km in 30 min · 6:00 min/km". */
-export function describeRun(run: Pick<DraftRun, 'treadmill' | 'minutes' | 'distanceKm' | 'avgHr'>): string {
-  const parts = [run.treadmill ? 'Treadmill' : 'Outdoor']
+/** "24 km/h", or null without both a time and a distance. */
+export function formatSpeed(minutes: number | null, distanceKm: number | null): string | null {
+  if (!minutes || !distanceKm || minutes <= 0 || distanceKm <= 0) return null
+  return `${Math.round((distanceKm / minutes) * 600) / 10} km/h`
+}
+
+/** Pace for a run, speed for a bike or cross trainer. */
+function cardioRate(run: Pick<DraftRun, 'activity' | 'minutes' | 'distanceKm'>): string | null {
+  return (run.activity ?? 'run') === 'run' ? formatPace(run.minutes, run.distanceKm) : formatSpeed(run.minutes, run.distanceKm)
+}
+
+/** A short line for a run, such as "Treadmill · 5 km in 30 min · 6:00 min/km", or "Bike · 5 min · level 6". */
+export function describeRun(
+  run: Pick<DraftRun, 'activity' | 'treadmill' | 'minutes' | 'distanceKm' | 'avgHr' | 'level'>
+): string {
+  const isRun = (run.activity ?? 'run') === 'run'
+  const parts = [isRun ? (run.treadmill ? 'Treadmill' : 'Outdoor') : cardioLabel(run.activity)]
   parts.push(run.distanceKm ? `${run.distanceKm} km in ${run.minutes} min` : `${run.minutes} min`)
-  const pace = formatPace(run.minutes, run.distanceKm)
-  if (pace) parts.push(pace)
+  const rate = cardioRate(run)
+  if (rate) parts.push(rate)
+  if (!isRun && run.level) parts.push(`level ${run.level}`)
   if (run.avgHr) parts.push(`${run.avgHr} bpm`)
   return parts.join(' · ')
+}
+
+const ACTIVITY_VALUES: Record<CardioActivity, string[]> = {
+  run: ['run', 'running', 'other'],
+  bike: ['cycle', 'cycling', 'bike', 'ride', 'other'],
+  'cross-trainer': ['cross-trainer', 'cross_trainer', 'elliptical', 'other'],
 }
 
 /** The row a run is written as, using only the columns the conditioning log has. */
@@ -453,7 +528,7 @@ export function runRow(conditioning: Dataset, date: string, run: DraftRun): Data
   if (minutes) row[minutes.name] = run.minutes
   const activity = firstColumn(conditioning, ACTIVITY_COLUMNS)
   if (activity) {
-    const value = ['run', 'running', 'other'].find((item) => allows(activity, item))
+    const value = ACTIVITY_VALUES[run.activity ?? 'run'].find((item) => allows(activity, item))
     if (value) row[activity.name] = value
   }
   const distance = firstColumn(conditioning, DISTANCE_COLUMNS)
@@ -462,8 +537,13 @@ export function runRow(conditioning: Dataset, date: string, run: DraftRun): Data
   if (heartRate && run.avgHr !== null) row[heartRate.name] = run.avgHr
   const notes = firstColumn(conditioning, NOTES_COLUMNS)
   if (notes) {
-    const pace = formatPace(run.minutes, run.distanceKm)
-    const text = [run.treadmill ? 'Treadmill.' : '', pace ? `Average pace: ${pace}.` : '', run.note?.trim() ?? '']
+    const isRun = (run.activity ?? 'run') === 'run'
+    const rate = cardioRate(run)
+    const text = [
+      isRun ? (run.treadmill ? 'Treadmill.' : '') : `${cardioLabel(run.activity)}${run.level ? `, level ${run.level}` : ''}.`,
+      rate ? `Average ${isRun ? 'pace' : 'speed'}: ${rate}.` : '',
+      run.note?.trim() ?? '',
+    ]
       .filter(Boolean)
       .join(' ')
     if (text) row[notes.name] = text
@@ -518,8 +598,16 @@ export function commitRuns(path: string, raw: string, draft: WorkoutDraft): { co
       ? runs[0].distanceKm
         ? `${runs[0].distanceKm} km in ${runs[0].minutes} min`
         : `${runs[0].minutes} min`
-      : `${runs.length} runs`
-  return { content, message: `Log run on ${draft.date}: ${detail}` }
+      : allRuns(runs)
+        ? `${runs.length} runs`
+        : `${runs.length} cardio sessions`
+  const noun = runs.length === 1 ? cardioLabel(runs[0].activity).toLowerCase() : allRuns(runs) ? 'run' : 'cardio'
+  return { content, message: `Log ${noun} on ${draft.date}: ${detail}` }
+}
+
+/** True when every cardio entry is a run, so the wording can say runs. */
+export function allRuns(runs: Pick<DraftRun, 'activity'>[]): boolean {
+  return runs.every((item) => (item.activity ?? 'run') === 'run')
 }
 
 /** The sets of one exercise in a draft, in set order. */
